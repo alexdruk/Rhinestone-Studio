@@ -47,6 +47,11 @@ export {
 } from './ColorQuantize.js';
 
 export {
+  chooseAutoColorCount,
+  prepareAutoColorField
+} from './AutoColourCount.js';
+
+export {
   computeSubjectMask,
   DEFAULT_SUBJECT_TOLERANCE_DE,
   SUBJECT_ALPHA_PRESENCE_FRACTION

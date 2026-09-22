@@ -7,11 +7,17 @@ import { fileURLToPath } from 'node:url';
 // now targets 200mm on the image's longer side (was a fixed 96/25.4 px/mm conversion) before the
 // existing canvas-minus-20mm clamp and centring; (2) the Image menu reveals the 2D canvas only, via
 // a new sibling revealCanvasOnlyForLightbox(), instead of Dual Workspace; (3) a freshly imported
-// image layer now defaults to stoneSize 2 (SS6), colorCount 6, and fillMode 'staggered' instead of
-// inheriting the previously-selected layer's stone size and defaulting to a single color/'fill'.
-// Every read-site default (resolveImageFillMode()'s 'fill' fallback, generateImageStonesLive()'s
-// colorCount??1) is deliberately untouched, so a project saved before this milestone still
-// regenerates byte-identically -- item 4 pins that. See docs/specifications/IMG-011-ImportDefaults.md.
+// image layer now defaults to stoneSize 2 (SS6), colorCount 'auto', and fillMode 'staggered' instead
+// of inheriting the previously-selected layer's stone size and defaulting to a single color/'fill'.
+// Every read-site default (resolveImageFillMode()'s 'fill' fallback) is deliberately untouched, so a
+// project saved before this milestone still regenerates byte-identically -- item 4 pins that. See
+// docs/specifications/IMG-011-ImportDefaults.md.
+//
+// IMG-012 follow-up: item 2's colorCount literal was 6 (IMG-011's own default) and is now 'auto'
+// (IMG-012 replaces it, decision 1); item 4's generateImageStonesLive() guard was
+// colorCount:layer.colorCount??1 and now reads colorCount:resolveImageColorCount(layer) (IMG-012's
+// resolver, called at every numeric read site) -- both updated below to match, test-side only, per
+// docs/specifications/IMG-012-AutoColourCount.md Task F item 13.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -100,11 +106,11 @@ await test('1. computeDefaultImagePlacement() scales the image to 200mm on its l
   }
 });
 
-await test("2. the importImageFile handler's new-layer literal defaults to stoneSize:2, colorCount:6, fillMode:'staggered', and no longer reads selectedLayer().stoneSize", async () => {
+await test("2. the importImageFile handler's new-layer literal defaults to stoneSize:2, colorCount:'auto', fillMode:'staggered', and no longer reads selectedLayer().stoneSize", async () => {
   const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
   const handler = extractImportImageFileHandler(appJs);
   assert.match(handler, /stoneSize:2,/, 'expected the new image layer to default stoneSize to 2');
-  assert.match(handler, /colorCount:6,/, 'expected the new image layer to default colorCount to 6');
+  assert.match(handler, /colorCount:'auto',/, "expected the new image layer to default colorCount to 'auto' (IMG-012)");
   assert.match(handler, /fillMode:'staggered'/, "expected the new image layer to default fillMode to 'staggered'");
   assert.ok(!handler.includes('selectedLayer().stoneSize'), 'expected the new image layer to no longer inherit stoneSize from selectedLayer()');
 });
@@ -122,7 +128,7 @@ await test("3. el('menuImageTrace').onclick calls revealCanvasOnlyForLightbox(),
   );
 });
 
-await test('4. read-site defaults are untouched: resolveImageFillMode() still falls back to \'fill\', generateImageStonesLive() still reads colorCount:layer.colorCount??1 -- saved projects regenerate byte-identically', async () => {
+await test("4. read-site defaults are untouched: resolveImageFillMode() still falls back to 'fill'; generateImageStonesLive() now reads colorCount:resolveImageColorCount(layer) (IMG-012), which is byte-identical to the old colorCount??1 for every numeric/absent colorCount -- saved projects regenerate byte-identically", async () => {
   const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 
   const fillModeMatch = appJs.match(/function resolveImageFillMode\(value\)\{[\s\S]*?\}/);
@@ -134,7 +140,7 @@ await test('4. read-site defaults are untouched: resolveImageFillMode() still fa
   assert.equal(resolveImageFillMode(undefined), 'fill', 'expected resolveImageFillMode(undefined) to still fall back to \'fill\'');
   assert.equal(resolveImageFillMode(null), 'fill', 'expected resolveImageFillMode(null) to still fall back to \'fill\'');
 
-  assert.match(appJs, /colorCount:layer\.colorCount\?\?1/, 'expected generateImageStonesLive() to still read colorCount:layer.colorCount??1');
+  assert.match(appJs, /colorCount:resolveImageColorCount\(layer\)/, 'expected generateImageStonesLive() to read colorCount:resolveImageColorCount(layer) (IMG-012)');
 });
 
 await test("5. imageStudioRemove reopens Image → Strass after deleteLayer() triggers the S-105 auto-switch to Text", async () => {

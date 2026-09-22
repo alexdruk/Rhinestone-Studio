@@ -276,7 +276,11 @@ await test('9. App-path source-text guard: resolveImageMaskMode(), the five deci
     // app.js:3217 -- resolveLayerShapeSource()'s prepareImageField() call (Boolean operations).
     { label: 'resolveLayerShapeSource() prepareImageField()', anchor: 'if(layer.type===\'image\'){', needle: 'maskMode:resolveImageMaskMode(layer.maskMode)' },
     // app.js:3239 -- resolveImageExportRegions()'s params object (IMG-008's SVG regions).
-    { label: 'resolveImageExportRegions() params', anchor: 'function resolveImageExportRegions(project){', needle: 'maskMode:resolveImageMaskMode(layer.maskMode)' }
+    { label: 'resolveImageExportRegions() params', anchor: 'function resolveImageExportRegions(project){', needle: 'maskMode:resolveImageMaskMode(layer.maskMode)' },
+    // IMG-012: resolveImageColorCount()'s own prepareAutoColorField() call for the 'auto' sentinel
+    // also forwards maskMode this same way -- a 6th read site (decision 2's own "subject pixels are
+    // whichever set the layer's current maskMode keeps"), not one of decision 6's original five.
+    { label: 'resolveImageColorCount() prepareAutoColorField() params (IMG-012)', anchor: 'function resolveImageColorCount(layer){', needle: 'maskMode:resolveImageMaskMode(layer.maskMode)' }
   ];
   for (const { label, needle } of siteNeedles) {
     assert.ok(appJs.includes(needle), `expected ${label} to contain "${needle}"`);
@@ -284,9 +288,11 @@ await test('9. App-path source-text guard: resolveImageMaskMode(), the five deci
   // Both prepareImageField() call sites inside resolveLayerShapeSource() and resolveImageExportRegions()
   // are otherwise textually near-identical (both build an image-layer params object from the same
   // layer fields) -- assert the exact needle count so a future edit can't silently satisfy this guard
-  // from just one of the two.
+  // from just one of the two. IMG-012 added a 4th occurrence of this exact substring
+  // (resolveImageColorCount()'s own prepareAutoColorField() call, for the 'auto' sentinel) -- see
+  // tools/test-img-012-auto-colour-count.mjs item 4/5/6.
   const maskModeParamOccurrences = (appJs.match(/maskMode:resolveImageMaskMode\(layer\.maskMode\)/g) || []).length;
-  assert.equal(maskModeParamOccurrences, 3, 'expected exactly 3 occurrences of maskMode:resolveImageMaskMode(layer.maskMode) in app.js (generateImageStonesLive, resolveLayerShapeSource, resolveImageExportRegions)');
+  assert.equal(maskModeParamOccurrences, 4, 'expected exactly 4 occurrences of maskMode:resolveImageMaskMode(layer.maskMode) in app.js (generateImageStonesLive, resolveLayerShapeSource, resolveImageExportRegions, and IMG-012\'s resolveImageColorCount())');
 
   assert.ok(indexHtml.includes('id="imgMaskMode"'), 'expected index.html to contain #imgMaskMode');
 

@@ -99,7 +99,7 @@ import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPd
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm } from './src/products/index.js';
-import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
+import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile, chooseAutoColorCount, prepareAutoColorField } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
 // dependency on src/geometry/**/StoneLayout/Stone and never generates stone positions itself;
@@ -275,7 +275,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
   // IMG-002: per-stone color comes entirely from layer.colorMap while a multi-colour image is
   // active -- #stoneColor's single value has no effect then, so it's disabled with an explanatory
   // title rather than left live-but-ignored.
-  const sel=selectedLayer();const multiColorImage=sel&&sel.type==='image'&&(sel.colorCount||1)>1;
+  const sel=selectedLayer();const multiColorImage=sel&&sel.type==='image'&&resolveImageColorCount(sel)>1;
   el('stoneColor').disabled=multiColorImage;
   el('stoneColor').title=multiColorImage?'Per-stone color is set in the Colours group while this image has more than one colour.':'';
 }
@@ -723,6 +723,64 @@ function resolveImageMaskMode(value){return value==='subject'?'subject':'thresho
 // harnesses new Function()-evaluate this span.
 let imageColorPaletteCache=null;
 function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=Object.values(STONE_COLORS).map(c=>({id:c.id,hex:c.previewColor}));return imageColorPaletteCache}
+// IMG-012: layer.colorCount === 'auto' (the sentinel, see docs/specifications/IMG-012-AutoColourCount.md
+// section B) resolves to a concrete integer 1-8 through this function alone -- every numeric read
+// site (this file's own multiColorImage flag, computeImageColorField(), generateImageStonesLive(),
+// resolveImageExportRegions()) calls this instead of reading layer.colorCount raw. A number or an
+// absent value passes through byte-identically (decision 4); only 'auto' triggers the sweep below.
+//
+// D3 (this milestone's own cache-key audit): computeSubjectMask() (maskMode:'subject') reads only
+// the source imageBuffer and a fixed default toleranceDe -- no layer-stored parameter, so
+// `threshold` has zero effect in 'subject' mode. applyThreshold() (maskMode:'threshold') reads
+// `threshold` directly. `invert`, `blurRadiusPx`, `maxWidthPx`/`maxHeightPx` (working resolution)
+// and `transparent` are read unconditionally by prepareImageField() after either mask route, in
+// both modes -- so the key below includes `threshold` only for 'threshold' mode. This is a flat
+// key->resolvedCount cache mirroring imageColorFieldCache's own shape/2-entry LRU cap exactly: a
+// key hit never re-runs the sweep, a key miss always does -- seed/spread/stoneSize/gap/fillMode/a
+// colorMap pick are deliberately absent from the key, so editing them never invalidates it (decision
+// 5's "recomputes once per change of image, mask parameters, or working resolution").
+//
+// D3 UI-perf follow-up (freeze, not the "not built" note this comment used to carry): #imgThreshold
+// is a range input firing 'input' on every drag tick, and each tick's threshold value is technically
+// a distinct key -- so unlike imageColorFieldCache's single quantizeColors() call, letting Auto's
+// 7-call sweep + ΔE scoring run on every drag tick would be a real per-frame cost. autoColorCountFrozen
+// (set true on 'pointerdown', false on 'pointerup'/'change' -- wired below, near
+// HISTORY_TRACKED_CONTROL_IDS) freezes resolveImageColorCount() to whatever it last actually
+// resolved for that layer (autoColorCountLastResolved) while a mask-slider drag is in progress,
+// regardless of what the key would compute to mid-drag; the trailing 'change' clears the freeze and
+// triggers one real recompute against the now-settled value. A keyboard edit to a number input fires
+// 'change' on every step (no drag in between), so it recomputes once per step -- accepted, since
+// there's no in-between value to freeze against.
+function autoColorCountKeyParts(layer){
+  const maskMode=resolveImageMaskMode(layer.maskMode);
+  const transparent=resolveImageTransparentMode(layer.transparent);
+  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent];
+  if(maskMode==='threshold')parts.push(layer.threshold);
+  return parts.join('|');
+}
+const autoColorCountCache=new Map();
+// layer.id -> the last count actually resolved for it (sweep result or cache hit), read while frozen.
+const autoColorCountLastResolved=new Map();
+let autoColorCountFrozen=false;
+function resolveImageColorCount(layer){
+  if(!layer||layer.type!=='image')return 1;
+  const raw=layer.colorCount;
+  if(raw==null)return 1;
+  if(typeof raw==='number')return Math.max(1,Math.min(8,raw));
+  if(raw!=='auto')return 1;
+  if(autoColorCountFrozen&&autoColorCountLastResolved.has(layer.id))return autoColorCountLastResolved.get(layer.id);
+  const buffer=imageBufferCache.get(layer.imageSrc);
+  if(!buffer)return 1;
+  const key=autoColorCountKeyParts(layer);
+  const cached=autoColorCountCache.get(key);
+  if(cached!=null){autoColorCountLastResolved.set(layer.id,cached);return cached}
+  const field=prepareAutoColorField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
+  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette());
+  autoColorCountCache.set(key,resolvedCount);
+  if(autoColorCountCache.size>2)autoColorCountCache.delete(autoColorCountCache.keys().next().value);
+  autoColorCountLastResolved.set(layer.id,resolvedCount);
+  return resolvedCount;
+}
 // IMG-002: recomputes the quantized color field (labels + colorGroups) for an image layer, purely
 // from its own already-cached decoded buffer and its own stored params -- deterministic, so this is
 // safe to call both when populating the Studio's Colours rows/view (renderImageStudio()) and when
@@ -744,14 +802,22 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 // other pure pipeline stage; this is app.js's own UI-latency concern, not the engine's.
 const imageColorFieldCache=new Map();
 function computeImageColorField(layer){
-  if(!layer||layer.type!=='image'||(layer.colorCount||1)<=1)return null;
+  if(!layer||layer.type!=='image')return null;
+  const colorCount=resolveImageColorCount(layer);
+  if(colorCount<=1)return null;
   const buffer=imageBufferCache.get(layer.imageSrc);
   if(!buffer)return null;
   const transparent=resolveImageTransparentMode(layer.transparent);
-  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,layer.colorCount].join('|');
+  // IMG-012 (D2): forwards maskMode -- and keys on it -- so the Studio's Colours rows/colorMap keys
+  // quantize against the same mask the production path (generateImageStonesLive()/
+  // resolveImageExportRegions(), both already maskMode-aware) uses, instead of always quantizing
+  // against the threshold mask regardless of the layer's actual maskMode (a pre-existing gap this
+  // function's own prior version had -- see docs/specifications/IMG-012-AutoColourCount.md section A).
+  const maskMode=resolveImageMaskMode(layer.maskMode);
+  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode].join('|');
   const cached=imageColorFieldCache.get(key);
   if(cached)return cached;
-  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount:layer.colorCount,palette:imageColorPalette()});
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,palette:imageColorPalette()});
   imageColorFieldCache.set(key,field);
   if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
   return field;
@@ -1020,7 +1086,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
  // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2658,7 +2724,10 @@ function writeSelectedControlsToLayer(){
   // whatever it was before this edit); computeImageColorField() re-quantizes from l's own
   // now-current params, so each visible row's nearestId is resolved fresh rather than trusted from
   // a possibly-stale prior render -- see computeImageColorField()'s own doc comment.
-  l.colorCount=Math.max(1,Math.min(8,parseIntOr(el('imgColorCount').value,1)));
+  // IMG-012: 'auto' must be special-cased before parseIntOr() below -- parseIntOr('auto',1) parses
+  // to NaN and falls back to 1, which would silently store colorCount:1 (single colour) for a
+  // dropdown pick of "Auto (best fit)", the opposite of what was asked.
+  l.colorCount=el('imgColorCount').value==='auto'?'auto':Math.max(1,Math.min(8,parseIntOr(el('imgColorCount').value,1)));
   const colorField=computeImageColorField(l);
   if(colorField){
     const colorMap={...l.colorMap};
@@ -3265,7 +3334,7 @@ function resolveImageExportRegions(project){
     if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
-    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
     const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
     for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
   }
@@ -4871,6 +4940,17 @@ el('autoFit').addEventListener('input',()=>{
 });
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
+// IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
+// #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
+// fire together, no drag in between, so there's nothing to freeze) -- freezes Auto's resolved count
+// at its last real value for the duration of a drag, and forces one real recompute on release. See
+// resolveImageColorCount()'s own doc comment.
+const AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS=['imgThreshold','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
+for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
+  el(id).addEventListener('pointerdown',()=>{autoColorCountFrozen=true});
+  el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});
+  el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});
+}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
 // which fontId #font's native 'input'/'change' events -- wired above via HISTORY_TRACKED_CONTROL_IDS
@@ -5316,7 +5396,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:6,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform'};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform'};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -6338,6 +6418,12 @@ async function renderImageStudio(){
   // computeImageColorField()'s own doc comment for why this isn't cached between renders. Drives
   // both the "Colours" canvas view below and the Colours group's per-row swatch/share/select.
   const colorField=computeImageColorField(l);
+  // IMG-012 (decision 3): shows the resolved count next to the control while Auto is selected --
+  // computeImageColorField() above already resolved layer.colorCount through resolveImageColorCount()
+  // internally (it returns null when that resolves to <=1, so re-resolve directly here for the "Auto:
+  // 1 colour" case too, which colorField alone can't distinguish from "not Auto at all").
+  const autoHintEl=el('imgColorCountAuto');
+  if(l.colorCount==='auto'){const autoResolvedCount=resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
   for(let i=0;i<8;i++){
     const row=el(`imgColorGroup${i}`);
     const group=colorField?.colorGroups?.[i];
