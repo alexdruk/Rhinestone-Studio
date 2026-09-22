@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL, fieldLuminanceAt, ink } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL, fieldLuminanceAt, ink, fieldPixelOn } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
@@ -48,6 +48,7 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // generateMixedSizeInfillStones() are the only S-200 entry points this module calls -- see
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
+import { generateGapFillStones } from './GapFill.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -1317,6 +1318,23 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
+    // IMG-013: runs last, against the combined primary + S-200-infill stone set (S-200 infill counts
+    // as "existing" from gap-fill's own point of view, decision 2) -- reuses the same colorAt()
+    // closure built above (Task C) and the same on-field mask test (fieldPixelOn(), decision 4).
+    if (options.fillGaps) {
+      const isInside = (xMm, yMm) => fieldPixelOn(field, xMm - placement.xMm, yMm - placement.yMm, placement.widthMm, placement.heightMm);
+      const gapFillStones = generateGapFillStones({
+        baseStones: stones,
+        gapMm: options.gapMm,
+        isInside,
+        placement,
+        colorAt,
+        layerId: options.layerId,
+        startIndex: stones.length
+      });
+      stones = stones.concat(gapFillStones);
+    }
+
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats });
   }
 
@@ -2497,6 +2515,11 @@ function normalizeImageParams(params) {
     // edgeThinning's 1, since brightnessThinning applies even to a plain 'uniform' image layer
     // (decision 2) and must be a true no-op there by default.
     brightnessThinning: typeof params.brightnessThinning === 'number' && Number.isFinite(params.brightnessThinning) && params.brightnessThinning >= 0 ? params.brightnessThinning : 0,
+    // IMG-013: read-site permissive default, the same precedent (edgeThinning/brightnessThinning)
+    // already established -- no validateProject() change, no project version bump. A saved project
+    // with no fillGaps field (every project saved before this milestone) coerces to false, which
+    // skips the gap-fill pass entirely, so it regenerates byte-identically.
+    fillGaps: Boolean(params.fillGaps),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     // IMG-006: allowBrightness -- only normalizeImageParams() (this method) passes it.
     ...normalizeMixedSizeParams(params, stoneSizeMm, { allowBrightness: true })

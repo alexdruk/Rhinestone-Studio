@@ -1741,7 +1741,12 @@ function fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm) {
   return pixelY * field.widthPx + pixelX;
 }
 
-function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+// IMG-013: exported (not module-private) so GapFill.js's mask test (decision 4) reuses the exact
+// on-field check every sampler in this module already uses, instead of a second copy -- the local-
+// coordinate convention (an absolute point is `fieldPixelOn(field, xMm - placement.xMm, yMm -
+// placement.yMm, widthMm, heightMm)`) mirrors this module's own insideAtPlaced() closures further
+// below (e.g. sampleRadialFieldFillPoints()).
+export function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
   const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
   return index >= 0 && field.data[index] >= FIELD_ON_THRESHOLD;
 }
