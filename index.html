@@ -1176,7 +1176,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
             </div>
           </div>
-          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option><option value="organic">Organic - hand-set, non-grid look</option><option value="edge">Edge - dense along edges, thinner inside</option></select></div>
+          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option><option value="organic">Organic - hand-set, non-grid look</option><option value="edge">Edge - dense along edges, thinner inside</option><option value="line-design">Line Design - traced outline and lines, filled interior</option></select></div>
         </details>
         <details class="advanced-section" id="imageStudioGroupPosition" open>
           <summary>Position &amp; size</summary>
@@ -1496,6 +1496,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's
        existing "disable the control + explain why right below it" convention. -->
   <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
+  <!-- IMG-010: Line Design ignores Stone size and Mixed Stone Size entirely (fixed 2.0mm chains,
+       2.8mm fills, decision 2) -- mirrors #gapFixedHint's own "disable the control + explain why
+       right below it" convention. Toggled in updateLineDesignSizeCapabilityUI(). -->
+  <p class="hint" id="lineDesignFixedSizeHint" style="display:none">Line design uses fixed 2.0mm chains and 2.8mm fills. Stone size and Mixed Stone Size do not apply.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
   <!-- RS-3013 Step 5: region-only Fill Style, shown instead of the whole-shape #shapeFillMode
        (5 options) while a region is selected -- deliberately scoped to just fill/outline for this

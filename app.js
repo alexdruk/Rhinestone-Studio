@@ -663,7 +663,7 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // #textMode value); every other layer type's stored value already equals the engine's own mode name
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
-const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge']);
+const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design']);
 const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
@@ -821,6 +821,25 @@ function computeImageColorField(layer){
   imageColorFieldCache.set(key,field);
   if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
   return field;
+}
+// IMG-010 (D4): a line-design layer's own stone list is expensive (~0.6-0.8s measured on a
+// realistic fixture) and LineDesignSampler.js reads the full-resolution decoded buffer directly,
+// ignoring threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent/colorCount/palette/
+// colorMap/seed/spread/edgeWidthMm/edgeThinning/brightnessThinning/stoneSize/sizeMode entirely for
+// this mode -- see its own doc comment -- so none of those belong in the cache key below. Mirrors
+// imageColorFieldCache's own shape/2-entry LRU cap exactly. Keyed on layer.id too (unlike
+// imageColorFieldCache) because the cached value already carries stones stamped with a specific
+// layerId, so two different layers must never share a slot.
+const lineDesignStoneCache=new Map();
+// Set true on pointerdown/false on pointerup for the same AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS drag
+// controls IMG-012 already freezes (see that wiring below) -- those controls have no effect on a
+// line-design layer's own output (see the cache-key comment above) but still trigger an expensive
+// regenerate on every 'input' tick while dragging; while frozen, a cache MISS for this layer falls
+// back to whatever is already cached for it (any key) rather than recomputing.
+let lineDesignFrozen=false;
+function invalidateLineDesignCache(layerId){
+  if(!layerId)return;
+  for(const k of[...lineDesignStoneCache.keys()])if(k.startsWith(layerId+'|'))lineDesignStoneCache.delete(k);
 }
 // S-200 (Mixed Stone-Size Layouts): Generation Mode -- 'uniform' (every stone in the layer is the
 // same size, unchanged pre-S-200 behavior) or 'mixed' (GeometryEngine.js's MixedSizeGenerator.js
@@ -1086,7 +1105,30 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
  // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
+  const mode=resolveImageFillMode(layer.fillMode);
+  // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
+  // freeze fallback below.
+  if(mode==='line-design'){
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap].join('|');
+    let cached=lineDesignStoneCache.get(key);
+    if(!cached&&lineDesignFrozen){
+      for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
+    }
+    if(!cached){
+      // maxWidthPx/maxHeightPx are still required here even though LineDesignSampler.js itself
+      // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
+      // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
+      // default for either field.
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
+      const result=this.permanentEngine.generateImageLayout(params);
+      cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
+      lineDesignStoneCache.set(key,cached);
+      if(lineDesignStoneCache.size>2)lineDesignStoneCache.delete(lineDesignStoneCache.keys().next().value);
+    }
+    return includeStats?cached:cached.stones;
+  }
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -3447,6 +3489,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateMixedSizeCapabilityUI();
   updateWeightSizeCapabilityUI();
   updateBrightnessSizeCapabilityUI();
+  updateLineDesignSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
   updateStoneSizeOverlapCapabilityUI();
   // FONT-LIB-004: deliberately last, and NOT between updateTextFontCapabilityUI() and
@@ -3667,6 +3710,27 @@ function updateBrightnessSizeCapabilityUI(){
     brightnessOption.title=eligible?'':'Brightness-following stone size is only available for image layers.';
   }
   if(!eligible&&resolveSizeMode(el('sizeMode').value)==='brightness'){
+    el('sizeMode').value='uniform';
+    if(l)l.sizeMode='uniform';
+  }
+}
+// IMG-010 (D3): Line design's own geometry ignores the layer's Stone size and Mixed Stone Size
+// entirely -- LineDesignSampler.js always places LINE_DESIGN_CHAIN_STONE_SIZE_MM/
+// LINE_DESIGN_FILL_STONE_SIZE_MM stones regardless, and GeometryEngine.generateImageLayout()'s
+// mixedOptions guard skips S-200 infill for this mode outright (see its own comment). Disables both
+// controls (same disable+explain idiom updateWeightSizeCapabilityUI()/updateBrightnessSizeCapabilityUI()
+// already use) with #lineDesignFixedSizeHint's own explanation, and forces a layer already on
+// 'mixed'/'weight'/'brightness' back to 'uniform' -- silent and safe, since none of those would ever
+// have had any effect on this mode's own fixed-size output anyway.
+function updateLineDesignSizeCapabilityUI(){
+  const l=selectedLayer();
+  const isLineDesign=Boolean(l&&l.type==='image'&&resolveImageFillMode(l.fillMode)==='line-design');
+  el('stoneSize').disabled=isLineDesign;
+  el('stoneSize').title=isLineDesign?'Line design uses fixed 2.0mm/2.8mm stones -- this control has no effect.':'';
+  el('sizeMode').disabled=isLineDesign;
+  el('sizeMode').title=isLineDesign?'Line design does not support Mixed Stone Size.':'';
+  el('lineDesignFixedSizeHint').style.display=isLineDesign?'block':'none';
+  if(isLineDesign&&resolveSizeMode(el('sizeMode').value)!=='uniform'){
     el('sizeMode').value='uniform';
     if(l)l.sizeMode='uniform';
   }
@@ -4950,6 +5014,16 @@ for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
   el(id).addEventListener('pointerdown',()=>{autoColorCountFrozen=true});
   el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});
   el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});
+}
+// IMG-010 (D4): same drag controls, freezing a line-design layer's own cached stone list instead --
+// see lineDesignFrozen's own doc comment. 'change' both unfreezes and forces one real recompute
+// (invalidateLineDesignCache() drops the selected layer's entries so updateAll(true) cannot just
+// hit the still-matching cache key -- those 4 controls never appear in that key, so the recompute's
+// own result is always identical to what was already cached; this only proves a real regenerate ran).
+for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
+  el(id).addEventListener('pointerdown',()=>{lineDesignFrozen=true});
+  el(id).addEventListener('pointerup',()=>{lineDesignFrozen=false});
+  el(id).addEventListener('change',()=>{lineDesignFrozen=false;invalidateLineDesignCache(selectedLayer()?.id);updateAll(true)});
 }
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides

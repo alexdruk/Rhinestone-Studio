@@ -28,10 +28,15 @@ Pipeline, from the prototype:
 - **(b)** Per-pixel catalog label by CIE76 over the catalog, dropping colours under 1.2% share.
 - **(c)** Outline chain: a contour one stone radius inside the silhouette edge, smoothed, stones
   placed by chord distance.
-- **(d)** Line chains: the jet-labelled mask closed with a disk of 0.6 stone diameters, clipped to the
-  silhouette dilated by half a stone radius, skeletonized, restricted to thin structures (half-width
-  ≤ 0.85 stone diameters), components under 1.2 stone diameters dropped whole, each path smoothed and
-  stones placed by chord distance.
+- **(d)** Line chains: the jet-labelled mask closed with a disk whose RADIUS is 0.6 stone diameters
+  (**implementation correction, D1**: the prototype's own `disk(0.6*2*rl)` -- `rl` the chain radius --
+  passes a RADIUS argument, so the closing disk's radius is `0.6 * chainDiameterMm` = 1.2mm at SS6, not
+  the 0.3mm a `0.6 stone diameters` reading as an overall-size-requiring-a-halving would give; this
+  spec's own earlier wording was ambiguous between the two and is corrected here, not just in the
+  implementation -- see Task D's "Antennae bridging (D1)" section below for the re-measured numbers
+  this correction changes), clipped to the silhouette dilated by half a stone radius, skeletonized,
+  restricted to thin structures (half-width ≤ 0.85 stone diameters), components under 1.2 stone
+  diameters dropped whole, each path smoothed and stones placed by chord distance.
 - **(e)** Fill rings: distance transform of the free space left by the chains, contours at stone
   radius + k·pitch, walked one pixel at a time placing a stone wherever it fits.
 - **(f)** Pocket pass: `generateGapFillStones()` (IMG-013), unmodified.
@@ -377,8 +382,18 @@ ANTENNAE (bridging test)               130 mm        180 mm
   dots per antenna                          13            13
   components BEFORE closing                 13            13   (truly disconnected)
   components AFTER closing                   1             1   (both antennae bridge into one chain)
-  sensitivity (10px-pitch dot variant, ~0.6-0.84mm gaps): bridges at 130mm, FRAGMENTS INTO 3 at 180mm
-  -> a 0.6-stone-diameter closing disk reliably bridges ~0.56mm gaps, marginal by ~0.84mm
+
+D1 RE-MEASUREMENT (implementation step, corrected 1.2mm-radius closing disk, both dot pitches the
+spec used, both widths -- tools/test-img-010-line-design.mjs item 14):
+                                       130 mm                    180 mm
+  9px pitch  (~0.41/0.56mm gap)   before=13 after=1        before=13 after=1
+  10px pitch (~0.61/0.84mm gap)   before=13 after=1        before=13 after=1
+  -> all four cases bridge into exactly 1 component per antenna under the corrected 1.2mm radius.
+     The earlier "0.6 stone diameters" wording (ambiguous between the disk's radius and its overall
+     size) had been implemented as a 0.3mm radius, under which the spec's own original measurement
+     recorded the 10px-pitch case fragmenting into 3 components at 180mm; re-measured here at the
+     corrected 1.2mm radius, that same case now bridges cleanly, and the 0.3mm-radius reading is
+     retired.
 
 WIDE DARK BLOB (14.6mm dia @180mm; must fill, not chain)
   skeleton px surviving the 0.85-diameter half-width gate     0             0
@@ -418,6 +433,18 @@ written (component-level length filtering only) does not fully prevent this; rec
 implementation add an explicit minimum traced-path length** (distinct from, and applied after, the
 existing component-level filter) — noted here as a measured refinement to record, not an open
 conflict, since it doesn't contradict any given decision.
+
+**Adopted (implementation step, D2).** A traced path shorter than one chain pitch
+(`LINE_DESIGN_CHAIN_STONE_SIZE_MM + gapMm`, i.e. the SS6 chain's own pitch at the layer's own gap —
+2.3mm at the Studio default 0.3mm gap) is dropped whole, after tracing and independent of the
+component-level `LINE_DESIGN_MIN_COMPONENT_DIAMETER_RATIO` (1.2 stone diameters) filter above. Also
+found and fixed in the same implementation step: Zhang-Suen thinning can additionally leave a
+several-pixel-long double-strand ("staircase") artifact along some diagonal runs, a related but
+distinct defect from the isolated-2x2-block case this section otherwise describes — every
+mutually-8-adjacent group of junction/endpoint pixels is clustered into one logical node before
+tracing (`LineDesignSampler.js`'s `traceSkeletonPaths()`), which is what let both antennae actually
+place chain stones end to end rather than fragmenting into all-sub-pitch pieces near the junction
+where each meets the body.
 
 ---
 
