@@ -118,7 +118,14 @@ function maskOutTransparent(mask, alphaNative) {
 // IMG-002: alpha-composites one RGBA channel onto white, at native resolution -- the same
 // alpha-onto-white rationale toGrayscale() (Grayscale.js) already uses for its luminosity blend,
 // applied per-channel instead of luminosity-combined, so R/G/B can be clustered in their own right.
-function compositeChannelOntoWhite(imageBuffer, channelOffset) {
+// IMG-012: exported (this function's own body is unchanged) so AutoColourCount.js's
+// prepareAutoColorField() can build the same per-pixel r/g/b channels prepareImageField() computes
+// internally for colorCount>1 -- prepareImageField() itself has no return-value slot for per-pixel
+// color (only aggregate colorGroups[].rgb, one value per cluster, not per pixel), and Auto's own
+// mean-ΔE-per-subject-pixel scoring needs the real per-pixel value. Reusing this existing pure
+// function (rather than widening prepareImageField()'s own params/return contract, or duplicating
+// its logic) is the smaller, already-correct fix -- see docs/specifications/IMG-012-AutoColourCount.md.
+export function compositeChannelOntoWhite(imageBuffer, channelOffset) {
   const { widthPx, heightPx, data } = imageBuffer;
   const pixelCount = widthPx * heightPx;
   const out = new Uint8ClampedArray(pixelCount);

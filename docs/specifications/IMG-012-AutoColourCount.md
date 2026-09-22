@@ -1,7 +1,42 @@
 # IMG-012 — Automatic Best-Fit Colour Count
 
-**SPEC ONLY.** No changes to `app.js`, `index.html`, `src/**`, or `tools/**` in this milestone.
-Every file:line citation below is against `develop` @ `5a69e50` (this branch's fork point).
+**Implemented.** File:line citations below (outside this note) are against `develop` @ `5a69e50`
+(this branch's fork point), as originally written for the spec-only pass. The implementing
+milestone's own build prompt overrode four points below at build time (decisions D1-D4); this
+document has been corrected in the same commit that implemented it, so it matches shipped
+behaviour. The overrides:
+
+- **D1 (tie rule, overrides decision 2 below):** among the `k` within 1% of the lowest mean ΔE,
+  the winner is the one whose quantization produced the **most non-empty clusters** (ties broken by
+  the smallest `k`) — not "prefer the larger `k`" as decision 2 originally said. The resolved colour
+  count is that winner's own non-empty cluster count (which can be lower than its `k` once
+  `quantizeColors()`'s non-empty-cluster compaction drops empty clusters), and that number is what
+  every read site receives and the Studio shows. Fixture 2 (section E) resolves to **6**, not 8 —
+  corrected in section E below.
+- **D2 (closes the gap section A documents):** `computeImageColorField()` now forwards
+  `maskMode:resolveImageMaskMode(layer.maskMode)` to `prepareImageField()` and includes it in
+  `imageColorFieldCache`'s key, so the Studio's Colours rows/colorMap keys quantize against the same
+  mask the production path already used. Section A's "IMG-012's own Auto sweep must not copy this
+  gap" language undersold this: the gap itself is fixed, not merely not-copied.
+- **D3 (cache key, refines Task D/B):** the Auto cache key is mode-aware —
+  `computeSubjectMask()` (`maskMode:'subject'`) reads only the source image and a fixed default
+  `toleranceDe`, no layer-stored parameter, so `threshold` has zero effect in `'subject'` mode and is
+  omitted from the key in that mode; `applyThreshold()` (`'threshold'` mode) reads `threshold`
+  directly, so it's included only then. `invert`/`blurRadiusPx`/`maxWidthPx`/`maxHeightPx`/
+  `transparent` are read unconditionally after either mask route in both modes. The cache is a flat
+  `key -> resolvedCount` map mirroring `imageColorFieldCache`'s own shape and 2-entry LRU cap exactly
+  — see `resolveImageColorCount()`'s own doc comment in `app.js` for the accepted trade-off this
+  implies for a live `#imgThreshold` drag (each tick's distinct value is a cache miss, unlike a
+  debounced/`change`-only recompute, which was considered and not built because it would make the
+  cache's key-invalidation behaviour — itself required and tested — unobservable from a plain
+  `resolveImageColorCount()` call).
+- **D4:** confirms Task D's own subsampling decision as shipped (scoring subsamples every 3rd
+  subject pixel; quantization itself runs on the full set) — no change from the design below.
+- **API note:** `prepareImageField()` itself was not widened to expose per-pixel colour (it has no
+  return-value slot for that — only aggregate `colorGroups[].rgb`, one value per cluster). The
+  existing private `compositeChannelOntoWhite()` helper in `ImageFieldPipeline.js` was exported
+  instead (its own body unchanged) for `AutoColourCount.js`'s `prepareAutoColorField()` to reuse,
+  rather than widening `prepareImageField()`'s params/return contract or duplicating its logic.
 
 ## Objective
 
@@ -20,6 +55,9 @@ number manually is unchanged.
    CIE76 ΔE between every subject pixel's *original* colour and the catalog colour its cluster
    resolved to. Choose the `k` with the lowest mean; when two `k` are within 1% of each other,
    prefer the larger. Subject pixels are whichever set the layer's current `maskMode` keeps.
+   **Superseded by D1 (this document's top note) before build:** among the `k` within 1% of the
+   lowest mean, prefer the one with the most non-empty clusters (ties broken by the smallest `k`),
+   and resolve to that winner's own cluster count rather than its `k`.
 3. The Studio shows the chosen count next to the control (e.g. "Auto: 5 colours").
 4. Saved projects are byte-identical: a stored numeric `colorCount` keeps meaning exactly that
    number; only new imports default to Auto. Every read site that sees an absent or numeric
@@ -87,15 +125,16 @@ both stay deliberately pure/uncached per their own header comments):
    `field` (`{labels, colorGroups, ...}`) returned by `computeImageColorField()`, keyed by
    `[layer.imageSrc, layer.threshold, layer.invert, layer.blurRadiusPx, layer.maxWidthPx,
    layer.maxHeightPx, transparent, layer.colorCount].join('|')`, LRU-capped at 2 entries (line
-   756). **This key omits `maskMode`** — `computeImageColorField()`'s own `prepareImageField()`
-   call at line 754 never forwards `maskMode` at all, so it always quantizes against the
-   *threshold* mask even when the layer's `maskMode` is `'subject'`. This is a pre-existing gap in
+   756). **This key omitted `maskMode`** — `computeImageColorField()`'s own `prepareImageField()`
+   call at line 754 never forwarded `maskMode` at all, so it always quantized against the
+   *threshold* mask even when the layer's `maskMode` was `'subject'`. This was a pre-existing gap in
    the Studio-only preview/colorMap-key path (not the production path — `generateImageStonesLive()`
    line 1023 and `resolveImageExportRegions()` line 3268 both correctly forward
-   `maskMode:resolveImageMaskMode(layer.maskMode)`). IMG-012's own Auto sweep must not copy this
-   gap: decision 2 explicitly requires mask-aware subject pixels, so Auto's field preparation must
-   be modelled on the production call sites (which pass `maskMode`), not on
-   `computeImageColorField()`.
+   `maskMode:resolveImageMaskMode(layer.maskMode)`). **Fixed by D2** (this document's top note):
+   `computeImageColorField()` now forwards `maskMode` and keys on it too, so the Studio's
+   preview/colorMap-key path matches production. Auto's own sweep was built on the mask-aware
+   production shape from the start (decision 2 requires mask-aware subject pixels), independent of
+   this fix.
 
 ---
 
@@ -343,20 +382,19 @@ k5: meanDeltaE=3.3695  clusters=5
 k6: meanDeltaE=0.0000  clusters=6
 k7: meanDeltaE=0.0000  clusters=6
 k8: meanDeltaE=0.0000  clusters=6
-CHOSEN k = 8
+CHOSEN k = 6 (D1 override -- see this document's top note)
 ```
 
 `k=6,7,8` all reach an exact 0.0000 mean ΔE — a perfect fit, since the image genuinely has 6 flat
 colours and `quantizeColors()`'s non-empty-cluster compaction (`ColorQuantize.js:270-282`) drops
 the two unused extra clusters at `k=7,8` for free (`clusters:6` reported at all three). These three
-`k` values are exactly tied (well within 1% of each other), so decision 2's tie rule picks the
-*largest*, `k=8`, over the intuitively-"correct" `k=6`.
-
-**Design note (not a blocking conflict):** this is a faithful, literal consequence of decision 2
-as written, not a bug — but it means Auto will report the maximum colour count (8) for any image
-whose true colour count is ≤8 and perfectly (or near-perfectly) separable, rather than the number
-of colours actually present. Worth the product owner's awareness before this ships; not redesigned
-here per the "not open for redesign" instruction.
+`k` values are exactly tied (well within 1% of each other). Decision 2's original tie rule (prefer
+the largest `k`) would have picked `k=8` here, reporting the maximum colour count (8) rather than
+the number of colours actually present (6) for any image whose true colour count is ≤8 and
+perfectly (or near-perfectly) separable — flagged below as a design note when this spec was written,
+and superseded before build by **D1**: among tied candidates, prefer the most non-empty clusters
+(all three tie at 6 here), breaking further ties by the smallest `k` — so the winner is `k=6`, and
+the resolved colour count (the winner's own cluster count) is **6**.
 
 ---
 
@@ -368,9 +406,12 @@ Numbered items:
    resolves to `k=4`, and the reported mean ΔE at `k=4` is the strict global minimum (not just
    within-1%-tied-and-largest) — asserts the "obvious" case picks the obviously-right answer, not
    an accidental tie.
-2. **Fixture 2 tie-rule correctness.** `chooseAutoK(buildSixRegionFixture(240,160))` resolves to
-   `k=8`, with `k=6`, `k=7`, `k=8` all reporting the same (0) mean ΔE — proves the "prefer larger
-   when within 1%" branch actually fires, not just the "lower mean wins" branch.
+2. **Fixture 2 tie-rule correctness (D1).** `chooseAutoColorCount(buildSixRegionFixture(240,160), ...)`
+   resolves to a winner `k=6` (resolvedCount 6), with `k=6`, `k=7`, `k=8` all reporting the same (0)
+   mean ΔE — proves the "most non-empty clusters, ties broken by the smallest k" branch (D1) actually
+   fires, not just the "lower mean wins" branch. (This spec originally called for `k=8`, per decision
+   2's "prefer the larger k when within 1%" — superseded by D1 before build; see this document's top
+   note.)
 3. **Tie-threshold boundary.** A constructed pair of mean-ΔE values exactly 1.0% apart and a pair
    just over 1.0% apart (synthetic numbers fed directly to the tie-break function, not through
    `quantizeColors()`) — confirms the boundary is `<=` (inclusive) not `<`, per decision 2's "within
