@@ -1,6 +1,8 @@
 # IMG-013 — Fill Empty Slots
 
-Spec only. No changes to `app.js`, `index.html`, `src/`, or `tools/` test files in this step.
+Implemented (`src/geometry/GapFill.js`, `GeometryEngine.js` wiring, `app.js`,
+`tools/test-img-013-fill-empty-slots.mjs`). Build-time product-change override to decision 1 below:
+there is no toggle button and no Studio control — see "Implementation override" under decision 1.
 
 ## Objective
 
@@ -13,6 +15,16 @@ that same layer, without touching the primary stones.
 1. A toggle button at the bottom of the Image → Strass Lightbox (`#lightboxImageTrace`), labelled
    "Fill empty slots", shows on/off state. It sets a new per-layer image field (`fillGaps`, boolean,
    default `false`/absent). Saved projects without the field regenerate byte-identically.
+
+   **Implementation override:** shipped with no button and no Studio control at all. `fillGaps` is
+   set once, programmatically, by the `importImageFile` new-layer factory (`app.js`'s
+   `el('importImageFile').addEventListener('change',...)` handler) — every newly imported image
+   layer gets `fillGaps:true`; there is no UI to turn it off per-layer. The field's own contract
+   (permissive boolean, `false`/absent default, byte-identical regeneration for every layer saved
+   before this milestone) is unchanged. This drops Task B's Studio-sync (site 2) and Studio-readback
+   (site 3) sites, the `#imgColorReset`-button pattern recommendation under site 3, and
+   Task E's caching recommendation (no cache shipped this milestone) — struck through in place
+   below rather than deleted, so the reuse-audit trail stays intact.
 2. When on, generation runs a gap-fill pass after the layer's normal layout: candidate positions are
    points touching two existing stones of that layer (the circle-circle intersection at distance
    `r_a+r+gap` and `r_b+r+gap`); a stone is placed wherever it fits against every existing and newly
@@ -157,8 +169,8 @@ The `fillGaps` field is a per-layer image field. Six sites were named, plus hist
 | # | Site | file:line | Field must reach it? |
 |---|---|---|---|
 | 1 | `generateImageStonesLive()` params object | `app.js:1089` | **Yes** |
-| 2 | Studio sync (control ← layer) | `app.js:6344` (`renderImageStudio()`, whole function 6344-6491) | **Yes** |
-| 3 | Studio readback (layer ← control) | `app.js:2720` (`writeSelectedControlsToLayer()`'s `l.type==='image'` branch, 2720-2752) | **Yes, but see note** |
+| 2 | ~~Studio sync (control ← layer)~~ | ~~`app.js:6344` (`renderImageStudio()`)~~ | **No (implementation override: no Studio control shipped)** |
+| 3 | ~~Studio readback (layer ← control)~~ | ~~`app.js:2720` (`writeSelectedControlsToLayer()`)~~ | **No (implementation override: no Studio control shipped)** |
 | 4 | `resolveLayerShapeSource()` image branch | `app.js:3311-3317` | **No** |
 | 5 | `resolveImageExportRegions()` params object | `app.js:3331-3342` | **No** |
 | 6 | `GeometryEngine.normalizeImageParams()` | `src/geometry/GeometryEngine.js:2409-2504` | **Yes** |
@@ -172,28 +184,12 @@ forwarded to `engine.generateImageLayout(params)`, listing every image-layer fie
 (`threshold`, `invert`, `maskMode`, `colorMap`, `...mixedSizeParamsFor(layer)`, etc.) by hand. Needs
 one more entry: `fillGaps:Boolean(layer.fillGaps)`.
 
-**2. Studio sync — `renderImageStudio()`, `app.js:6344-6491`.** This function pushes every current
-layer value into the Studio's DOM controls each time it runs (e.g. `el('imgSeed').value=...` at
-`app.js:6378`, the Poisson-controls enable/disable block at `app.js:6376-6377`). The toggle button's
-pressed/on state must be set here from `l.fillGaps`, following the same "read layer, write DOM"
-direction every other control in this function already uses. Natural insertion point: alongside the
-other mode-dependent control syncs (`app.js:6371-6390`), since the toggle's meaning also only applies
-while an image layer is selected (same gating `IMAGE_STUDIO_LIVE_GROUP_IDS`, `app.js:6359/6364`,
-already uses).
-
-**3. Studio readback — `writeSelectedControlsToLayer()`'s `l.type==='image'` branch,
-`app.js:2720-2752`.** This is the generic "read every control's current DOM value into `l`" function,
-wired to fire on `HISTORY_TRACKED_CONTROL_IDS`' `input`/`change` events
-(`app.js:4941-4942`). **Note:** decision 1 specifies a *button* that "shows on/off state," not a
-`<select>`. This codebase's one existing precedent for a layer-mutating button inside this same
-Lightbox, `#imgColorReset` (`index.html:1201`, handler at `app.js:5422`:
-`el('imgColorReset').onclick=()=>{...commitHistory();l.colorMap={};updateAll(true)}`), does **not**
-go through `writeSelectedControlsToLayer()` at all — it commits history and mutates the layer directly
-in its own `onclick`, even though `'imgColorReset'` also (redundantly, harmlessly) appears in
-`HISTORY_TRACKED_CONTROL_IDS` (a button never fires `input`/`change`, so that list membership is
-inert for it). **Recommendation: follow the `#imgColorReset` pattern** — a dedicated `onclick` near
-`app.js:5413-5424` that does `commitHistory();l.fillGaps=!l.fillGaps;updateAll(true)` and toggles its
-own `aria-pressed` attribute, rather than adding a line inside
+**2/3. Studio sync and readback — not implemented.** Implementation override (see decision 1): this
+milestone ships no Studio control and no toggle button, so there is nothing for `renderImageStudio()`
+or `writeSelectedControlsToLayer()` to sync or read back. `fillGaps` is set exactly once, at import
+time, by the `importImageFile` new-layer factory, and is otherwise a plain, permissive per-layer
+field with no UI path to change it. The analysis originally here (an `#imgColorReset`-pattern
+dedicated `onclick` recommendation) is moot under the override.
 `writeSelectedControlsToLayer()`. Listed as a site here because the task named it as one of the six,
 but under this recommendation it does not actually need a new line.
 
@@ -234,6 +230,11 @@ and newly placed stones of that layer" (S-200 infill counts as "existing" from g
 view). The same `colorAt(xMm,yMm)` closure already built at `GeometryEngine.js:1251-1256` is reused
 unchanged for filler colour (see Task C).
 
+**As implemented:** landed exactly as described, immediately after the S-200 block and gated on
+`options.fillGaps`, calling the new `generateGapFillStones()` (`src/geometry/GapFill.js`) with an
+`isInside` closure built from `StoneSampler.js`'s `fieldPixelOn()` (exported for this purpose) and
+the same `colorAt`/`placement` already in scope.
+
 **6b. `resolveImagePolygons()` — `GeometryEngine.js:1342-1385`.** Produces silhouette contours, never
 stones (`"produces no Stone/StoneLayout"`, `GeometryEngine.js:1329`). Confirmed no forwarding needed —
 same reasoning as site 5, and it already demonstrates the "accepted via `normalizeImageParams()`,
@@ -241,12 +242,8 @@ ignored here" pattern for `mode`.
 
 ### History-tracking list
 
-`HISTORY_TRACKED_CONTROL_IDS`, `app.js:4941` (array), wired at `app.js:4942`
-(`el(id).addEventListener('input',...)`/`('change',...)`). Per site 3's recommendation (dedicated
-`onclick`, `#imgColorReset` pattern), the toggle button's id does **not** need to be added here — a
-button's `onclick` handler that calls `commitHistory()`/`updateAll(true)` directly is the established,
-correct mechanism for a button-shaped control in this codebase, and adding the id to this array would
-be inert (as it already, harmlessly, is for `'imgColorReset'`).
+`HISTORY_TRACKED_CONTROL_IDS`, `app.js:4941` (array). Moot under the implementation override (no
+toggle button, no control id) — nothing to add here.
 
 ### `validateProject()` — `app.js:1175-1234`
 
@@ -368,24 +365,31 @@ fixture's size. Two things argue for caching anyway rather than treating this as
    (`app.js:4942`) fires on every drag tick of a slider like `#imgThreshold`, not just on commit. A
    pass that is cheap once can still add up when re-run tens of times per second while dragging.
 
-**Recommendation:** cache the gap-fill pass's own result (the filler stone list) the same way this
-codebase already caches the other expensive, drag-repeated step in this exact pipeline:
-`imageColorFieldCache` (`app.js:803-824`), a 2-entry LRU `Map` keyed on every param the expensive
-computation depends on, with an explicit doc comment (`app.js:791-802`) recording why —
-"deliberately NOT cached inside `src/image` or `src/geometry`... this is `app.js`'s own UI-latency
-concern, not the engine's," which matches this repo's architecture rule that `GeometryEngine` stays a
-pure, uncached pipeline stage. Concretely: a sibling `imageFillGapsCache` in `app.js`, keyed on the
-same field-shaping params `imageColorFieldCache`/`generateImageStonesLive()`'s own params object
-already use (`imageSrc, threshold, invert, blurRadiusPx, maxWidthPx, maxHeightPx, transparent,
-colorCount, maskMode, stoneSizeMm, gapMm, mode, fillGaps`, plus whatever S-200 params affect the base
-stone set the pass runs against, since S-200 infill stones count as "existing" per site 6a) —
-so an edit that does not change the layer's own layout (e.g. selecting a different layer, or an
-unrelated project-level edit) never re-runs the pass, and an edit that does change any input the pass
-actually depends on always invalidates it correctly.
+**Recommendation (superseded):** the analysis above argued for an `app.js`-side
+`imageFillGapsCache`, mirroring `imageColorFieldCache`. **Implementation override: no cache shipped
+in this milestone**, by explicit product-change instruction, not because point 2's concern went
+away — `fillGaps:true` is now the permanent default for every imported image layer (decision 1's
+override), so `generateImageLayout()` still re-runs the gap-fill pass on every `updateAll()` a
+drag-tick fires for such a layer, same as before. The measured cost (33-88ms at this fixture's scale
+in Task D; ~40-70ms at ~2,250-2,450 base stones measured again at implementation time, item 15's own
+number) clears the ~100ms bar this task gates on without a cache, so nothing broke by shipping
+without one, but the drag-repeat cost this section flagged is real and un-mitigated. Revisit this
+caching recommendation if UI-latency during a slider drag on a gap-filled image layer turns out to be
+noticeable in practice.
 
 ---
 
 ## F. Test plan — `tools/test-img-013-fill-empty-slots.mjs`
+
+**As implemented:** items 1-11 below match this section as written. Item 12 does not hand-copy
+`generateImageStonesLive()`'s params expression (the IMG-009 lesson: a copy can drift) — it extracts
+the real method source from `app.js` via a brace-balanced slice and executes it with `new Function()`
+against a real engine and stubbed caches/helpers, asserting the `fillGaps:true` layer's stones are a
+strict superset of the `fillGaps:false` layer's. Item 13's literals are STEP 0's own (captured on
+this branch's actual pristine tip, commit `d1cfca0`, not `827b70d` — this spec had one more commit
+land on top of it before build started), inlined directly rather than loaded from a saved-project
+JSON fixture. Item 14 (new) pins the `importImageFile` factory literal's `fillGaps:true`. Item 15
+(new) is the performance gate.
 
 1. **Off by default, byte-identical.** `normalizeImageParams({...literal params, no fillGaps field})`
    resolves `fillGaps:false`; `generateImageLayout()` with `fillGaps` omitted produces the identical
@@ -465,23 +469,24 @@ actually depends on always invalidates it correctly.
 
 ---
 
-## Summary of file:line changes this spec anticipates (informational — not implemented here)
+## Summary of file:line changes (as implemented)
 
-- `src/geometry/GeometryEngine.js:2409-2504` (`normalizeImageParams()`) — add `fillGaps` to the
-  returned options object, read-site permissive default.
-- `src/geometry/GeometryEngine.js:1189-1321` (`generateImageLayout()`) — invoke the new gap-fill pass
-  after the existing S-200 infill block (after line 1318), reusing `colorAt()` (1251-1256) for filler
-  colour.
-- `src/geometry/MixedSizeGenerator.js` (or a new sibling module) — new circle-circle intersection
-  candidate generator (Task A); call `selectNonOverlappingSizedStones()` (already exported,
-  `MixedSizeGenerator.js:179`) with `eligibleSizesMm: [GAP_FILL_STONE_SIZE_MM]` for accept/reject.
-- `app.js:1089` (`generateImageStonesLive()`) — forward `fillGaps` into the params object.
-- `app.js:6344-6491` (`renderImageStudio()`) — sync the toggle button's on/off state from `l.fillGaps`.
-- `app.js:~5413-5424` (imagetrace Lightbox button wiring, `#imgColorReset` precedent) — new dedicated
-  `onclick` for the toggle button, following the direct-mutate-and-commit pattern rather than
-  `writeSelectedControlsToLayer()`.
-- `index.html:~1147-1163` (Image → Strass Lightbox markup) — new toggle button, `aria-pressed`
-  convention.
-- No changes anticipated to: `app.js:3311-3317` (`resolveLayerShapeSource()`), `app.js:3331-3342`
+- `src/geometry/GapFill.js` (new module) — `generateGapFillStones()` (circle-circle intersection
+  candidate generation, round-based iteration per decision 2, `selectNonOverlappingSizedStones()`
+  reused unchanged for accept/reject) and `GAP_FILL_STONE_SIZE_MM = 2.0`.
+- `src/geometry/StoneSampler.js` — exported `fieldPixelOn()` (was module-private) so `GapFill.js`'s
+  mask test (decision 4) reuses the exact on-field check every sampler in this module already uses.
+- `src/geometry/GeometryEngine.js:2409-2504` (`normalizeImageParams()`) — added `fillGaps:
+  Boolean(params.fillGaps)`, read-site permissive default.
+- `src/geometry/GeometryEngine.js:1189-1321` (`generateImageLayout()`) — invokes the gap-fill pass
+  after the existing S-200 infill block, reusing `colorAt()` for filler colour and a new
+  `fieldPixelOn()`-based `isInside` closure for the mask test.
+- `app.js:1089` (`generateImageStonesLive()`) — forwards `fillGaps:Boolean(layer.fillGaps)` into the
+  engine params object.
+- `app.js` (`importImageFile` new-layer factory) — new image layers default to `fillGaps:true`
+  (decision 1's implementation override: no button, no Studio control).
+- No changes to: `app.js:3311-3317` (`resolveLayerShapeSource()`), `app.js:3331-3342`
   (`resolveImageExportRegions()`), `GeometryEngine.js:1342-1385` (`resolveImagePolygons()`),
-  `HISTORY_TRACKED_CONTROL_IDS` (`app.js:4941`), `validateProject()` (`app.js:1175-1234`).
+  `HISTORY_TRACKED_CONTROL_IDS` (`app.js:4941`), `validateProject()` (`app.js:1175-1234`),
+  `renderImageStudio()`, `writeSelectedControlsToLayer()`, `index.html` — matching the table in
+  Task B above.
