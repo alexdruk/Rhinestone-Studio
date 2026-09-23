@@ -120,7 +120,9 @@ path rescales `0/1 -> 0/255` itself; either would silently corrupt a 0/255 input
   averaged to a background colour, and a pixel is subject when its CIE76 distance from it exceeds
   `toleranceDe`. The result is reduced to its largest 4-connected component, which drops the
   speckle a photographic background leaves behind and keeps holes as holes — an enclosed region
-  that is background-coloured stays off, because it is simply not in the component.
+  that is background-coloured stays off, because it is simply not in the component. **Reversed by
+  IMG-014** (`docs/specifications/IMG-014-SubjectMaskPhotographic.md` decision 3), which found real
+  photographs where an enclosed background-coloured region is subject (skin, fur), not a true hole.
 
 The Lab conversion and CIE76 distance already exist in `ColorQuantize.js` for `assignNearestIds()`.
 They move to a small shared module rather than being duplicated (decision 5).
