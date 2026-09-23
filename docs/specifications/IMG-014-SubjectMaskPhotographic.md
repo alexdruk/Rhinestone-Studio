@@ -17,8 +17,9 @@ traced to the same two mechanisms:
 * **`largestConnectedComponent()`** (`:57`) keeps only the single largest on-component and drops
   everything else, including secondary subject parts (a logo's dot, a second word) that just happen
   to be smaller than the main one, and treats every enclosed background-coloured region as a hole
-  that stays off — correct for a true cutout hole, wrong for skin between an arm and a torso, or fur
-  between ears, which is subject that happens to render close to the background colour.
+  that stays off — correct for a true cutout hole, wrong for the portrait's own mid-grey facial skin
+  and the tiger's white fur, both subject that happens to render close to the background colour
+  (measured in decision 3 below).
 
 IMG-014 replaces both mechanisms with a border-ring analysis that tolerates a non-uniform border
 (a modal colour, not a mean) and a background definition based on border-connectivity rather than
@@ -35,10 +36,10 @@ is the fraction of the image the mask keeps.
 | Image | shipped coverage | proposed coverage | pixel agreement | What went wrong (shipped) |
 |---|---|---|---|---|
 | tiger | 0.808 | 0.819 | 0.665 | Snow kept, white/grey fur dropped — the two errors cancel in the coverage figure alone; pixel agreement is the figure that exposes it. |
-| portrait | 0.325 | 0.822 | — | Hair, brows, eyes and lips dropped: the averaged background `56,56,56` is pulled dark by hair on the border. |
-| logo | 0.169 | 0.208 | — | The largest-component rule drops the dot, the word CREATIVE, and the slogan. |
-| Einstein | 0.572 | 0.596 | — | (recorded as provided) |
-| butterfly | 0.365 | 0.368 | — | (recorded as provided) |
+| portrait | 0.325 | 0.822 | 0.503 | Hair, brows, eyes and lips dropped: the averaged background `56,56,56` is pulled dark by hair on the border. |
+| logo | 0.169 | 0.208 | 0.961 | The largest-component rule drops the dot, the word CREATIVE, and the slogan. |
+| Einstein | 0.572 | 0.596 | 0.976 | (recorded as provided) |
+| butterfly | 0.365 | 0.368 | 0.997 | (recorded as provided) |
 
 The alpha route (cartoon 0.488, furry 0.335) is out of scope for this milestone and stays
 byte-identical — recorded here as provided context, not a target this spec changes.
@@ -76,7 +77,7 @@ absolute 0.05% floor closes that gap as a side effect.
 ### 1. Background colour is the modal border colour, not the mean
 
 Replaces `averageBorderRgb()` (`:35`). For every 7th pixel of the border ring (same ring
-`averageBorderRgb()` already walks: row 0, row `h-1`, column 0, column `h-1`, each pixel counted
+`averageBorderRgb()` already walks: row 0, row `h-1`, column 0, column `w-1`, each pixel counted
 once), count how many border pixels overall are within ΔE 8 of it; the pixel with the highest count
 is the winner (ties: first in the existing row-major-then-column border enumeration order — no
 documented behaviour depends on which of two equal-count winners is picked, mirroring
@@ -143,13 +144,15 @@ an enclosed background-coloured region is, by construction, unreached by the bor
 it is subject with no separate rule needed — decision 3 is naming that consequence, not adding new
 mechanism.
 
-The reversal is measured, not asserted: on the portrait, skin between the arm and torso forms a
-12.8% enclosed region at mean ΔE 6.1 from the background — well inside the default ΔE-12 tolerance,
-so it was always being *classified* as background-like, and the shipped "holes stay holes" rule was
-the only reason it was discarded. Tiger white fur is a smaller instance of the same thing (0.86% at
-ΔE 8.8). The logo's largest enclosed background-coloured region is 0.09% of the image — small enough
-that this decision's cost on that image is negligible next to the largest-component-drop it also
-fixes (decision 4).
+The reversal is measured, not asserted: on the portrait — a greyscale photograph — the 12.8%
+enclosed region is mid-grey facial skin, at mean ΔE 6.1 from the background — well inside the
+default ΔE-12 tolerance, so it was always being *classified* as background-like, and the shipped
+"holes stay holes" rule was the only reason it was discarded. On the tiger, the 0.86% figure is the
+largest of 15 enclosed white-fur regions each at or above decision 4's own 0.05% floor, at ΔE 8.8;
+across the whole tiger frame, enclosed background-coloured pixels (of every size, not just the 15
+above the floor) total 5.48%. The logo's largest enclosed background-coloured region is 0.09% of the
+image — small enough that this decision's cost on that image is negligible next to the
+largest-component-drop it also fixes (decision 4).
 
 Fixture (b) above is the minimal case: a 6×6 island at ΔE≈4.4 from background, fully enclosed in a
 20×20 subject square, is dropped by the shipped algorithm (364/400) and kept whole by the proposed
@@ -165,13 +168,17 @@ few-pixel noise (fixture (d): a lone speckle with no competing component, which 
 "keep the largest" rule cannot filter at all once it is the *only* candidate — see the incidental
 finding above).
 
-0.05% is the same order of magnitude as the logo's own smallest kept feature (the dot, plausibly
-close to this floor) and comfortably above single-pixel/few-pixel noise on every fixture measured
-here (fixture (c)'s smallest real component is 0.28%, 5.6× the floor; fixture (d)'s speckle is
-0.01%, 20× below it). No real-image measurement in this milestone's own probe runs close enough to
-0.05% to have been at risk of the floor being wrong in either direction; this is flagged as the one
-number in this spec not independently corroborated by the architect's own real-image measurements,
-which do not report per-component sizes.
+0.05% is bracketed by real per-component measurements on both sides, provided by the architect: the
+largest proposed-mask component that still falls *below* the floor is 0.039% on the tiger and
+0.034% on the portrait; the smallest real part that survives it is the logo's — 13 components in
+the proposed mask, the smallest 0.078% (156 px of 199,820), none below the floor. The floor sits
+about 1.3× above the largest measured speckle (0.05/0.039) and about 1.6× below the smallest
+measured real part (0.078/0.05) — margin on both sides, not a knife-edge choice. Aggregate speckle
+volume stays small next to what it removes: the tiger has 1248 components below the floor totalling
+0.340% of its pixels, the portrait 158 components totalling 0.271% — both dwarfed by the coverage
+gains in the real-image table above. The same margin holds on this milestone's own fixtures
+(fixture (c)'s smallest real component is 0.28%, 5.6× the floor; fixture (d)'s speckle is 0.01%,
+20× below it).
 
 ## Structure
 
@@ -193,9 +200,12 @@ the alpha route are all unchanged — decisions 5–6).
 4. `tools/test-img-014-subject-mask-photographic.mjs` (new, future implementation step) — the five
    fixtures pinned verbatim below, plus a re-pin of `tools/test-img-009-subject-mask.mjs`'s Item 5
    hole sub-case (see "Existing tests" below) since that literal changes under this milestone.
-5. Docs — this spec; `docs/specifications/IMG-009-SubjectMask.md` gains one sentence noting the
+5. `tools/test-img-010-line-design.mjs` Item 20 (`:806`-`:864`, future implementation step) —
+   re-fixtured onto the alpha route per "The Item 20 decision" below; not a
+   `computeSubjectMask()`/`SubjectMask.js` change.
+6. Docs — this spec; `docs/specifications/IMG-009-SubjectMask.md` gains one sentence noting the
    decision-1 reversal; `docs/BACKLOG.md` gains a row recording the shipped defect and pointing to
-   this spec.
+   this spec, plus a second row on the full-bleed/no-background case Item 20 exposed.
 
 ## Existing tests: every pinned literal expected to change
 
@@ -220,26 +230,37 @@ alpha route is out of scope and confirmed unreached by anything below that isn't
 | `test-img-013-fill-empty-slots.mjs` Item 13 (`:446`-`:479`) | four-quadrant, `colorCount:4` | Yes | No — identical fixture to IMG-012's, measured unchanged | unchanged |
 | `test-img-010-line-design.mjs` `makeFixture()` (all items) | wings/veins fixture | **No** — background outside the blob is fully transparent (`data[i+3]=0`, `:154`), well above `SUBJECT_ALPHA_PRESENCE_FRACTION` (1%): alpha route | No — alpha route is out of scope and unchanged | unchanged |
 | `test-img-010-line-design.mjs` Item 11 (`:512`) | disc, `maskMode:'threshold'` | No (threshold mode) | No | n/a |
-| `test-img-010-line-design.mjs` **Item 20** (`:806`-`:864`) | 200×14, fully opaque, hard 2-colour vertical split at x=98, no true background at all | Yes | **Regression risk, flagged, not fixed by this spec** — see below | shipped coverage 2800/2800 (whole image, both colours) → proposed 1371 (~half); `backgroundRgb` `[48,140,158]` (blend, matches neither colour) → `[49,168,109]` (exactly colour B) |
+| `test-img-010-line-design.mjs` **Item 20** (`:806`-`:864`) | 200×14, fully opaque, hard 2-colour vertical split at x=98, no true background at all | As shipped today: no fixture change, would take the background route | **Resolved by re-fixturing onto the alpha route, not a mask-algorithm change** — see below | Implementation step pads the fixture to 204×18 with a 2px fully-transparent margin on every side (the strip and the poke shifted `+2` in x and y) — `transparentFraction` then clears `SUBJECT_ALPHA_PRESENCE_FRACTION`, the same mechanism `makeFixture()` already uses elsewhere in this file, so the fixture takes the alpha route (untouched, out of scope) instead of the background route at all |
 
-### The Item 20 regression, called out explicitly
+### The Item 20 decision
 
-This fixture has no real background at all — it is a solid rectangle covered entirely by two
-subject colours (`sapphire`/`emerald`), used to test the pocket pass's modal-colour rule, not the
-mask. The shipped algorithm accidentally gets it right: its whole-ring mean is a blend of both
-colours, far enough from both in ΔE that every pixel registers as "on," so the mask keeps the entire
-2800px rectangle — correct, for the wrong reason. The proposed algorithm's modal-colour step, given
-no genuine background to find, picks whichever real colour dominates the border ring (colour B, at
-102/200 px of the top/bottom rows) and calls it "the background," then correctly-per-its-own-logic
-excludes the other 1371px (colour A) from the mask entirely — a real defect on an image with no
-background, introduced by this milestone. This was measured directly (table above), not asserted:
-`tools/scratch/img-014-run-fixtures.mjs`'s split-border-fixture run. Item 20's own downstream
-assertions (the pocket-stone search, the majority-colour oracle) are keyed to positions across the
-*whole* strip and would need to be re-measured — plausibly redesigned — against whatever the
-implementation step's mask actually produces for this fixture; this spec does not resolve that,
-since resolving it means either accepting the loss, special-casing a no-real-background image (out
-of scope per this spec's fixed decisions), or redesigning the Item 20 fixture to have an actual
-border margin. Flagged for the implementation step to decide, not silently absorbed here.
+Item 20 exists to test the pocket pass's own modal-colour rule
+(`LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO`), not `computeSubjectMask()` itself — its 200×14, fully
+opaque, hard 2-colour split was never meant to exercise the background route's border-colour logic,
+and decision 1's modal-colour step cannot tell that apart from a real image with a genuinely
+dominant border colour: both simply mean "whichever colour covers more of the border ring."
+
+**The implementation step re-fixtures Item 20 instead of accepting the coverage loss.** It pads the
+fixture to a 204×18 canvas with a 2px fully-transparent margin on every side (the strip and the poke
+shifted `+2` in x and `+2` in y, preserving their relative geometry), which pushes
+`transparentFraction` above `SUBJECT_ALPHA_PRESENCE_FRACTION` and sends the fixture down the alpha
+route — the exact mechanism `makeFixture()` already uses elsewhere in the same file, so Item 20
+becomes consistent with the rest of `test-img-010-line-design.mjs` rather than an outlier reaching
+the background route at all. The straddling stone Item 20 searches for is re-located empirically
+against the padded fixture's actual geometry, and the test is re-verified to still fail when the
+pocket pass is reverted to a single-pixel point sample — the regression guard Item 20 exists for —
+proving the padding fixes the mask path without quietly defanging the test.
+
+**Why no border-share threshold can rescue the no-background case instead.** The natural
+alternative — refuse to trust the modal colour as "background" unless its cluster covers less than
+some share of the border ring — does not separate the two cases. Item 20's own modal cluster covers
+0.509 of its border ring (measured directly, `tools/scratch/img-014-verify-followup.mjs`); the
+portrait's — a real photograph with a real background — covers 0.515, provided by the architect. A
+gate anywhere near 0.51 would misclassify one or the other; there is no threshold that keeps the
+portrait on the background route while pushing Item 20 off it. This confirms the fixture-level fix
+above is the right layer to resolve this at, not a new heuristic inside `computeSubjectMask()`
+itself — and it is why the general case (any full-bleed, no-real-background image) is recorded as a
+`docs/BACKLOG.md` row rather than solved here.
 
 ## Fixtures (pinned verbatim, for the future test file)
 
@@ -341,14 +362,24 @@ function buildFixtureE(runPx) {
   carry a real interior hole `computeSubjectMask()`'s alpha branch does not fill. Not touched or
   removed here; worth a `docs/BACKLOG.md` row of its own once this milestone actually ships and the
   redundancy is real rather than prospective.
-* `test-img-010-line-design.mjs` Item 20's own fixture/assertions — flagged above, not fixed.
+* A general, algorithmic fix for full-bleed/no-real-background images — resolved for
+  `test-img-010-line-design.mjs` Item 20 specifically by re-fixturing it onto the alpha route (above),
+  not by any change inside `computeSubjectMask()`; the general case is a `docs/BACKLOG.md` row, not
+  solved here.
 * Any change to `computeSubjectMask()`'s call sites, `maskMode`, the Studio control, or the mask's
   0/1 convention (decisions 5–6) — all confirmed unchanged, no wiring surface this milestone
   touches.
-* Performance: the modal-colour step samples the same border ring `averageBorderRgb()` did (no new
-  full-image pass beyond the pre-existing per-pixel ΔE classification), so the existing
-  `docs/BACKLOG.md` row on `computeSubjectMask()`'s native-resolution Lab-conversion cost is
-  unaffected by this milestone in either direction and is not revisited here.
+* Performance: decision 1's modal-colour step only samples the same border ring `averageBorderRgb()`
+  already walked, but decisions 2 and 4 each add a full-image pass — the border-seeded flood fill and
+  the small-component prune — on top of the pre-existing per-pixel ΔE classification, replacing
+  `largestConnectedComponent()`'s single pass with two. A reference prototype measured about 315ms
+  against the shipped 215ms on a 1300×1302 photograph (provided). Lab conversion itself is not
+  repeated per pass: the implementation computes each pixel's Lab once, reused by the eligibility
+  test and the flood fill, and each border pixel's Lab once more, reused by the colour vote and the
+  run-length seed scan — so the added cost is the extra full-image traversals, not extra
+  colour-space conversion, and the existing `docs/BACKLOG.md` row on `computeSubjectMask()`'s
+  native-resolution Lab-conversion cost already covers that class of cost and is not separately
+  revisited here. Not optimized in this milestone.
 
 ## Compatibility
 
