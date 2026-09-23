@@ -18,7 +18,9 @@ colour. With nothing between jet (L≈6) and silver (L≈88), a greyscale portra
 land on jet, silver or light-sapphire. With no browns, a tiger's fur has to land on topaz, siam or
 silver.
 
-IMG-016 appends six entries: three neutrals and three browns. Nothing else changes.
+IMG-016 appends six entries: three neutrals and three browns. The only other change is that Line
+Design's ink structure is pinned to the 17-colour catalogue it uses today, and line stones vote on
+their colour among ink pixels only (decision 3).
 
 | id | name | group | fill |
 |---|---|---|---|
@@ -191,27 +193,70 @@ on their next regeneration.
 * Every non-image layer (text, shapes, SVG, paths, monogram, Stamp/Trace/Paint marks) is unaffected.
   Its colour is a stored id, never derived.
 
-**Line Design output changes too, including its geometry, not only its colours.**
-`LineDesignSampler.js` labels every pixel against the same palette (`:652`, `:682`). Its ink
-structure (decision d of IMG-010) is exactly the set of pixels labelled `'jet'` (`:58-60`, `:78-84`).
-Dark pixels that labelled jet with 17 colours now partly label hematite or black-diamond. The ink
-region shrinks, and with it the `line` stones and the fill/pocket split. The outline is traced from
-the silhouette and does not change.
+**Line Design geometry stays byte-identical; only its colours change.** `LineDesignSampler.js`
+labels every pixel against the same palette (`:652`, `:682`). Its ink structure (decision d of
+IMG-010) is the set of pixels labelled `'jet'` (`:58-60`, `:78-84`, `:756-758`). Left as it is, the
+23-colour catalogue would move dark pixels from jet to hematite or black-diamond. The ink region would
+shrink, and with it the line chains (furry 36 → 3 line stones). IMG-016 therefore changes Line Design
+in three ways:
 
-Measured with a 100 mm-wide placement and a 0.3 mm gap:
+1. **Frozen ink reference.** The ink structure stays exactly what it is today: the pixels whose
+   nearest colour, after the 1.2% floor and relabelling, among the pre-IMG-016 17-colour catalogue is
+   jet. `LineDesignSampler.js` exports those 17 ids as a pinned constant,
+   `LINE_DESIGN_INK_REFERENCE_COLOR_IDS`, next to `JET_COLOR_ID` (`:60`). The ink labelling runs
+   `buildLabelField()` on the matching subset of the passed palette and its Lab values, in palette
+   order, and takes jet's index within that subset. A comment at the constant says the
+   coloured-chains milestone removes it. The ink mask is computed once, after the full labelling
+   (`:682-684`), replacing the in-closure computation at `:756-758`.
+2. **Stone colours use the full catalogue.** `finalLabel`, and therefore every stone's modal colour,
+   is still labelled against all 23 colours, as today.
+3. **Line stones vote among ink pixels.** A `line` stone takes the modal colour among ink pixels only,
+   within its own vote radius. If that disk contains no ink pixel, it falls back to the existing
+   all-pixel modal. `outline`, `fill` and `pocket` stones keep the existing all-pixel modal. This is
+   one optional argument on `modalColorAt()` (`:695-716`), set for `kind === 'line'` in the colour
+   pass (`:817-820`).
 
-| Image | Stones, 17 → 23 | line | fill | pocket | Jet stones | Unchanged positions (23) |
-|---|---|---|---|---|---|---|
-| portrait | 1049 → 1061 | 34 → 45 | 653 → 628 | 129 → 155 | 717 → 476 | 503 of 1061 |
-| Einstein | 676 → 658 | 96 → 69 | 254 → 281 | 186 → 168 | 165 → 110 | 167 of 658 |
-| tiger | 972 → 971 | 122 → 137 | 408 → 399 | 263 → 256 | 315 → 162 | 211 of 971 |
-| butterfly | 473 → 443 | 66 → 54 | 105 → 125 | 152 → 114 | 184 → 48 | 172 of 443 |
-| cartoon | 593 → 568 | 66 → 57 | 115 → 139 | 170 → 130 | 70 → 59 | 352 of 568 |
-| logo | 247 → 251 | 26 → 30 | 40 → 40 | 50 → 50 | 244 → 249 | 229 of 251 |
-| furry | 432 → 397 | 36 → 3 | 123 → 175 | 111 → 57 | 106 → 21 | 244 of 397 |
+Measured on a scratch copy with the 23-colour catalogue and these three changes, at a 100 mm-wide
+placement with a 0.3 mm gap. On all seven images, the stone list hashed as
+`[xMm, yMm, sizeMm, kind]` in order is identical to the shipped module's 17-colour run. The line
+counts equal the 17-colour counts.
 
-The furry image loses almost all of its interior lines (36 → 3), because its jet share falls from
-20.0% to 3.9%. See open question 1.
+| Image | Stones | line | Line stones, 17 colours (shipped) | Line stones, 23 colours (this rule) |
+|---|---|---|---|---|
+| portrait | 1049 | 34 | jet 30, light-sapphire 3, silver 1 | hematite 12, jet 12, black-diamond 10 |
+| Einstein | 676 | 96 | silver 39, jet 21, siam 20, light-sapphire 8, rose 7, light-siam 1 | smoked-topaz 33, black-diamond 31, hematite 17, jet 14, grey 1 |
+| tiger | 972 | 122 | silver 47, jet 41, siam 23, topaz 7, crystal-clear 3, rose 1 | smoked-topaz 46, black-diamond 29, jet 28, hematite 13, crystal-clear 2, light-colorado 1, light-peach 1, silver 1, grey 1 |
+| butterfly | 473 | 66 | jet 33, light-sapphire 18, silver 6, aquamarine 5, crystal-clear 3, topaz 1 | hematite 43, jet 10, smoked-topaz 7, black-diamond 4, crystal-clear 1, light-sapphire 1 |
+| cartoon | 593 | 66 | topaz 25, jet 15, siam 9, citrine 7, gold 6, peridot 2, light-siam 2 | jet 63, smoked-topaz 2, peridot 1 |
+| logo | 247 | 26 | jet 26 | jet 26 |
+| furry | 432 | 36 | jet 21, silver 10, light-sapphire 3, siam 2 | black-diamond 22, smoked-topaz 8, hematite 6 |
+
+All stones, 23 colours with this rule:
+
+| Image | Colour breakdown |
+|---|---|
+| portrait | jet 450, black-diamond 232, grey 195, hematite 172 |
+| Einstein | smoked-topaz 153, grey 135, jet 102, black-diamond 73, light-colorado 54, silver 43, light-peach 40, hematite 35, rose 20, crystal-clear 12, siam 9 |
+| tiger | light-colorado 164, smoked-topaz 161, jet 150, grey 129, silver 98, black-diamond 80, hematite 71, light-peach 64, crystal-clear 55 |
+| butterfly | hematite 94, smoked-topaz 70, topaz 70, jet 54, black-diamond 31, light-sapphire 30, aquamarine 28, crystal-clear 17, grey 15, light-peach 14, citrine 14, light-colorado 12, sapphire 7, silver 5, gold 4, siam 4, crystal 4 |
+| cartoon | gold 200, topaz 141, jet 109, light-siam 44, citrine 40, peridot 33, siam 15, smoked-topaz 11 |
+| logo | jet 245, silver 2 |
+| furry | grey 101, black-diamond 92, silver 65, hematite 44, smoked-topaz 38, light-colorado 25, jet 21, light-sapphire 19, topaz 12, light-peach 9, crystal-clear 6 |
+
+The line colour vote alone also changes line colours under the old 17-colour catalogue. The shipped
+all-pixel vote lets the fill around a thin line win. The ink-only vote gives nearly every line stone
+jet: 34 of 34, 95 of 96, 115 of 122, 64 of 66, 65 of 66, 26 of 26, 36 of 36. It recolours 4, 74, 74,
+31, 50, 0 and 15 line stones and no stone of any other kind. Under 23 colours, the same ink pixels
+label hematite, black-diamond or smoked-topaz, because those are now their nearest stones. That is the
+intended reading: the line takes the colour of its own ink.
+
+Two other ink rules were measured on the same images and rejected:
+
+* **Ink = pixels labelled `{jet, hematite}` in the 23-colour catalogue:** furry gets 13 line stones
+  against 36, because most of its old jet area now labels black-diamond.
+* **Ink = subject pixels below a fixed CIE L\* cutoff (20 to 45):** tiger and furry need opposite
+  cutoffs. Tiger keeps at least 75% of its lines only at L\* < 20 or 25. Furry reaches that only at
+  L\* < 45. No single cutoff fits all seven images. See the coloured-chains row in `docs/BACKLOG.md`.
 
 ### 4. The 8-colour cap and the 1.2% floor are unchanged
 
@@ -344,8 +389,11 @@ Only the expectations do.
   and `<optgroup` by pattern only, so the count is not pinned.
 * **img-002, 008, 009, 010, 012 and 013** all pass unchanged. Their fixtures are synthetic, or use
   their own test palettes, or their colours stay nearest an old entry. Item 1 of img-008 pins a photo
-  SVG sha256; its fixture is unaffected. img-010's Line Design fixture is unaffected even though real
-  photographs change (decision 3). No existing test covers Line Design on a photograph.
+  SVG sha256; its fixture is unaffected.
+* **`tools/test-img-010-line-design.mjs`** also passes unchanged (20 of 20) on a scratch copy that has
+  both the 23-colour catalogue and decision 3's three Line Design changes. No pinned literal changes.
+  No existing test covers Line Design on a photograph, and no existing test pins line-stone colours
+  in a way the ink-only vote moves.
 * **Production Sheet:** no test pins legend content that the six entries change.
 
 ## Code sites the build touches (at `9a107de`)
@@ -359,21 +407,27 @@ Only the expectations do.
 | `docs/ARCHITECTURE.md` | `:293` | "17-color" → 23, plus one sentence citing IMG-016 |
 | `tools/test-crystal-color-catalog.mjs` | `:39-43`, `:58-59`, after `:106` | Six names added, count, full 17-entry byte pin, new-entry pin |
 | `tools/test-img-015-direct-catalogue-colour.mjs` | `:182-192` | Item 1 literals, per the table above |
-| `tools/test-img-016-neutral-brown-stones.mjs` | new | Selector guard (decision 6), derivation rule (decision 1), the 23-colour floor/cap outcome on a synthetic fixture |
+| `src/geometry/LineDesignSampler.js` | after `:60` | Export `LINE_DESIGN_INK_REFERENCE_COLOR_IDS` (the 17 pre-IMG-016 ids, in catalogue order), with a comment that the coloured-chains milestone removes it (decision 3) |
+| `src/geometry/LineDesignSampler.js` | `:682-684`, `:756-758` | Compute the ink mask once, from `buildLabelField()` on the reference subset; delete the in-closure jet mask |
+| `src/geometry/LineDesignSampler.js` | `:695-716`, `:817-820` | Optional ink-only argument on `modalColorAt()`, with the all-pixel fallback; set it for `kind === 'line'` only |
+| `tools/test-img-016-neutral-brown-stones.mjs` | new | Selector guard (decision 6), derivation rule (decision 1), the 23-colour floor/cap outcome on a synthetic fixture, and the two Line Design obligations below |
 
-No change to `app.js` code, `index.html`, `src/image/**`, `src/geometry/**`, `src/export/**`,
-`src/preview3d/**` or `src/drawing/**`.
+The new test also carries two Line Design obligations (decision 3):
 
-## Open questions for the lead
+* **Pinned ink reference.** `LINE_DESIGN_INK_REFERENCE_COLOR_IDS` deep-equals the literal 17-id list,
+  in order, and every id in it is a valid catalogue id.
+* **Position byte-identity.** On a Line Design fixture that has dark pixels nearer to hematite or
+  black-diamond than to jet, the stone list hashed as `[xMm, yMm, sizeMm, kind]` in order is identical
+  between the full catalogue and the 17-colour subset passed as the palette. A second assertion checks
+  that at least one `line` stone's colour differs between the two runs, so the fixture really exercises
+  the ink-only vote.
 
-1. **Line Design ink structure.** The ink structure is exactly the jet-labelled region, so adding
-   hematite and black-diamond thins the interior lines on photographs (furry 36 → 3 line stones).
-   Options:
-   * accept the change;
-   * widen the ink structure to `{jet, hematite}` (a one-set change at `LineDesignSampler.js:60`,
-     with its own before/after measurement);
-   * keep labelling Line Design's ink against the 17-colour set.
+No change to `app.js` code, `index.html`, `src/image/**`, `src/export/**`, `src/preview3d/**` or
+`src/drawing/**`. In `src/geometry/**`, only `LineDesignSampler.js` changes.
 
-   This spec assumes the first option (no Line Design change), pending the lead's decision.
-2. **Group name.** "Brown & Peach" is this spec's choice for the new group. "Brown & Nude" and "Earth"
-   are alternatives, if the product prefers different wording.
+## Resolved
+
+* **Line Design ink rule:** the ink stays pinned to the pre-IMG-016 17-colour reference, and line
+  stones vote among ink pixels only. See decision 3's Line Design paragraph, which also records the
+  two rejected alternatives.
+* **Group name:** "Brown & Peach" is final (decision 1).
