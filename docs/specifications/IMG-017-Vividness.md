@@ -15,8 +15,8 @@ longer clears the 1.2% floor. Its fur labels light-colorado and smoked-topaz ins
 `docs/BACKLOG.md` row IMG-016 decision 5 deferred.
 
 IMG-017 adds a per-layer **vividness** factor. It scales each subject pixel's chroma before catalogue
-matching, so the user can trade some colour accuracy for brighter stones. The default is 1, which
-leaves every existing layer byte-identical.
+matching, so the user can trade some colour accuracy for brighter stones. A missing value reads as 1,
+so every saved layer stays byte-identical; new imports start at Vivid, 1.4 (D3).
 
 ## Measurement settings
 
