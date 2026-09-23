@@ -106,7 +106,7 @@ function buildFourQuadrantImageBuffer(widthPx, heightPx) {
 const AUTO_FIELD_BASE_PARAMS = { threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 400, maxHeightPx: 400, transparent: 'white' };
 
 // ---- Item 1: Fixture 1 correctness ----------------------------------------------------------------
-await test('1. chooseAutoColorCount(buildFourRegionFixture(200,200,{noise:6,seed:1})) resolves to k=4, the strict global minimum', () => {
+await test('1. chooseAutoColorCount(buildFourRegionFixture(200,200,{noise:6,seed:1})) resolves to k=4, the four catalog colours clearing the 1.2% share floor', () => {
   const result = chooseAutoColorCount(buildFourRegionFixture(200, 200, { noise: 6, seed: 1 }), PALETTE);
   assert.equal(result.resolvedCount, 4);
 });
@@ -114,7 +114,7 @@ await test('1. chooseAutoColorCount(buildFourRegionFixture(200,200,{noise:6,seed
 // ---- Item 2: D1's own worked example (Fixture 2 resolves to 6, not the spec's original 8) --------
 await test('2. chooseAutoColorCount(buildSixRegionFixture(240,160)) resolves to 6, not the spec\'s original 8', () => {
   const result = chooseAutoColorCount(buildSixRegionFixture(240, 160), PALETTE);
-  assert.equal(result.resolvedCount, 6, 'D1: resolved count is the winner\'s own cluster count');
+  assert.equal(result.resolvedCount, 6, 'IMG-015: resolved count is max(2, n), n the catalog colours clearing the 1.2% share floor');
 });
 
 // ---- Item 4: maskMode matters ----------------------------------------------------------------------
