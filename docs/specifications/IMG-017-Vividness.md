@@ -32,15 +32,13 @@ Stage labels:
 * **Decision** is after the 1.2% floor, relabelling and the cap of 8.
 
 Stone figures come from `generateImageLayout()` with Staggered, SS6 (2.0 mm), gap 0.3 mm,
-`fillGaps` true and Auto colour count, on a layer 129.6 mm wide. The layer height is the source aspect
-rounded to 2 dp: tiger 129.80 mm, Einstein 121.91 mm, butterfly 121.01 mm and furry 129.60 mm. The
-unrounded height moves individual colours on tiger and Einstein by 1 to 4 stones, with the same
-totals.
+`fillGaps` true and Auto colour count, on a layer 129.6 mm wide. The layer height is the unrounded
+value `129.6 * naturalHeightPx / naturalWidthPx`, as `computeDefaultImagePlacement()` produces it
+(it never rounds `w` or `h`): tiger 129.7993846153846 mm, Einstein 121.91441860465116 mm.
 
 The seven images are IMG-015's fixtures, decoded with PIL (see
-`docs/specifications/IMG-015-DirectCatalogueColour.md`). PNG figures match the browser exactly. The
-JPEG figures (tiger, portrait and butterfly) may differ from Chrome by a few tenths of a percent, or
-a few stones per colour.
+`docs/specifications/IMG-015-DirectCatalogueColour.md`). At the unrounded height, the tiger stone
+figures match the browser-derived handoff figures exactly.
 
 Mean ΔE is CIE76, measured from each pixel's **unscaled** Lab to its assigned stone. It is a measure
 of colour fidelity, so it rises as vividness pushes pixels away from their true colour.
@@ -82,9 +80,14 @@ The total stone count is unchanged at every factor. Only colours move.
 
 | Image | Stones | Colours |
 |---|---|---|
-| tiger | 2986 | ×1.0: light-colorado 526, silver 510, smoked-topaz 465, jet 429, grey 412, hematite 229, black-diamond 215, light-peach 200 |
-| | | ×1.4: jet 508, smoked-topaz 462, silver 416, light-colorado 389, grey 326, topaz 320, black-diamond 294, light-peach 271 |
-| Einstein | 2052 | ×1.0: no siam. ×1.2: siam 194. ×1.4: siam 278, light-siam 191. ×1.6: siam 414, light-siam 282 |
+| tiger | 2986 | ×1.0: light-colorado 522, silver 511, smoked-topaz 468, jet 429, grey 412, hematite 228, black-diamond 215, light-peach 201 |
+| | | ×1.2: light-colorado 618, silver 478, smoked-topaz 471, jet 423, grey 364, light-peach 229, hematite 209, black-diamond 194 |
+| | | ×1.4: jet 509, smoked-topaz 462, silver 417, light-colorado 386, grey 326, topaz 321, black-diamond 294, light-peach 271 |
+| | | ×1.6: jet 500, topaz 466, smoked-topaz 419, silver 382, light-colorado 336, grey 304, light-peach 297, black-diamond 282 |
+| Einstein | 2052 | ×1.0: smoked-topaz 607, grey 409, jet 251, light-colorado 226, black-diamond 191, silver 186, light-peach 121, hematite 61 |
+| | | ×1.2: smoked-topaz 437, grey 401, light-colorado 254, jet 249, black-diamond 227, siam 194, silver 178, light-peach 112 |
+| | | ×1.4: grey 395, smoked-topaz 278, siam 277, light-colorado 272, jet 218, silver 212, black-diamond 209, light-siam 191 |
+| | | ×1.6: siam 412, grey 389, light-siam 282, light-colorado 217, silver 209, black-diamond 198, jet 191, smoked-topaz 154 |
 | butterfly | 1261 | topaz 223, 260, 336 and 243 at ×1.0, ×1.2, ×1.4 and ×1.6; sapphire 107 at ×1.4 |
 | furry | 1221 | siam 56 at ×1.2 only; topaz 106 at ×1.4 |
 
