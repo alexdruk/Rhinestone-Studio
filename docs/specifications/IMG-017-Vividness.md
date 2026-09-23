@@ -139,10 +139,12 @@ every saved project stays byte-identical.
   These are `normalizeImageParams()` in `GeometryEngine.js` and `normalizeParams()` in
   `ImageFieldPipeline.js`.
 * **`app.js`'s `resolveImageVividness()`** accepts exactly the four steps and falls back to 1.
-* **The import factory** sets `vividness:1`.
+* **The import factory** sets `vividness:1.4`.
 
-*Rationale.* No single step improves every image. At 1.2, furry's orange collar turns red. At 1.4,
-Einstein's face turns light-siam. So the faithful default stays, and the user chooses.
+*Rationale.* Sasha's product decision after the build: new layers start at Vivid, where the tiger,
+butterfly and furry measured best. Faces can take light-siam at Vivid (Einstein siam 12.9%,
+light-siam 9.0% decision); the user lowers such layers to Rich. Missing values still read as 1, so no
+saved project changes.
 
 There is no `validateProject()` change and no version bump. `maskMode` (IMG-009 decision 3) set the
 precedent.
@@ -188,11 +190,11 @@ Each anchor below was re-grepped on `99d1d7c`, and the line given is the actual 
 | | `:1146` | The Line Design params pass `vividness`. |
 | | `:1154` | The live `generateImageLayout()` params pass `vividness`. |
 | | `:3402` | `resolveImageExportRegions()` params pass `vividness`. |
-| | `:5513` | The `importImageFile` new-layer factory sets `vividness:1`. |
+| | `:5513` | The `importImageFile` new-layer factory sets `vividness:1.4`. |
 | | `:2629` | The Studio control read (`syncSelectedControlsFromLayer()`, image branch): `el('imgVividness').value = resolveImageVividness(l.vividness)`. |
 | | `:2785`, `:2795` | The write in `writeSelectedControlsToLayer()`. The image branch opens at `:2785`, and the neighbouring `imgColorCount` write is at `:2795`. The new write is exactly `l.vividness=resolveImageVividness(Number(el('imgVividness').value));`, as its own statement, so `:2795` stays byte-identical (see "Existing tests"). The `Number(` is required: a select value is a string, and `resolveImageVividness()` accepts only the four numbers, so a write without it stores a string that reads back as 1, and the control does nothing. |
 | | `:5048` | `HISTORY_TRACKED_CONTROL_IDS` gains `'imgVividness'`. |
-| `index.html` | after `:1192` | A new `<select id="imgVividness">`, labelled "Colour vividness". It goes directly after `#imgColorCount`, in `#imageStudioGroupColors` (`:1190`). The hint text is "Pushes colours toward brighter stones. No effect on black-and-white images or single-colour layers." The options are Natural 1, Rich 1.2, Vivid 1.4 and Bold 1.6, in that order. |
+| `index.html` | after `:1192` | A new `<select id="imgVividness">`, labelled "Colour vividness". It goes directly after `#imgColorCount`, in `#imageStudioGroupColors` (`:1190`). The hint text is "Pushes colours toward brighter stones. No effect on black-and-white images or single-colour layers." The options are Natural 1, Rich 1.2, Vivid 1.4 and Bold 1.6, in that order. Vivid carries `selected`, matching a new layer. |
 
 **Why `IMAGE_VIVIDNESS_STEPS` must be plain literals.** Several harnesses slice `app.js` from
 `const DEFAULT_TEXT_FONT_ID=` (`:176`) or `const DEFAULT_PROJECT_NAME=` (`:1209`) through
@@ -314,7 +316,7 @@ Kills two mutants:
 * `autoColorCountKeyParts()`;
 * the `:822` key and the `:1136` key;
 * the `:1146`, `:1154` and `:3402` params;
-* the import factory (`vividness:1`);
+* the import factory (`vividness:1.4`);
 * `HISTORY_TRACKED_CONTROL_IDS`.
 
 These Studio control guards are also source-text checks on `app.js`:
@@ -326,7 +328,8 @@ These Studio control guards are also source-text checks on `app.js`:
 * the `:782` `chooseAutoColorCount()` call passes `chromaScale`;
 * the `:825` `prepareImageField()` call passes `vividness`.
 
-In addition, `#imgVividness` exists in `index.html` with exactly the four options, in order.
+In addition, `#imgVividness` exists in `index.html` with exactly the four options, in order, and the
+Vivid option carries `selected` and no other option does.
 
 **T7. Byte identity.** Every pinned count and hash in `tools/test-img-015-direct-catalogue-colour.mjs`
 and `tools/test-img-016-neutral-brown-stones.mjs` stays unchanged. Default vividness is exactly the
@@ -382,7 +385,7 @@ These tests' fixtures never set `layer.vividness`, so every expected value in th
   at `app.js:2795`. The vividness write is a separate statement.
 * **`tools/test-img-011-import-defaults.mjs:111-114`** and
   **`tools/test-img-013-fill-empty-slots.mjs:493`** match fields in the import factory with regexes.
-  Adding `vividness:1` breaks none of them.
+  Adding `vividness:1.4` breaks none of them.
 * **Tests that match `HISTORY_TRACKED_CONTROL_IDS` with a regex**
   (`tools/test-s200-app-integration.mjs:104`, `:192`, `tools/test-crystal-color-integration.mjs:92`
   and others) require a flat list of string literals. Appending `'imgVividness'` keeps that.

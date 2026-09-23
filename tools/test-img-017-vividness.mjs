@@ -190,7 +190,7 @@ await test('T6. app.js and index.html source guards', () => {
   assert.ok(exportSource.includes(`vividness:${RESOLVED}`), 'resolveImageExportRegions() params pass vividness');
 
   const factory = /const layer=\{id:'image'\+Date\.now\(\),type:'image',[^;]*\};/.exec(appJs);
-  assert.ok(factory && factory[0].includes(',vividness:1,'), 'the import factory sets vividness:1');
+  assert.ok(factory && factory[0].includes(',vividness:1.4,'), 'the import factory sets vividness:1.4');
 
   const history = /const HISTORY_TRACKED_CONTROL_IDS=\[([^\]]*)\];/.exec(appJs);
   assert.ok(history && history[1].split(',').includes("'imgVividness'"), 'HISTORY_TRACKED_CONTROL_IDS includes imgVividness');
@@ -205,6 +205,8 @@ await test('T6. app.js and index.html source guards', () => {
   assert.ok(select, 'index.html has a imgVividness select');
   const options = [...select[1].matchAll(/<option\b[^>]*\bvalue="([^"]*)"[^>]*>([^<]*)<\/option>/g)].map((m) => [m[1], m[2]]);
   assert.deepEqual(options, [['1', 'Natural'], ['1.2', 'Rich'], ['1.4', 'Vivid'], ['1.6', 'Bold']]);
+  const selected = [...select[1].matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)].filter((m) => /\bselected\b/.test(m[1])).map((m) => m[2]);
+  assert.deepEqual(selected, ['Vivid'], 'only the Vivid option carries selected');
 });
 
 await test('T8. resolveImageVividness() accepts exactly the four steps', () => {
