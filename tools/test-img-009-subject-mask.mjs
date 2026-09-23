@@ -210,16 +210,16 @@ await test('5. Largest-component reduction: a detached 3x3 speckle is dropped (s
 });
 
 // ---- Item 6: colour recovery ------------------------------------------------------------------
-await test('6. Colour recovery: colorCount:6 over the subject mask yields jet/siam/citrine/silver/light-sapphire; over the threshold mask, jet/siam', () => {
+await test('6. Colour recovery: colorCount:6 over the subject mask yields jet/light-sapphire/topaz/citrine/silver; over the threshold mask, jet', () => {
   const subject = prepareImageField(opaqueBuffer, { threshold: 128, maxWidthPx: 400, maxHeightPx: 400, maskMode: 'subject', colorCount: 6, palette: PALETTE });
   const threshold = prepareImageField(opaqueBuffer, { threshold: 128, maxWidthPx: 400, maxHeightPx: 400, maskMode: 'threshold', colorCount: 6, palette: PALETTE });
-  assert.deepEqual(subject.colorGroups.map((g) => g.nearestId), ['jet', 'siam', 'citrine', 'silver', 'light-sapphire']);
-  assert.deepEqual(threshold.colorGroups.map((g) => g.nearestId), ['jet', 'siam']);
+  assert.deepEqual(subject.colorGroups.map((g) => g.nearestId), ['jet', 'light-sapphire', 'topaz', 'citrine', 'silver']);
+  assert.deepEqual(threshold.colorGroups.map((g) => g.nearestId), ['jet']);
 });
 
 // ---- Item 7: the Lab move is pure --------------------------------------------------------------
 // Measured on pristine `develop` (before rgbToLab()/cie76Distance() moved out of ColorQuantize.js).
-await test('7. The Lab move is pure: assignNearestIds() (via quantizeColors()) and rgbToLab() return the pristine-tip values after the move to ColorSpace.js', () => {
+await test('7. The Lab move is pure: quantizeColors() and rgbToLab() return the pristine-tip values after the move to ColorSpace.js', () => {
   const clusterRgbs = [
     [20, 20, 20], [155, 28, 28], [34, 105, 211], [111, 168, 220],
     [224, 142, 38], [242, 201, 76], [216, 221, 228], [233, 247, 255]
@@ -229,7 +229,7 @@ await test('7. The Lab move is pure: assignNearestIds() (via quantizeColors()) a
   for (let i = 0; i < n; i++) { r[i] = clusterRgbs[i][0]; g[i] = clusterRgbs[i][1]; b[i] = clusterRgbs[i][2]; }
   const { colorGroups } = quantizeColors({ r, g, b, data, colorCount: n, palette: PALETTE });
   assert.deepEqual(colorGroups.map((grp) => grp.nearestId), [
-    'jet', 'siam', 'topaz', 'citrine', 'sapphire', 'light-sapphire', 'silver', 'crystal'
+    'jet', 'siam', 'sapphire', 'light-sapphire', 'topaz', 'citrine', 'silver', 'crystal'
   ]);
 
   const PRISTINE_LAB = [

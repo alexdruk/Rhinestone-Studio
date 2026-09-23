@@ -127,7 +127,7 @@ await test('1. Byte-identity of the legacy document (no third argument), measure
   const photoSvg = stoneLayoutToSvg(photoLayout, { widthMm: 60, heightMm: 60 });
   assert.equal(
     crypto.createHash('sha256').update(photoSvg).digest('hex'),
-    'e8d4f4506fa19dc4a8298f1ee0a7d66c2325848527ea09b628ae44651567e70e'
+    '14c52341a04adc46671f5148531ca7ba14c0979f95b954c94bab5a1a1e8f8d26'
   );
 });
 
@@ -139,7 +139,7 @@ await test("2. sampleSource()'s label filter: raw contour counts per label, and 
   const perLabelCounts = [0, 1, 2].map((label) =>
     combineShapeSources({ ...baseSource, label }, null, 'union', { targetSpacingMm }).contours.length
   );
-  assert.deepEqual(perLabelCounts, [2, 32, 2]);
+  assert.deepEqual(perLabelCounts, [2, 1, 2]);
 
   const withoutLabel = combineShapeSources(baseSource, null, 'union', { targetSpacingMm });
   assert.equal(withoutLabel.contours.length, 3);
@@ -169,13 +169,13 @@ await test('4. resolveImagePolygons() on logo, colorCount:3 -- label order and c
 
   assert.equal(regions[0].colorId, 'siam');
   assert.equal(regions[0].contours.length, 2);
-  assert.equal(regions[0].contours.reduce((s, c) => s + c.length, 0), 287);
-  assert.deepEqual(roundedAreas(regions[0].contours), [1278.5, 118.6]);
+  assert.equal(regions[0].contours.reduce((s, c) => s + c.length, 0), 281);
+  assert.deepEqual(roundedAreas(regions[0].contours), [1281.5, 111.8]);
 
   assert.equal(regions[1].colorId, 'citrine');
   assert.equal(regions[1].contours.length, 1);
-  assert.equal(regions[1].contours.reduce((s, c) => s + c.length, 0), 99);
-  assert.deepEqual(roundedAreas(regions[1].contours), [118.6]);
+  assert.equal(regions[1].contours.reduce((s, c) => s + c.length, 0), 93);
+  assert.deepEqual(roundedAreas(regions[1].contours), [111.8]);
 
   assert.equal(regions[2].colorId, 'sapphire');
   assert.equal(regions[2].contours.length, 2);
@@ -204,16 +204,15 @@ await test('5. The area floor on photo -- raw vs. kept contour counts', () => {
   assert.equal(raw.contours.length, 448);
 
   const threeColor = engine.resolveImagePolygons(baseImageParams(photoBuffer(), 3));
-  assert.equal(threeColor.regions.length, 3);
+  assert.equal(threeColor.regions.length, 2);
 
   const labeledField = prepareImageField(photoBuffer(), { threshold: 128, maxWidthPx: N, maxHeightPx: N, colorCount: 3, palette: PALETTE });
   const labeledSource = { kind: 'field', field: labeledField, xMm: 0, yMm: 0, widthMm: W, heightMm: H };
   // Ordered per-label, not sorted -- pins each label's own raw and kept count individually rather
   // than discarding the label-to-count mapping via a sort.
   const expectedByLabel = [
-    { colorId: 'citrine', keptContours: 2, rawContours: 182 },
-    { colorId: 'siam', keptContours: 7, rawContours: 405 },
-    { colorId: 'crystal', keptContours: 7, rawContours: 559 }
+    { colorId: 'siam', keptContours: 1, rawContours: 58 },
+    { colorId: 'crystal', keptContours: 4, rawContours: 506 }
   ];
   expectedByLabel.forEach((expected, label) => {
     assert.equal(threeColor.regions[label].colorId, expected.colorId, `label ${label} colorId`);
@@ -248,7 +247,7 @@ await test('6. Fidelity: IoU of each kept region against its own mask, sampled o
   const threeColorField = prepareImageField(logoBuffer(), { threshold: 128, maxWidthPx: N, maxHeightPx: N, colorCount: 3, palette: PALETTE });
   const { regions: threeColorRegions } = engine.resolveImagePolygons(baseImageParams(logoBuffer(), 3));
   const labelFor = { siam: 0, citrine: 1, sapphire: 2 };
-  const expectedIoU = { siam: '0.991', citrine: '0.959', sapphire: '0.971' };
+  const expectedIoU = { siam: '0.991', citrine: '0.976', sapphire: '0.970' };
   for (const region of threeColorRegions) {
     const iou = measureIoU(threeColorField, region.contours, labelFor[region.colorId], W, H);
     assert.equal(iou.toFixed(3), expectedIoU[region.colorId], `unexpected IoU for ${region.colorId}`);

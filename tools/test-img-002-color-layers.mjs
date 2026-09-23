@@ -253,26 +253,19 @@ await test('8. colorMap override applies to matching nearestId stones; an unknow
   assert.ok(sawOverride, 'expected at least one stone to receive the override');
 });
 
-await test('9. nearestId uniqueness: two clusters whose nearest catalog entry collides get distinct nearestIds -- the larger keeps it, the smaller falls through', () => {
+await test('9. one group per catalogue colour (IMG-015): two pixel colours nearest the same catalog entry form one group with that entry, not two groups with distinct entries', () => {
   const length = 10;
   const r = new Uint8ClampedArray(length), g = new Uint8ClampedArray(length), b = new Uint8ClampedArray(length);
   const data = new Uint8ClampedArray(length).fill(255);
-  for (let i = 0; i < 7; i++) { r[i] = 40; g[i] = 40; b[i] = 40; } // larger cluster (0.7 share)
-  for (let i = 7; i < 10; i++) { r[i] = 5; g[i] = 5; b[i] = 5; } // smaller cluster (0.3 share)
+  for (let i = 0; i < 7; i++) { r[i] = 40; g[i] = 40; b[i] = 40; }
+  for (let i = 7; i < 10; i++) { r[i] = 5; g[i] = 5; b[i] = 5; }
 
   const contestedPalette = [
     { id: 'near-black', hex: '#101010' },
     { id: 'distant', hex: '#ffffff' }
   ];
   const { colorGroups } = quantizeColors({ r, g, b, data, colorCount: 2, palette: contestedPalette });
-  assert.equal(colorGroups.length, 2);
-
-  const big = colorGroups.find((group) => group.pixelShare > 0.5);
-  const small = colorGroups.find((group) => group.pixelShare <= 0.5);
-  assert.ok(big && small, 'expected one majority and one minority cluster');
-  assert.notEqual(big.nearestId, small.nearestId, 'expected distinct nearestIds');
-  assert.equal(big.nearestId, 'near-black', 'expected the larger cluster to keep the contested entry');
-  assert.equal(small.nearestId, 'distant', 'expected the smaller cluster to fall through to its next-nearest unclaimed entry');
+  assert.deepEqual(colorGroups, [{ rgb: [30, 30, 30], pixelShare: 1, nearestId: 'near-black' }]);
 });
 
 await test('10. NO_LABEL unreachability: across all four modes, with and without sizeMode:"mixed", zero stones (base or infill) resolve to NO_LABEL; mixed always adds infill', () => {

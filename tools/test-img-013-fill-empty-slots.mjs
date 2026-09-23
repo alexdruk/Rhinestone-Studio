@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createGeometryEngine } from '../src/geometry/index.js';
 import { prepareImageField } from '../src/image/index.js';
-import { fieldLabelAt, fieldPixelOn } from '../src/geometry/StoneSampler.js';
+import { fieldModalLabelAt, fieldPixelOn } from '../src/geometry/StoneSampler.js';
+import { LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO } from '../src/geometry/LineDesignSampler.js';
 import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 
@@ -240,7 +241,7 @@ await test('6. Whole stone inside the placement rectangle: a rect whose top edge
 });
 
 // ---- Items 7/8/9: filler colour (decision 5) ----------------------------------------------------
-await test('7. Filler colour, multi-colour: every added stone\'s colour equals imageRegionColorId()\'s rule (cluster at that pixel -> catalog nearestId), independently reconstructed via prepareImageField()/fieldLabelAt() against the real field, no colorMap override', () => {
+await test('7. Filler colour, multi-colour: every added stone\'s colour equals imageRegionColorId()\'s rule (modal label under the filler\'s own radius -> catalog nearestId, IMG-015 decision 4), independently reconstructed via prepareImageField()/fieldModalLabelAt() against the real field, no colorMap override', () => {
   const engine = createGeometryEngine();
   const buffer = buildFourQuadrantDiscBuffer(200, 200);
   const params = { ...COLOR_FIXTURE_PARAMS, imageBuffer: buffer };
@@ -257,7 +258,7 @@ await test('7. Filler colour, multi-colour: every added stone\'s colour equals i
   const placement = { xMm: params.xMm, yMm: params.yMm, widthMm: params.widthMm, heightMm: params.heightMm };
   let checkedAtLeastOneLabeled = false;
   for (const stone of added) {
-    const label = fieldLabelAt(field, placement, stone.xMm, stone.yMm);
+    const label = fieldModalLabelAt(field, placement, stone.xMm, stone.yMm, (GAP_FILL_STONE_SIZE_MM / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO);
     assert.notEqual(label, 255, `expected added stone (${stone.xMm},${stone.yMm}) to resolve to a real cluster label, not NO_LABEL`);
     const group = field.colorGroups[label];
     const expectedColor = group.nearestId; // no colorMap override in this fixture

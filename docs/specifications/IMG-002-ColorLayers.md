@@ -1,5 +1,7 @@
 # IMG-002 — Color Quantization and Color Layers
 
+**Superseded in part by IMG-015:** decision 2's median-cut + k-means quantizer and distinct-claim `nearestId` assignment retire in favour of direct per-pixel catalogue labelling with a 1.2% share floor, and decision 1's stone-centre label lookup becomes a modal vote under each stone's own radius — see `docs/specifications/IMG-015-DirectCatalogueColour.md`.
+
 ## Objective
 
 IMG-002 is the second of `IMG-001`'s eight-milestone roadmap (`docs/specifications/IMG-001-ImageToStrass.md`

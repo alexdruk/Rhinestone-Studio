@@ -1,5 +1,7 @@
 # IMG-012 — Automatic Best-Fit Colour Count
 
+**Superseded in part by IMG-015:** the k=2..8 mean-ΔE sweep, the 1% tie band and D1's cluster-count tie rule retire — Auto now resolves to the number of catalogue colours clearing a 1.2% share floor, capped at 8; see `docs/specifications/IMG-015-DirectCatalogueColour.md`.
+
 **Implemented.** File:line citations below (outside this note) are against `develop` @ `5a69e50`
 (this branch's fork point), as originally written for the spec-only pass. The implementing
 milestone's own build prompt overrode four points below at build time (decisions D1-D4); this

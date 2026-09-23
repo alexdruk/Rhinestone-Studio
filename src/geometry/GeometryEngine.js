@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL, fieldLuminanceAt, ink, fieldPixelOn } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldModalLabelAt, NO_LABEL, fieldLuminanceAt, ink, fieldPixelOn } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
@@ -48,11 +48,11 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // generateMixedSizeInfillStones() are the only S-200 entry points this module calls -- see
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
-import { generateGapFillStones } from './GapFill.js';
+import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
 // IMG-010 (Line Design): the only S-200/IMG-013-adjacent mode whose stones never come from a single
 // sampleFieldByMode() call -- see LineDesignSampler.js's own doc comment and this file's
 // generateImageLayout() branch below.
-import { generateLineDesignStonePoints } from './LineDesignSampler.js';
+import { generateLineDesignStonePoints, LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO } from './LineDesignSampler.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -1182,11 +1182,12 @@ export class GeometryEngine {
    *   alpha onto white before thresholding (the pre-IMG-001, only-ever behavior); 'ignore' forces
    *   any pixel whose source alpha is below the coverage threshold off in the generated field,
    *   regardless of luminance. See docs/specifications/IMG-001-ImageToStrass.md.
-   * @param {number} [params.colorCount] Integer 1-8, default 1 (IMG-002). >1 quantizes the traced
-   *   image's colors and labels each stone by its own pixel's cluster, instead of every stone taking
-   *   `color` uniformly.
+   * @param {number} [params.colorCount] Integer 1-8, default 1 (IMG-002). >1 labels every subject
+   *   pixel with its nearest catalog colour, keeps at most colorCount of them (IMG-015), and gives
+   *   each stone the modal label under its own radius, instead of every stone taking `color`
+   *   uniformly.
    * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1 -- the
-   *   catalog each cluster's `nearestId` resolves against.
+   *   catalog every pixel is labelled against.
    * @param {object} [params.colorMap] `nearestId -> overrideId`, default {}. See
    *   docs/specifications/IMG-002-ColorLayers.md decision 3.
    * @param {'threshold'|'subject'} [params.maskMode] Default 'threshold' (IMG-009). 'subject' calls
@@ -1258,12 +1259,15 @@ export class GeometryEngine {
     // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
     // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
     // every stone takes options.color exactly as before this milestone (decision 1's byte-identity
-    // guarantee). fieldLabelAt() takes each stone's own ABSOLUTE xMm/yMm (not the sampled point's
-    // local coordinates) -- see docs/specifications/IMG-002-ColorLayers.md decision 1.
+    // guarantee). The lookup takes each stone's own ABSOLUTE xMm/yMm (not the sampled point's
+    // local coordinates) -- see docs/specifications/IMG-002-ColorLayers.md decision 1. IMG-015
+    // decision 4: it is the modal label within LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO of the stone's
+    // own radius (fieldModalLabelAt()), not the label of its centre pixel, so every call passes the
+    // stone's own size.
     const labeled = options.colorCount > 1 && field.labels !== null;
-    const colorAt = (xMm, yMm) => {
+    const colorAt = (xMm, yMm, sizeMm) => {
       if (!labeled) return options.color;
-      const label = fieldLabelAt(field, placement, xMm, yMm);
+      const label = fieldModalLabelAt(field, placement, xMm, yMm, (sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO);
       if (label === NO_LABEL) return options.color;
       return imageRegionColorId(options, field, label);
     };
@@ -1307,7 +1311,7 @@ export class GeometryEngine {
         xMm: point.xMm,
         yMm: point.yMm,
         sizeMm: point.sizeMm,
-        color: colorAt(point.xMm, point.yMm),
+        color: colorAt(point.xMm, point.yMm, point.sizeMm),
         layerId: options.layerId,
         index
       }));
@@ -1316,7 +1320,7 @@ export class GeometryEngine {
         xMm: point.xMm,
         yMm: point.yMm,
         sizeMm: options.stoneSizeMm,
-        color: colorAt(point.xMm, point.yMm),
+        color: colorAt(point.xMm, point.yMm, options.stoneSizeMm),
         layerId: options.layerId,
         index
       }));
@@ -1346,7 +1350,7 @@ export class GeometryEngine {
         xMm: point.xMm,
         yMm: point.yMm,
         sizeMm: point.sizeMm,
-        color: colorAt(point.xMm, point.yMm),
+        color: colorAt(point.xMm, point.yMm, point.sizeMm),
         layerId: options.layerId,
         index: startIndex + i
       }));
@@ -1356,6 +1360,8 @@ export class GeometryEngine {
     // IMG-013: runs last, against the combined primary + S-200-infill stone set (S-200 infill counts
     // as "existing" from gap-fill's own point of view, decision 2) -- reuses the same colorAt()
     // closure built above (Task C) and the same on-field mask test (fieldPixelOn(), decision 4).
+    // GapFill.js calls colorAt(xMm, yMm), so its filler size (GAP_FILL_STONE_SIZE_MM, no
+    // fillerSizeMm override here) is closed over, as LineDesignSampler.js's pocket pass does.
     // IMG-010: Line Design's own pocket pass already ran inside generateLineDesignStonePoints()
     // above (decision f, against its own hole-filled subject mask, not `field`) -- running this
     // generic fillGaps pass again here would double-apply GapFill.js against the wrong mask.
@@ -1366,7 +1372,7 @@ export class GeometryEngine {
         gapMm: options.gapMm,
         isInside,
         placement,
-        colorAt,
+        colorAt: (xMm, yMm) => colorAt(xMm, yMm, GAP_FILL_STONE_SIZE_MM),
         layerId: options.layerId,
         startIndex: stones.length
       });
