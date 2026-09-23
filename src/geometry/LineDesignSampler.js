@@ -25,7 +25,7 @@ import { computeSubjectMask } from '../image/SubjectMask.js';
 import { rgbToLab, cie76Distance } from '../image/ColorSpace.js';
 import { CRYSTAL_COLORS } from '../renderer/CrystalColors.js';
 import { rawGridDistanceTransform, computeSingleDistanceRing, computeInwardRingPolygons } from './ContourRingSampler.js';
-import { generateGapFillStones } from './GapFill.js';
+import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
 import { selectNonOverlappingSizedStones } from './MixedSizeGenerator.js';
 
 // Matches catalog ids 'ss6'/'ss10' (src/renderer/StoneSizes.js:38-39) -- decision 2's fixed sizes,
@@ -666,10 +666,14 @@ function densifyRingForWalk(loop, stepMm) {
  * @param {{xMm:number,yMm:number,widthMm:number,heightMm:number}} args.placement
  * @param {number} args.gapMm
  * @param {string} args.layerId
+ * @param {object} [args.colorMap] `catalogId -> overrideId`, default {} -- same override rule
+ *   imageRegionColorId() applies for every other mode, resolved against the catalog id each stone
+ *   would otherwise get (its own direct per-pixel label, not a quantized cluster -- this mode never
+ *   quantizes/clusters at all, so colour COUNT stays entirely unaffected by this map).
  * @param {(stage:string, elapsedMs:number)=>void} [args.onStageTiming] Optional per-stage timing hook (D4).
  * @returns {{xMm:number,yMm:number,sizeMm:number,color:string,kind:('outline'|'line'|'fill'|'pocket')}[]}
  */
-export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, onStageTiming }) {
+export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, onStageTiming }) {
   const time = (stage, fn) => {
     const t0 = performance.now();
     const result = fn();
@@ -703,10 +707,14 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
 
   const insideAtSilhouette = (xMm, yMm) => filledMask[pixelIndexAt(xMm, yMm)] === 1;
 
+  // Decision (g) follow-up (colour overrides): the same override rule imageRegionColorId() applies
+  // for every other mode -- colorMap[catalogId] ?? catalogId -- resolved here, at the one point each
+  // catalog id is actually produced, so every caller (outline/line/fill's own colour pass below, and
+  // the pocket pass's colorAt) picks it up automatically.
   const pointColorAt = (xMm, yMm) => {
     const idx = pixelIndexAt(xMm, yMm);
-    if (!filledMask[idx]) return CRYSTAL_COLORS[survivingIds[0]].id;
-    return CRYSTAL_COLORS[finalLabel[idx]].id;
+    const catalogId = filledMask[idx] ? CRYSTAL_COLORS[finalLabel[idx]].id : CRYSTAL_COLORS[survivingIds[0]].id;
+    return colorMap[catalogId] ?? catalogId;
   };
   const modalColorAt = (xMm, yMm, radiusMm) => {
     const rPx = Math.max(1, Math.round(radiusMm / mmPerPx));
@@ -729,7 +737,8 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
       const count = counts.get(label) || 0;
       if (count > bestCount) { bestCount = count; best = label; }
     }
-    return CRYSTAL_COLORS[best].id;
+    const catalogId = CRYSTAL_COLORS[best].id;
+    return colorMap[catalogId] ?? catalogId;
   };
 
   const boundingBox = {
@@ -834,7 +843,11 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
     color: modalColorAt(p.xMm, p.yMm, (p.sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO)
   })));
 
-  // ---- Decision (f): pocket pass (GapFill.js, unmodified) -- point colour rule, not modal --------
+  // ---- Decision (f): pocket pass (GapFill.js, unmodified) -- modal colour rule, like every other
+  // stone here (colorAt is only ever called with a stone's own xMm/yMm, so the pocket stone's own
+  // radius -- GapFill.js's GAP_FILL_STONE_SIZE_MM, since generateGapFillStones() is called below
+  // without a fillerSizeMm override -- is closed over rather than threaded through colorAt's signature.
+  const pocketRadiusMm = GAP_FILL_STONE_SIZE_MM / 2;
   const pocketPoints = time('pocket', () => {
     const baseStones = colored.map((p) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: p.sizeMm }));
     const gapFillStones = generateGapFillStones({
@@ -842,7 +855,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
       gapMm,
       isInside: insideAtSilhouette,
       placement,
-      colorAt: pointColorAt,
+      colorAt: (xMm, yMm) => modalColorAt(xMm, yMm, pocketRadiusMm * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO),
       layerId,
       startIndex: baseStones.length
     });

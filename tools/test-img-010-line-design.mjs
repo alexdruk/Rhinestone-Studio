@@ -6,9 +6,11 @@ import {
   generateLineDesignStonePoints,
   LINE_DESIGN_CHAIN_STONE_SIZE_MM,
   LINE_DESIGN_FILL_STONE_SIZE_MM,
-  LINE_DESIGN_CLOSING_DISK_RADIUS_RATIO_OF_DIAMETER
+  LINE_DESIGN_CLOSING_DISK_RADIUS_RATIO_OF_DIAMETER,
+  LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO
 } from '../src/geometry/LineDesignSampler.js';
 import { rawGridDistanceTransform } from '../src/geometry/ContourRingSampler.js';
+import { GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { rgbToLab, cie76Distance } from '../src/image/ColorSpace.js';
 import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
 
@@ -19,9 +21,14 @@ import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
 //
 // Items 1-13 are the spec's own test plan (Task E), with the fixture (item 1) inlined verbatim.
 // Item 14 is D1's four antenna-bridging measurements; item 15 is D3 (Mixed Stone Size is a no-op for
-// this mode); item 16 is D4 (the app.js-side stone-list cache + drag freeze). Mutation-tested: 3, 5,
-// 7, 12, 16 (verified separately, against a deliberately broken copy of the relevant code, that each
-// of those items actually fails when it should -- see the milestone's own report).
+// this mode); item 16 is D4 (the app.js-side stone-list cache + drag freeze). Items 17-20 are the
+// IMG-010 follow-up (colour overrides, a corrected resize-drag freeze, and the pocket pass's own
+// modal colour rule): 17/18 are the colorMap override + its cache-key participation; 19 replaces
+// item 16's control-drag freeze scenario with the actual resize-drag one (the only drag that ever
+// forces a real per-tick line-design recompute -- see lineDesignFrozen's own doc comment in app.js);
+// 20 is the pocket pass's own modal-colour rule. Mutation-tested: 3, 5, 7, 12, 16, 17, 19, 20
+// (verified separately, against a deliberately broken copy of the relevant code, that each of those
+// items actually fails when it should -- see the milestone's own report).
 
 async function test(name, fn) {
   try {
@@ -530,15 +537,23 @@ function buildGenerateImageStonesLive(source, deps) {
     'imageBufferCache', 'decodeDataUrlToBuffer', 'resolveImageFillMode', 'resolveImageTransparentMode',
     'resolveImageMaskMode', 'resolveImageColorCount', 'imageColorPalette', 'resolveImageSeed',
     'resolveImageSpread', 'resolveImageEdgeWidth', 'resolveImageEdgeThinning', 'resolveImageBrightnessThinning',
-    'mixedSizeParamsFor', 'lineDesignStoneCache', 'lineDesignFrozen',
+    'mixedSizeParamsFor', 'lineDesignStoneCache', 'lineDesignFrozen', 'lineDesignColorMapKey',
     `return ${rewritten};`
   )(
     deps.imageBufferCache, deps.decodeDataUrlToBuffer, deps.resolveImageFillMode, deps.resolveImageTransparentMode,
     deps.resolveImageMaskMode, deps.resolveImageColorCount, deps.imageColorPalette, deps.resolveImageSeed,
     deps.resolveImageSpread, deps.resolveImageEdgeWidth, deps.resolveImageEdgeThinning, deps.resolveImageBrightnessThinning,
-    deps.mixedSizeParamsFor, deps.lineDesignStoneCache, deps.lineDesignFrozen
+    deps.mixedSizeParamsFor, deps.lineDesignStoneCache, deps.lineDesignFrozen, deps.lineDesignColorMapKey
   );
   return fn;
+}
+// IMG-010 follow-up: the same sorted-key stable serialization app.js's own lineDesignColorMapKey()
+// uses for the cache key's colorMap segment -- duplicated here (not imported) because it is a
+// module-private function in app.js, the same reason every other dependency above is passed in
+// rather than imported.
+function lineDesignColorMapKeyForTest(colorMap) {
+  const keys = Object.keys(colorMap || {}).sort();
+  return keys.map((k) => `${k}=${colorMap[k]}`).join(',');
 }
 async function callRealGenerateImageStonesLive(layer, imageBufferCacheEntries, lineDesignStoneCache = new Map(), lineDesignFrozen = false) {
   const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
@@ -558,7 +573,8 @@ async function callRealGenerateImageStonesLive(layer, imageBufferCacheEntries, l
     resolveImageBrightnessThinning: (v) => v ?? 0,
     mixedSizeParamsFor: () => ({}),
     lineDesignStoneCache,
-    lineDesignFrozen
+    lineDesignFrozen,
+    lineDesignColorMapKey: lineDesignColorMapKeyForTest
   });
   return { fn: generateImageStonesLive, source };
 }
@@ -673,4 +689,169 @@ await test('16. D4: the app.js cache returns the same stone list without recompu
   const fourth = await releasedCall.call({ permanentEngine: spyEngine }, layer);
   assert.equal(engineCalls, 2, 'expected exactly one additional real compute on release');
   assert.deepEqual(fourth, first, 'expected the released recompute to reproduce the same stones');
+});
+
+// ---- Items 17-20 (IMG-010 follow-up): colour overrides, corrected drag freeze, modal pocket colour
+
+await test('17. IMG-010 follow-up: a colorMap override changes only the affected stones\' colours; stones of other catalog colours are unchanged', () => {
+  const widthMm = 130;
+  const base = runFixture(widthMm);
+  const baseStones = base.layout.stones;
+  // The dark ink (rim/veins/antennae/blob) CIE76-labels to 'jet', the nearest-black catalog entry
+  // (see src/renderer/CrystalColors.js -- fill #141414, essentially identical to this fixture's own
+  // DARK #171717) -- overriding it to a clearly distinct catalog colour and checking every OTHER
+  // stone is untouched proves the override is scoped to its own catalog id, not global.
+  const targetId = 'jet';
+  assert.ok(baseStones.some((s) => s.color === targetId), 'expected some baseline stones labelled "jet"');
+  const overrideId = CRYSTAL_COLORS.find((c) => c.id !== targetId).id;
+  const overridden = runFixture(widthMm, { extra: { colorMap: { [targetId]: overrideId } } });
+  const overriddenStones = overridden.layout.stones;
+  assert.equal(overriddenStones.length, baseStones.length, 'expected identical stone geometry -- colorMap must not affect placement');
+  let changedCount = 0;
+  for (let i = 0; i < baseStones.length; i++) {
+    const a = baseStones[i], b = overriddenStones[i];
+    assert.equal(b.xMm, a.xMm, `stone ${i}: expected unchanged xMm`);
+    assert.equal(b.yMm, a.yMm, `stone ${i}: expected unchanged yMm`);
+    assert.equal(b.sizeMm, a.sizeMm, `stone ${i}: expected unchanged sizeMm`);
+    if (a.color === targetId) {
+      assert.equal(b.color, overrideId, `stone ${i}: expected the override colour`);
+      changedCount++;
+    } else {
+      assert.equal(b.color, a.color, `stone ${i}: expected an unrelated catalog colour to be unchanged`);
+    }
+  }
+  assert.ok(changedCount > 0, 'expected at least one stone to actually change colour');
+});
+
+await test('18. IMG-010 follow-up: two runs differing only in colorMap produce different cached entries, not a stale hit', async () => {
+  const buffer = makeFixture();
+  let engineCalls = 0;
+  const spyEngine = { generateImageLayout: (params) => { engineCalls++; return createGeometryEngine().generateImageLayout(params); } };
+  const lineDesignStoneCache = new Map();
+  const layer = {
+    id: 'L1', imageSrc: 'img1', x: 0, y: 0, w: 130, h: 130 * FIXTURE_H / FIXTURE_W,
+    stoneSize: 2.8, gap: 0.3, fillMode: 'line-design', color: 'jet',
+    threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 400, maxHeightPx: 400,
+    transparent: 'white', maskMode: 'threshold', colorCount: 1, colorMap: {}
+  };
+  const overrideId = CRYSTAL_COLORS.find((c) => c.id !== 'jet').id;
+
+  const { fn: firstCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], lineDesignStoneCache, false);
+  const first = await firstCall.call({ permanentEngine: spyEngine }, layer);
+  assert.equal(engineCalls, 1, 'expected exactly one real compute on the first call');
+
+  const { fn: secondCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], lineDesignStoneCache, false);
+  const second = await secondCall.call({ permanentEngine: spyEngine }, { ...layer, colorMap: { jet: overrideId } });
+  assert.equal(engineCalls, 2, 'expected a real recompute -- not a stale cache hit -- when only colorMap changed');
+  assert.notDeepEqual(second, first, 'expected the overridden run to produce different stone colours');
+
+  // Repeating the SAME overridden colorMap (a fresh object, same entries) must hit the now-populated
+  // cache for that exact key -- proves the key's own colorMap serialization is stable, not identity-based.
+  const { fn: thirdCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], lineDesignStoneCache, false);
+  const third = await thirdCall.call({ permanentEngine: spyEngine }, { ...layer, colorMap: { jet: overrideId } });
+  assert.equal(engineCalls, 2, 'expected the identical colorMap (by value) to reuse the cached entry, not recompute again');
+  assert.deepEqual(third, second, 'expected the cache hit to reproduce the same stones');
+});
+
+await test('19. IMG-010 follow-up: a simulated resize drag (frozen) reuses the drag-start cached stone list with zero regeneration per tick; release forces exactly one real regeneration', async () => {
+  const buffer = makeFixture();
+  let engineCalls = 0;
+  const spyEngine = { generateImageLayout: (params) => { engineCalls++; return createGeometryEngine().generateImageLayout(params); } };
+  const layer = {
+    id: 'L1', imageSrc: 'img1', x: 0, y: 0, w: 130, h: 130 * FIXTURE_H / FIXTURE_W,
+    stoneSize: 2.8, gap: 0.3, fillMode: 'line-design', color: 'jet',
+    threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 400, maxHeightPx: 400,
+    transparent: 'white', maskMode: 'threshold', colorCount: 1, colorMap: {}
+  };
+
+  // Drag start: pointerdown's own updateAll(true) -- one real compute at the pre-drag geometry.
+  const dragCache = new Map();
+  const { fn: startCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], dragCache, false);
+  const atStart = await startCall.call({ permanentEngine: spyEngine }, layer);
+  assert.equal(engineCalls, 1, 'expected exactly one real compute at drag start');
+
+  // Every pointermove tick changes w/h (a real resize, so a real cache-key MISS every tick) AND is
+  // frozen -- must reuse the drag-start cached list every tick, never recompute, regardless of how
+  // many ticks fire or how far the geometry has moved from the drag-start key.
+  const widths = [140, 150, 160, 155];
+  let lastTick;
+  for (const w of widths) {
+    const { fn: tickCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], dragCache, true);
+    lastTick = await tickCall.call({ permanentEngine: spyEngine }, { ...layer, w, h: w * FIXTURE_H / FIXTURE_W });
+    assert.equal(engineCalls, 1, `expected zero regeneration on a frozen resize tick (w=${w})`);
+    assert.deepEqual(lastTick, atStart, 'expected the frozen fallback to reuse the drag-start stone list');
+  }
+
+  // Release: endActiveDrag() unfreezes, invalidates this layer's cache entries, and calls
+  // updateAll(true) once more at the drag's final w/h -- the invalidateLineDesignCache() +
+  // updateAll(true) pattern.
+  for (const [k] of [...dragCache]) if (k.startsWith('L1|')) dragCache.delete(k);
+  const finalLayer = { ...layer, w: 155, h: 155 * FIXTURE_H / FIXTURE_W };
+  const { fn: releaseCall } = await callRealGenerateImageStonesLive({}, [['img1', buffer]], dragCache, false);
+  const released = await releaseCall.call({ permanentEngine: spyEngine }, finalLayer);
+  assert.equal(engineCalls, 2, 'expected exactly one additional real compute on release');
+  assert.notDeepEqual(released, atStart, 'expected the released stones to reflect the final resized geometry, not the stale drag-start list');
+});
+
+await test('20. IMG-010 follow-up: a pocket stone straddling a colour boundary takes the majority colour under its own 80% radius, not the single pixel at its centre', () => {
+  // A narrow 2-colour strip: too short (14px tall) for any SS10 fill ring to fit between its two
+  // outline chains, so its whole interior is covered by GapFill's own SS6 pocket pass alone --
+  // easy to reason about (a hard vertical colour split) and empirically tuned (SPLIT_PX=98) so one
+  // pocket's own centre lands within its own modal-colour radius of the boundary.
+  const WIDTH_PX = 200, HEIGHT_PX = 14, SPLIT_PX = 98;
+  const COLOR_A = [0x2f, 0x6f, 0xd0], COLOR_B = [0x31, 0xa8, 0x6d]; // -> catalog 'sapphire' / 'emerald'
+  const data = new Uint8ClampedArray(WIDTH_PX * HEIGHT_PX * 4);
+  for (let y = 0; y < HEIGHT_PX; y++) {
+    for (let x = 0; x < WIDTH_PX; x++) {
+      const i = (y * WIDTH_PX + x) * 4;
+      const c = x < SPLIT_PX ? COLOR_A : COLOR_B;
+      data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
+    }
+  }
+  // Poke the single pixel pointColorAt() itself would sample for the straddling stone found below
+  // (px=97,py=4, empirically located) to the OTHER colour -- verified (against a deliberately broken
+  // copy of the pocket pass) that this exact poke is what makes the point-sample and modal-majority
+  // rules actually disagree; without it, this stone's single centre pixel happens to already agree
+  // with its own radius's majority, and the test would pass even with the modal rule reverted to a
+  // point sample.
+  {
+    const pokeX = 97, pokeY = 4, i = (pokeY * WIDTH_PX + pokeX) * 4;
+    data[i] = COLOR_B[0]; data[i + 1] = COLOR_B[1]; data[i + 2] = COLOR_B[2]; data[i + 3] = 255;
+  }
+  const widthMm = 100, heightMm = widthMm * HEIGHT_PX / WIDTH_PX, mmPerPx = widthMm / WIDTH_PX;
+  const layout = engine.generateImageLayout({
+    imageBuffer: { widthPx: WIDTH_PX, heightPx: HEIGHT_PX, data }, layerId: 'img010-pocket-boundary',
+    xMm: 0, yMm: 0, widthMm, heightMm, stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet',
+    maxWidthPx: 2000, maxHeightPx: 2000
+  });
+  const pockets = layout.stones.filter((s) => (s.metadata.kind || 'pocket') === 'pocket');
+  assert.ok(pockets.length > 0, 'expected this narrow strip to produce pocket fillers (too narrow for a fill ring)');
+
+  const splitXmm = SPLIT_PX * mmPerPx;
+  const radiusMm = (GAP_FILL_STONE_SIZE_MM / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO;
+  const straddling = pockets.find((s) => Math.abs(s.xMm - splitXmm) < radiusMm);
+  assert.ok(
+    straddling,
+    `expected a pocket stone within ${radiusMm}mm of the colour boundary at xMm=${splitXmm} (fixture-tuned); got distances ${pockets.map((s) => (s.xMm - splitXmm).toFixed(3)).join(', ')}`
+  );
+
+  // Independent oracle (mirrors item 2's own vein-distance oracle: re-derived from the fixture's own
+  // known geometry, not from the pipeline's internals) -- a fine grid over the stone's own disk,
+  // majority side wins. This fixture is a hard 2-colour vertical split with no third colour and no
+  // share-floor pruning in play, so "which side of splitXmm" is the whole rule.
+  const GRID = 61;
+  let sideACount = 0, sideBCount = 0;
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const dx = (gx / (GRID - 1) - 0.5) * 2 * radiusMm, dy = (gy / (GRID - 1) - 0.5) * 2 * radiusMm;
+      if (dx * dx + dy * dy > radiusMm * radiusMm) continue;
+      if (straddling.xMm + dx < splitXmm) sideACount++; else sideBCount++;
+    }
+  }
+  assert.notEqual(sideACount, sideBCount, 'expected the fixture-tuned offset to give a clear majority, not a tie');
+  const expectedColor = sideACount > sideBCount ? 'sapphire' : 'emerald';
+  assert.equal(
+    straddling.color, expectedColor,
+    `expected the pocket straddling the boundary to take the majority colour (sideA=${sideACount} vs sideB=${sideBCount} samples under its own radius)`
+  );
 });

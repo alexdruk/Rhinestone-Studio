@@ -1499,7 +1499,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <!-- IMG-010: Line Design ignores Stone size and Mixed Stone Size entirely (fixed 2.0mm chains,
        2.8mm fills, decision 2) -- mirrors #gapFixedHint's own "disable the control + explain why
        right below it" convention. Toggled in updateLineDesignSizeCapabilityUI(). -->
-  <p class="hint" id="lineDesignFixedSizeHint" style="display:none">Line design uses fixed 2.0mm chains and 2.8mm fills. Stone size and Mixed Stone Size do not apply.</p>
+  <p class="hint" id="lineDesignFixedSizeHint" style="display:none">Line design uses fixed 2.0mm chains and 2.8mm fills. Stone size and Mixed Stone Size do not apply. It also chooses its own colours from the full catalog, so the colour count and the Mask and Trace controls do not apply -- but colour overrides do.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
   <!-- RS-3013 Step 5: region-only Fill Style, shown instead of the whole-shape #shapeFillMode
        (5 options) while a region is selected -- deliberately scoped to just fill/outline for this

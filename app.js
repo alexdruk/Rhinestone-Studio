@@ -825,17 +825,31 @@ function computeImageColorField(layer){
 // IMG-010 (D4): a line-design layer's own stone list is expensive (~0.6-0.8s measured on a
 // realistic fixture) and LineDesignSampler.js reads the full-resolution decoded buffer directly,
 // ignoring threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent/colorCount/palette/
-// colorMap/seed/spread/edgeWidthMm/edgeThinning/brightnessThinning/stoneSize/sizeMode entirely for
-// this mode -- see its own doc comment -- so none of those belong in the cache key below. Mirrors
-// imageColorFieldCache's own shape/2-entry LRU cap exactly. Keyed on layer.id too (unlike
-// imageColorFieldCache) because the cached value already carries stones stamped with a specific
-// layerId, so two different layers must never share a slot.
+// seed/spread/edgeWidthMm/edgeThinning/brightnessThinning/stoneSize/sizeMode entirely for this mode
+// -- see its own doc comment -- so none of those belong in the cache key below. colorMap IS read
+// (IMG-010 follow-up: colour overrides) and so IS in the key, via lineDesignColorMapKey()'s stable
+// serialization below. Mirrors imageColorFieldCache's own shape/2-entry LRU cap exactly. Keyed on
+// layer.id too (unlike imageColorFieldCache) because the cached value already carries stones
+// stamped with a specific layerId, so two different layers must never share a slot.
 const lineDesignStoneCache=new Map();
-// Set true on pointerdown/false on pointerup for the same AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS drag
-// controls IMG-012 already freezes (see that wiring below) -- those controls have no effect on a
-// line-design layer's own output (see the cache-key comment above) but still trigger an expensive
-// regenerate on every 'input' tick while dragging; while frozen, a cache MISS for this layer falls
-// back to whatever is already cached for it (any key) rather than recomputing.
+// IMG-010 follow-up: a plain object's key order is insertion order, not a canonical one (l.colorMap
+// is rebuilt via `{...l.colorMap}` in writeSelectedControlsToLayer(), so two calls with the same
+// overrides could in principle insert them in a different order) -- sorting the override entries'
+// own keys before joining makes the same set of overrides always serialize identically, regardless
+// of insertion order, so the cache key is stable across calls.
+function lineDesignColorMapKey(colorMap){
+  const keys=Object.keys(colorMap||{}).sort();
+  return keys.map(k=>`${k}=${colorMap[k]}`).join(',');
+}
+// Set true on pointerdown/false on pointerup for a line-design image layer's own resize drag (the
+// resize-drag branch of layoutCanvas's pointermove handler mutates x/y/w/h every tick and, unlike a
+// move drag -- see the M14 translate fast path -- has no cheaper preview path, so it calls
+// updateAll(true) -- and therefore generateImageStonesLive() -- on every tick); while frozen, a
+// cache MISS for this layer falls back to whatever is already cached for it (any key) rather than
+// recomputing. endActiveDrag() clears the freeze and forces one real recompute at drag end. (The
+// AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS drag controls IMG-012 freezes never touch this flag: none of
+// those four controls are in the cache key above, so a drag on one of them already hits the cache
+// unchanged, freeze or not.)
 let lineDesignFrozen=false;
 function invalidateLineDesignCache(layerId){
   if(!layerId)return;
@@ -1110,7 +1124,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
   // freeze fallback below.
   if(mode==='line-design'){
-    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap].join('|');
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap)].join('|');
     let cached=lineDesignStoneCache.get(key);
     if(!cached&&lineDesignFrozen){
       for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
@@ -1120,7 +1134,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
       // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
       // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
       // default for either field.
-      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
       const result=this.permanentEngine.generateImageLayout(params);
       cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
       lineDesignStoneCache.set(key,cached);
@@ -4510,6 +4524,13 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     const anchorLocal={x:cx0-off.x*(hit.b0.width/2),y:cy0-off.y*(hit.b0.height/2)};
     const anchorAbs=rotationDeg0?rotatePointDeg(anchorLocal.x,anchorLocal.y,cx0,cy0,rotationDeg0):anchorLocal;
     drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer)),rotationDeg:rotationDeg0,anchorAbs,handleOffset:off};
+    // IMG-010 follow-up: a resize drag mutates l.x/l.y/l.w/l.h on every pointermove tick (below) and
+    // has no fast path (unlike a move drag -- see the M14 translate fast path), so it calls
+    // updateAll(true) every tick -- an expensive line-design regenerate on every tick for a
+    // line-design image layer, since x/y/w/h are in lineDesignStoneCache's own key. Freezing only
+    // for that case (not every resize) keeps every other resize -- shapes, other image modes --
+    // exactly as before.
+    if(hit.layer.type==='image'&&resolveImageFillMode(hit.layer.fillMode)==='line-design')lineDesignFrozen=true;
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(hit.kind==='rotate'){
@@ -4687,11 +4708,24 @@ window.addEventListener('pointercancel',endActiveDrag);
 // updateAll(true) commits no history (that happened once at drag start), so there is no double-commit
 // on any path; a plain click with no pointermove is already canonical from pointerdown's own
 // updateAll(true) and the extra regeneration here is idempotent.
+//
+// IMG-010 follow-up: a resize drag that froze lineDesignFrozen (pointerdown above) spent its whole
+// drag showing stale, frozen-fallback stones -- every pointermove's updateAll(true) hit the freeze
+// fallback instead of a real recompute -- so release must unfreeze and force exactly one real
+// recompute at the drag's final x/y/w/h, reusing the invalidateLineDesignCache() + updateAll(true)
+// pattern IMG-012's own drag-control freeze already established. Guarded on lineDesignFrozen so an
+// ordinary resize (a shape, or an image layer not in line-design mode) never pays this extra call --
+// pointermove's own per-tick updateAll(true) already left it fully up to date.
 function endActiveDrag(){
   const ended=drag;
   drag=null;
   if(activeGuides.length){activeGuides=[];drawLayout()}
   if(ended&&ended.kind==='move')updateAll(true);
+  else if(ended&&ended.kind==='resize'&&lineDesignFrozen){
+    lineDesignFrozen=false;
+    invalidateLineDesignCache(ended.layerId);
+    updateAll(true);
+  }
 }
 window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
@@ -5015,16 +5049,13 @@ for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
   el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});
   el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});
 }
-// IMG-010 (D4): same drag controls, freezing a line-design layer's own cached stone list instead --
-// see lineDesignFrozen's own doc comment. 'change' both unfreezes and forces one real recompute
-// (invalidateLineDesignCache() drops the selected layer's entries so updateAll(true) cannot just
-// hit the still-matching cache key -- those 4 controls never appear in that key, so the recompute's
-// own result is always identical to what was already cached; this only proves a real regenerate ran).
-for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
-  el(id).addEventListener('pointerdown',()=>{lineDesignFrozen=true});
-  el(id).addEventListener('pointerup',()=>{lineDesignFrozen=false});
-  el(id).addEventListener('change',()=>{lineDesignFrozen=false;invalidateLineDesignCache(selectedLayer()?.id);updateAll(true)});
-}
+// IMG-010 follow-up: this same wiring used to also freeze lineDesignFrozen on these 4 controls, but
+// none of imgThreshold/imgBlurRadius/imgMaxWidth/imgMaxHeight are in the line-design cache key (see
+// lineDesignStoneCache's own doc comment) -- a drag on any of them already hits the cache unchanged,
+// with or without the freeze flag, so that wiring achieved nothing and has been removed. What
+// actually forces an expensive line-design recompute per drag tick is a resize drag on the 2D
+// canvas (x/y/w/h are in the key) -- see lineDesignFrozen's own doc comment and layoutCanvas's own
+// pointerdown/pointermove/endActiveDrag() wiring below.
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
 // which fontId #font's native 'input'/'change' events -- wired above via HISTORY_TRACKED_CONTROL_IDS

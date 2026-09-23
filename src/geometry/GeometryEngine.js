@@ -1277,7 +1277,7 @@ export class GeometryEngine {
       // isBrightness branch below already uses; `kind` is carried in metadata only (introspection/
       // testing), never read by any renderer or exporter.
       const linePoints = generateLineDesignStonePoints({
-        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId
+        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap
       });
       stones = linePoints.map((point, index) => new Stone({
         xMm: point.xMm,
