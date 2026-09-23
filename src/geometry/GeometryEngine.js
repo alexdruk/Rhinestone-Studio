@@ -49,6 +49,10 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
 import { generateGapFillStones } from './GapFill.js';
+// IMG-010 (Line Design): the only S-200/IMG-013-adjacent mode whose stones never come from a single
+// sampleFieldByMode() call -- see LineDesignSampler.js's own doc comment and this file's
+// generateImageLayout() branch below.
+import { generateLineDesignStonePoints } from './LineDesignSampler.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -60,7 +64,11 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // perimeter to walk, so it joins this set (not SAMPLE_MODES above).
 // IMG-004: 'edge' is a sixth image-only mode, reusing the same generalized Poisson-disk sampler with
 // a per-point radius keyed to detected edges -- see docs/specifications/IMG-004-EdgeAwareness.md.
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge']);
+// IMG-010: 'line-design' is a seventh image-only mode -- unlike every mode above, it never reaches
+// sampleFieldByMode() (StoneSampler.js's switch has no case for it); generateImageLayout() branches
+// on it before that call and calls LineDesignSampler.js's own candidate generation instead. See
+// docs/specifications/IMG-010-LineDesign.md's "Architecture decision" section.
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design']);
 const DEFAULT_MODE = 'outline';
 // IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
 // -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
@@ -1232,7 +1240,11 @@ export class GeometryEngine {
     // an undefined threshold propagating into a NaN ink() result.
     const resolvedThreshold = options.threshold ?? DEFAULT_THRESHOLD;
     const resolvedInvert = Boolean(options.invert);
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
+    const isLineDesign = options.mode === 'line-design';
+    // IMG-010: 'line-design' has its own candidate generation (LineDesignSampler.js, below) --
+    // StoneSampler.js's switch has no case for it, so the call is skipped entirely rather than
+    // silently falling through to its `default` (plain Grid Fill) branch.
+    const points = isLineDesign ? [] : sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
       seed: options.seed,
       spread: options.spread,
       edgeThinning: options.edgeThinning,
@@ -1257,7 +1269,26 @@ export class GeometryEngine {
     };
 
     let stones;
-    if (isBrightness) {
+    if (isLineDesign) {
+      // IMG-010: three concurrently-generated populations (outline/line chains at a fixed SS6,
+      // fill rings at a fixed SS10, plus GapFill.js's own pocket pass) from LineDesignSampler.js's
+      // own candidate generation -- never sampleFieldByMode(), see the architecture note on
+      // IMAGE_SAMPLE_MODES above. Mapped straight to Stone instances, the same one-call shape the
+      // isBrightness branch below already uses; `kind` is carried in metadata only (introspection/
+      // testing), never read by any renderer or exporter.
+      const linePoints = generateLineDesignStonePoints({
+        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap
+      });
+      stones = linePoints.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: point.color,
+        layerId: options.layerId,
+        index,
+        metadata: { kind: point.kind, pathId: point.pathId ?? null }
+      }));
+    } else if (isBrightness) {
       // IMG-006 decision 1/3: assign each survivor a diameter from its own measured luminance (the
       // same absolute pixel fieldLabelAt()/colorAt() above already reads), then run
       // dropOverlappingSizedStones() as a structural safety net -- expected to remove nothing on this
@@ -1297,7 +1328,11 @@ export class GeometryEngine {
     // single `color` argument (MixedSizeGenerator.js) cannot carry a per-point IMG-002 label lookup
     // -- see docs/specifications/IMG-002-ColorLayers.md, Structure. startIndex still continues from
     // the base stones' own length, exactly as generateMixedSizeInfillStones() would have produced.
-    if (options.mixedOptions) {
+    // IMG-010 (D3): Line Design ignores S-200 Mixed Stone Size entirely -- decisions (b)-(e) never
+    // anticipated (and Task D never measured) running S-200's additive infill on top of an
+    // already two-size layout. `options.mixedOptions` is otherwise mode-agnostic, so this mode is
+    // excluded here rather than in normalizeMixedSizeParams() itself.
+    if (options.mixedOptions && !isLineDesign) {
       const infillPoints = generateMixedSizeInfillPoints({
         mode: options.mode,
         source: { kind: 'field', field, placement },
@@ -1321,7 +1356,10 @@ export class GeometryEngine {
     // IMG-013: runs last, against the combined primary + S-200-infill stone set (S-200 infill counts
     // as "existing" from gap-fill's own point of view, decision 2) -- reuses the same colorAt()
     // closure built above (Task C) and the same on-field mask test (fieldPixelOn(), decision 4).
-    if (options.fillGaps) {
+    // IMG-010: Line Design's own pocket pass already ran inside generateLineDesignStonePoints()
+    // above (decision f, against its own hole-filled subject mask, not `field`) -- running this
+    // generic fillGaps pass again here would double-apply GapFill.js against the wrong mask.
+    if (options.fillGaps && !isLineDesign) {
       const isInside = (xMm, yMm) => fieldPixelOn(field, xMm - placement.xMm, yMm - placement.yMm, placement.widthMm, placement.heightMm);
       const gapFillStones = generateGapFillStones({
         baseStones: stones,
