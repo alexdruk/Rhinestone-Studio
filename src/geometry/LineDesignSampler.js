@@ -5,7 +5,8 @@
  * ContourRingSampler.js already have) housing the pieces docs/specifications/IMG-010-LineDesign.md's
  * reuse audit found genuinely missing from the rest of the codebase: enclosed-pocket hole-fill +
  * nearest-opaque inpaint (decision a), direct per-pixel CIE76 catalog labelling with a 1.2%-share
- * floor (decision b), disk-based morphological close/dilate over a raw pixel grid (decision d, via
+ * floor (decision b, since IMG-015 src/image/ColorQuantize.js's labelCatalogColors(), shared with
+ * every other image fill mode), disk-based morphological close/dilate over a raw pixel grid (decision d, via
  * ContourRingSampler.js's rawGridDistanceTransform()), Zhang-Suen skeletonization + connected-
  * component length filtering + traced-path length filtering (decision d), and chord-distance stone
  * placement (decisions c/d). Decisions (c)/(e) reuse ContourRingSampler.js's ring-tracing machinery
@@ -22,7 +23,8 @@
  */
 
 import { computeSubjectMask } from '../image/SubjectMask.js';
-import { rgbToLab, cie76Distance } from '../image/ColorSpace.js';
+import { rgbToLab } from '../image/ColorSpace.js';
+import { labelCatalogColors, MIN_CATALOG_COLOR_SHARE } from '../image/ColorQuantize.js';
 import { rawGridDistanceTransform, computeSingleDistanceRing, computeInwardRingPolygons } from './ContourRingSampler.js';
 import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
 import { selectNonOverlappingSizedStones } from './MixedSizeGenerator.js';
@@ -47,8 +49,9 @@ export const LINE_DESIGN_MIN_COMPONENT_DIAMETER_RATIO = 1.2;
 // applied after the component-level LINE_DESIGN_MIN_COMPONENT_DIAMETER_RATIO filter above -- see
 // docs/specifications/IMG-010-LineDesign.md's "Defect found: skeleton junction fragmentation".
 // Decision (b): colours under this share of the silhouette's own pixel count are dropped and
-// relabelled to their nearest surviving catalog colour.
-export const LINE_DESIGN_MIN_COLOR_SHARE = 0.012;
+// relabelled to their nearest surviving catalog colour. IMG-015 moved the constant, with the
+// labeller, into src/image/ColorQuantize.js; this name stays exported as an alias of it.
+export const LINE_DESIGN_MIN_COLOR_SHARE = MIN_CATALOG_COLOR_SHARE;
 // Decision (g): modal colour vote over every silhouette pixel within this fraction of a stone's own
 // radius of its centre.
 export const LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO = 0.8;
@@ -165,55 +168,11 @@ function computeFilledMaskAndInpaint(imageBuffer) {
 
 // ---- Stage (b): direct per-pixel CIE76 catalog labelling, 1.2% share floor + relabel ------------
 
-function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx, catalogLabs }) {
-  const pixelCount = widthPx * heightPx;
-  const rawLabel = new Uint8Array(pixelCount).fill(255);
-  const labL = new Float64Array(pixelCount);
-  const labA = new Float64Array(pixelCount);
-  const labB = new Float64Array(pixelCount);
-  const counts = new Array(catalogLabs.length).fill(0);
-  let silhouettePixelCount = 0;
-
-  for (let i = 0; i < pixelCount; i++) {
-    if (!filledMask[i]) continue;
-    silhouettePixelCount++;
-    const lab = rgbToLab(inpaintedR[i], inpaintedG[i], inpaintedB[i]);
-    labL[i] = lab[0]; labA[i] = lab[1]; labB[i] = lab[2];
-    let best = 0, bestD = Infinity;
-    for (let c = 0; c < catalogLabs.length; c++) {
-      const d = cie76Distance(lab, catalogLabs[c]);
-      if (d < bestD) { bestD = d; best = c; }
-    }
-    rawLabel[i] = best;
-    counts[best]++;
-  }
-
-  let survivingIds = [];
-  for (let c = 0; c < counts.length; c++) {
-    if (silhouettePixelCount > 0 && counts[c] / silhouettePixelCount >= LINE_DESIGN_MIN_COLOR_SHARE) survivingIds.push(c);
-  }
-  if (survivingIds.length === 0) {
-    // Degenerate fixture (no colour clears the floor, or an empty silhouette) -- fall back to every
-    // observed label rather than producing an unlabellable field.
-    survivingIds = counts.map((count, c) => (count > 0 ? c : -1)).filter((c) => c >= 0);
-  }
-  const survivingSet = new Set(survivingIds);
-
-  const finalLabel = new Uint8Array(pixelCount).fill(255);
-  for (let i = 0; i < pixelCount; i++) {
-    if (!filledMask[i]) continue;
-    const raw = rawLabel[i];
-    if (survivingSet.has(raw)) { finalLabel[i] = raw; continue; }
-    const lab = [labL[i], labA[i], labB[i]];
-    let best = survivingIds[0], bestD = Infinity;
-    for (const c of survivingIds) {
-      const d = cie76Distance(lab, catalogLabs[c]);
-      if (d < bestD) { bestD = d; best = c; }
-    }
-    finalLabel[i] = best;
-  }
-
-  return { finalLabel, survivingIds, silhouettePixelCount };
+function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs }) {
+  const { labels, keptIds } = labelCatalogColors({
+    r: inpaintedR, g: inpaintedG, b: inpaintedB, eligible: filledMask, palette, catalogLabs, minShare: LINE_DESIGN_MIN_COLOR_SHARE
+  });
+  return { finalLabel: labels, survivingIds: keptIds };
 }
 
 // ---- Raster morphology: disk dilation/erosion via rawGridDistanceTransform() --------------------
@@ -720,7 +679,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   const { filledMask, inpaintedR, inpaintedG, inpaintedB, holeCount } = time('mask', () => computeFilledMaskAndInpaint(imageBuffer));
   time('inpaint', () => holeCount); // inpainting already ran inside computeFilledMaskAndInpaint(); measured jointly with mask above -- see report.
 
-  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx, catalogLabs }));
+  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs }));
 
   const insideAtSilhouette = (xMm, yMm) => filledMask[pixelIndexAt(xMm, yMm)] === 1;
 

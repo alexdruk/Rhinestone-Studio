@@ -1823,6 +1823,52 @@ export function fieldLabelAt(field, placement, xMm, yMm) {
 }
 
 /**
+ * IMG-015 decision 4: the modal label under a stone's own disk rather than the label of its centre
+ * pixel. Counts every labelled (non-NO_LABEL) pixel with dx^2 + dy^2 <= r^2 around fieldLabelAt()'s
+ * own clamped centre cell, where r = max(1, round(radiusMm / (widthMm / widthPx))), and returns the
+ * most frequent label, ties to the lowest. A disk with no labelled pixel falls back to
+ * fieldLabelAt(), so an off-field coordinate or a null field.labels still returns NO_LABEL. The same
+ * rule LineDesignSampler.js's own modal colour vote applies.
+ *
+ * @param {{widthPx: number, heightPx: number, labels: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @param {number} radiusMm The vote disk's radius.
+ * @returns {number} The label byte (0..K-1), or NO_LABEL.
+ */
+export function fieldModalLabelAt(field, placement, xMm, yMm, radiusMm) {
+  if (!field.labels) return NO_LABEL;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return NO_LABEL;
+  }
+  const { widthPx, heightPx, labels } = field;
+  const centerX = Math.min(widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * widthPx)));
+  const centerY = Math.min(heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * heightPx)));
+  const radiusPx = Math.max(1, Math.round(radiusMm / (widthMm / widthPx)));
+  const counts = new Map();
+  for (let dy = -radiusPx; dy <= radiusPx; dy++) {
+    for (let dx = -radiusPx; dx <= radiusPx; dx++) {
+      if (dx * dx + dy * dy > radiusPx * radiusPx) continue;
+      const px = centerX + dx, py = centerY + dy;
+      if (px < 0 || py < 0 || px >= widthPx || py >= heightPx) continue;
+      const label = labels[py * widthPx + px];
+      if (label === NO_LABEL) continue;
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+  }
+  if (counts.size === 0) return fieldLabelAt(field, placement, xMm, yMm);
+  let best = NO_LABEL, bestCount = -1;
+  for (const [label, count] of counts) {
+    if (count > bestCount || (count === bestCount && label < best)) { bestCount = count; best = label; }
+  }
+  return best;
+}
+
+/**
  * Look up a field's raw per-pixel luminance (0..255) at an absolute (xMm, yMm) -- IMG-006's
  * fieldLabelAt() counterpart for field.luminance. Mirrors its exact coordinate/pixel arithmetic so a
  * stone's assigned brightness size is read from the same pixel its on-field (field.data) test used.

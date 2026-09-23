@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chooseAutoColorCount, prepareAutoColorField, pickAutoColorCountWinner } from '../src/image/AutoColourCount.js';
+import { chooseAutoColorCount, prepareAutoColorField } from '../src/image/AutoColourCount.js';
 import { prepareImageField } from '../src/image/index.js';
 import { createGeometryEngine } from '../src/geometry/index.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
@@ -11,15 +11,15 @@ const appJsSource = await readFile(fileURLToPath(new URL('../app.js', import.met
 function readFileSync() { return appJsSource; }
 
 // IMG-012 -- unit tests for the Auto (best fit) colour count: src/image/AutoColourCount.js's
-// chooseAutoColorCount()/pickAutoColorCountWinner()/prepareAutoColorField() (decisions 1/2/D1/D4),
-// app.js's resolveImageColorCount() + its Auto cache (decision 5/D3), the write-site 'auto'
-// round-trip (section B), the D2 maskMode-forwarding fix to computeImageColorField(), and the
-// Studio's "Auto: N colours" hint (decision 3). See docs/specifications/IMG-012-AutoColourCount.md.
+// chooseAutoColorCount()/prepareAutoColorField(), app.js's resolveImageColorCount() + its Auto cache
+// (decision 5/D3), the write-site 'auto' round-trip (section B), the D2 maskMode-forwarding fix to
+// computeImageColorField(), and the Studio's "Auto: N colours" hint (decision 3). See
+// docs/specifications/IMG-012-AutoColourCount.md.
 //
-// D1 overrides the spec's own tie rule (spec: prefer the larger k; this milestone: among the k
-// within 1% of the lowest mean ΔE, prefer the most non-empty clusters, ties broken by the smallest
-// k -- and the resolved count is that winner's own cluster count, not its k). Item 2 below pins
-// D1's own worked example: Fixture 2 resolves to 6, not the spec's original 8.
+// IMG-015 (docs/specifications/IMG-015-DirectCatalogueColour.md, decisions 3 and 7) retired
+// IMG-012's k=2..8 mean-ΔE sweep and D1's tie rule: Auto now resolves to max(2, n), n the catalog
+// colours clearing the 1.2% share floor capped at 8, and the Studio hint counts the resolved colour
+// field's groups. Items 1 and 2 keep their resolved counts, 4 and 6.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -108,43 +108,13 @@ const AUTO_FIELD_BASE_PARAMS = { threshold: 128, invert: false, blurRadiusPx: 0,
 // ---- Item 1: Fixture 1 correctness ----------------------------------------------------------------
 await test('1. chooseAutoColorCount(buildFourRegionFixture(200,200,{noise:6,seed:1})) resolves to k=4, the strict global minimum', () => {
   const result = chooseAutoColorCount(buildFourRegionFixture(200, 200, { noise: 6, seed: 1 }), PALETTE);
-  assert.equal(result.winnerK, 4);
   assert.equal(result.resolvedCount, 4);
-  const others = result.scores.filter((s) => s.k !== 4);
-  const k4 = result.scores.find((s) => s.k === 4);
-  for (const other of others) {
-    assert.ok(k4.meanDeltaE < other.meanDeltaE, `expected k=4's mean ΔE (${k4.meanDeltaE}) to be strictly lower than k=${other.k}'s (${other.meanDeltaE})`);
-  }
 });
 
 // ---- Item 2: D1's own worked example (Fixture 2 resolves to 6, not the spec's original 8) --------
-await test('2. chooseAutoColorCount(buildSixRegionFixture(240,160)) resolves to 6 under D1 (winnerK=6), not the spec\'s original 8', () => {
+await test('2. chooseAutoColorCount(buildSixRegionFixture(240,160)) resolves to 6, not the spec\'s original 8', () => {
   const result = chooseAutoColorCount(buildSixRegionFixture(240, 160), PALETTE);
-  const tied = result.scores.filter((s) => s.meanDeltaE === 0);
-  assert.deepEqual(tied.map((s) => s.k).sort((a, z) => a - z), [6, 7, 8], 'expected k=6,7,8 to tie at meanDeltaE=0');
-  for (const s of tied) assert.equal(s.clusters, 6, `expected k=${s.k} to report 6 non-empty clusters`);
-  assert.equal(result.winnerK, 6, "D1: equal cluster counts (6) among the tied candidates pick the smallest k");
   assert.equal(result.resolvedCount, 6, 'D1: resolved count is the winner\'s own cluster count');
-});
-
-// ---- Item 3: tie-threshold boundary, on synthetic scores (not through quantizeColors()) ----------
-await test('3. pickAutoColorCountWinner() tie boundary is <= (inclusive): exactly 1.0% above the minimum is a candidate, 1.01% above is not; equal cluster counts pick the smaller k', () => {
-  // m=100: k3 at exactly +1.0% (101) is a candidate and wins on cluster count over k2; k4 at +1.01%
-  // (101.01) is excluded -- if it were included, its higher cluster count (10) would win instead.
-  const boundary = pickAutoColorCountWinner([
-    { k: 2, meanDeltaE: 100, clusters: 2 },
-    { k: 3, meanDeltaE: 101, clusters: 5 },
-    { k: 4, meanDeltaE: 101.01, clusters: 10 }
-  ]);
-  assert.equal(boundary.k, 3, 'expected the +1.0% candidate (k=3) to win, proving the boundary is inclusive');
-
-  // Equal cluster counts among candidates: the smaller k wins.
-  const equalClusters = pickAutoColorCountWinner([
-    { k: 5, meanDeltaE: 10, clusters: 4 },
-    { k: 6, meanDeltaE: 10.05, clusters: 4 },
-    { k: 7, meanDeltaE: 50, clusters: 8 }
-  ]);
-  assert.equal(equalClusters.k, 5, 'expected the smaller k (5) to win a tie between two candidates with equal cluster counts');
 });
 
 // ---- Item 4: maskMode matters ----------------------------------------------------------------------
@@ -275,8 +245,8 @@ const STEP0_BASELINE = {
   subject: {
     absent: { stoneCount: 256, distinctColors: ['jet'] },
     1: { stoneCount: 256, distinctColors: ['jet'] },
-    2: { stoneCount: 256, distinctColors: ['light-sapphire', 'topaz'] },
-    3: { stoneCount: 256, distinctColors: ['emerald', 'sapphire', 'topaz'] },
+    2: { stoneCount: 256, distinctColors: ['sapphire', 'siam'] },
+    3: { stoneCount: 256, distinctColors: ['emerald', 'sapphire', 'siam'] },
     4: { stoneCount: 256, distinctColors: ['emerald', 'gold', 'sapphire', 'siam'] },
     5: { stoneCount: 256, distinctColors: ['emerald', 'gold', 'sapphire', 'siam'] },
     6: { stoneCount: 256, distinctColors: ['emerald', 'gold', 'sapphire', 'siam'] },
@@ -286,7 +256,7 @@ const STEP0_BASELINE = {
   threshold: {
     absent: { stoneCount: 192, distinctColors: ['jet'] },
     1: { stoneCount: 192, distinctColors: ['jet'] },
-    2: { stoneCount: 192, distinctColors: ['jet', 'sapphire'] },
+    2: { stoneCount: 192, distinctColors: ['sapphire', 'siam'] },
     3: { stoneCount: 192, distinctColors: ['emerald', 'sapphire', 'siam'] },
     4: { stoneCount: 192, distinctColors: ['emerald', 'sapphire', 'siam'] },
     5: { stoneCount: 192, distinctColors: ['emerald', 'sapphire', 'siam'] },
@@ -398,7 +368,7 @@ await test("9. D2: computeImageColorField() for a subject-mode layer returns col
 
 // ---- Item 10: Studio hint text ----------------------------------------------------------------------
 function extractAutoHintSource(appJs) {
-  const marker = "const autoHintEl=el('imgColorCountAuto');\n  if(l.colorCount==='auto'){const autoResolvedCount=resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}";
+  const marker = "const autoHintEl=el('imgColorCountAuto');\n  if(l.colorCount==='auto'){const autoResolvedCount=colorField?colorField.colorGroups.length:resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}";
   assert.ok(appJs.includes(marker), 'expected renderImageStudio() to set the #imgColorCountAuto hint text');
   return marker;
 }
@@ -410,9 +380,10 @@ await test('10. Studio hint text reads exactly "Auto: 4 colours" for fixture 1 (
   const hintEl = { textContent: '', style: {} };
   const el = (id) => { assert.equal(id, 'imgColorCountAuto'); return hintEl; };
   const resolveImageColorCount = () => 4;
+  const colorField = { colorGroups: new Array(4).fill({}) };
   const l = { colorCount: 'auto' };
   // eslint-disable-next-line no-new-func
-  new Function('el', 'l', 'resolveImageColorCount', source)(el, l, resolveImageColorCount);
+  new Function('el', 'l', 'resolveImageColorCount', 'colorField', source)(el, l, resolveImageColorCount, colorField);
 
   assert.equal(hintEl.textContent, 'Auto: 4 colours');
   assert.equal(hintEl.style.display, '');
@@ -421,7 +392,7 @@ await test('10. Studio hint text reads exactly "Auto: 4 colours" for fixture 1 (
   const hiddenEl = { textContent: '', style: {} };
   const elHidden = () => hiddenEl;
   // eslint-disable-next-line no-new-func
-  new Function('el', 'l', 'resolveImageColorCount', source)(elHidden, { colorCount: 3 }, resolveImageColorCount);
+  new Function('el', 'l', 'resolveImageColorCount', 'colorField', source)(elHidden, { colorCount: 3 }, resolveImageColorCount, colorField);
   assert.equal(hiddenEl.style.display, 'none');
 });
 
@@ -484,9 +455,10 @@ await test('14. Hint singular/plural: a resolved count of 1 reads "Auto: 1 colou
     const hintEl = { textContent: '', style: {} };
     const el = () => hintEl;
     const resolveImageColorCount = () => resolvedCount;
+    const colorField = { colorGroups: new Array(resolvedCount).fill({}) };
     const l = { colorCount: 'auto' };
     // eslint-disable-next-line no-new-func
-    new Function('el', 'l', 'resolveImageColorCount', source)(el, l, resolveImageColorCount);
+    new Function('el', 'l', 'resolveImageColorCount', 'colorField', source)(el, l, resolveImageColorCount, colorField);
     return hintEl.textContent;
   }
 

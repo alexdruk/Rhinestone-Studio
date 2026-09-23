@@ -1,6 +1,6 @@
 # IMG-015 — Direct Catalogue Colour
 
-**Status: spec only, not implemented.** File:line citations are against `develop` @ `918622f`. Every
+**Status: implemented.** File:line citations are against `develop` @ `918622f`, before the build. Every
 figure marked "measured" was produced in this spec's own scratch probes (untracked, under
 `tools/scratch/`), on the pristine tip and on a scratch copy of the tree with the proposal applied.
 Figures marked "provided" were supplied by the lead architect and are recorded as given.

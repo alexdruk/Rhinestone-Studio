@@ -727,7 +727,10 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 // section B) resolves to a concrete integer 1-8 through this function alone -- every numeric read
 // site (this file's own multiColorImage flag, computeImageColorField(), generateImageStonesLive(),
 // resolveImageExportRegions()) calls this instead of reading layer.colorCount raw. A number or an
-// absent value passes through byte-identically (decision 4); only 'auto' triggers the sweep below.
+// absent value passes through byte-identically (decision 4); only 'auto' triggers the count below.
+// IMG-015 (decisions 3 and 7): that count is one pass of direct catalog labelling, max(2, n) where n
+// is the number of catalog colours clearing the 1.2% share floor (capped at 8), or 1 with no subject
+// pixels -- no longer IMG-012's k=2..8 sweep.
 //
 // D3 (this milestone's own cache-key audit): computeSubjectMask() (maskMode:'subject') reads only
 // the source imageBuffer and a fixed default toleranceDe -- no layer-stored parameter, so
@@ -736,14 +739,15 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 // and `transparent` are read unconditionally by prepareImageField() after either mask route, in
 // both modes -- so the key below includes `threshold` only for 'threshold' mode. This is a flat
 // key->resolvedCount cache mirroring imageColorFieldCache's own shape/2-entry LRU cap exactly: a
-// key hit never re-runs the sweep, a key miss always does -- seed/spread/stoneSize/gap/fillMode/a
+// key hit never re-runs the count, a key miss always does -- seed/spread/stoneSize/gap/fillMode/a
 // colorMap pick are deliberately absent from the key, so editing them never invalidates it (decision
 // 5's "recomputes once per change of image, mask parameters, or working resolution").
 //
 // D3 UI-perf follow-up (freeze, not the "not built" note this comment used to carry): #imgThreshold
 // is a range input firing 'input' on every drag tick, and each tick's threshold value is technically
-// a distinct key -- so unlike imageColorFieldCache's single quantizeColors() call, letting Auto's
-// 7-call sweep + ΔE scoring run on every drag tick would be a real per-frame cost. autoColorCountFrozen
+// a distinct key -- so letting Auto's labelling pass (a full-field per-pixel catalog labelling, on
+// top of imageColorFieldCache's own quantizeColors() call) run on every drag tick would be a real
+// per-frame cost. autoColorCountFrozen
 // (set true on 'pointerdown', false on 'pointerup'/'change' -- wired below, near
 // HISTORY_TRACKED_CONTROL_IDS) freezes resolveImageColorCount() to whatever it last actually
 // resolved for that layer (autoColorCountLastResolved) while a mask-slider drag is in progress,
@@ -759,7 +763,7 @@ function autoColorCountKeyParts(layer){
   return parts.join('|');
 }
 const autoColorCountCache=new Map();
-// layer.id -> the last count actually resolved for it (sweep result or cache hit), read while frozen.
+// layer.id -> the last count actually resolved for it (fresh count or cache hit), read while frozen.
 const autoColorCountLastResolved=new Map();
 let autoColorCountFrozen=false;
 function resolveImageColorCount(layer){
@@ -788,15 +792,16 @@ function resolveImageColorCount(layer){
 // than caching a row->nearestId mapping between the two, which could drift stale if e.g. threshold
 // changed between renders. Returns null (no quantization) for colorCount<=1 or before the source
 // image has been decoded/cached at least once.
-// IMG-002 follow-up: quantization (median-cut + 8 k-means passes) has a measured real cost at larger
-// working resolutions -- +312ms at 1000x1000, +218ms at 2000x2000, +575ms at 4000x4000, all measured
-// on top of the shipped 400px default. This function alone already runs up to three times per
+// IMG-002 follow-up: quantization has a measured real cost at larger working resolutions -- +312ms
+// at 1000x1000, +218ms at 2000x2000, +575ms at 4000x4000, all measured on top of the shipped 400px
+// default, when it was median cut + 8 k-means passes; IMG-015's direct per-pixel catalog labelling
+// replaced that and was not re-measured at those sizes. This function alone already runs up to three times per
 // updateAll() (writeSelectedControlsToLayer(), generateImageLayout()'s own prepareImageField() call
 // inside the engine, and renderImageStudio()), and #imgThreshold is a range input firing on every
 // 'input' event while dragging -- so imageColorFieldCache below caches the last couple of results,
 // keyed on every param quantizeColors()' own output depends on: imageSrc (which image), threshold/
 // invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent (which determine the density/R/G/B fields
-// it reads), and colorCount (how many clusters it produces). Omitting any one of these from the key
+// it reads), and colorCount (how many colour groups it keeps). Omitting any one of these from the key
 // would let an edit to that param silently reuse a stale quantization. Deliberately NOT cached inside
 // src/image or src/geometry -- prepareImageField() itself stays pure and uncached, the same as every
 // other pure pipeline stage; this is app.js's own UI-latency concern, not the engine's.
@@ -6527,12 +6532,13 @@ async function renderImageStudio(){
   // computeImageColorField()'s own doc comment for why this isn't cached between renders. Drives
   // both the "Colours" canvas view below and the Colours group's per-row swatch/share/select.
   const colorField=computeImageColorField(l);
-  // IMG-012 (decision 3): shows the resolved count next to the control while Auto is selected --
-  // computeImageColorField() above already resolved layer.colorCount through resolveImageColorCount()
-  // internally (it returns null when that resolves to <=1, so re-resolve directly here for the "Auto:
-  // 1 colour" case too, which colorField alone can't distinguish from "not Auto at all").
+  // IMG-012 (decision 3): shows the count next to the control while Auto is selected. IMG-015
+  // (decision 7): it is the number of groups in colorField, the Colours rows rendered below, not the
+  // resolved count (a one-group Auto layer resolves to 2). computeImageColorField() returns null when
+  // the count resolves to <=1 (no subject pixels) or before the source is decoded, so the hint then
+  // falls back to resolveImageColorCount() directly.
   const autoHintEl=el('imgColorCountAuto');
-  if(l.colorCount==='auto'){const autoResolvedCount=resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
+  if(l.colorCount==='auto'){const autoResolvedCount=colorField?colorField.colorGroups.length:resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
   for(let i=0;i<8;i++){
     const row=el(`imgColorGroup${i}`);
     const group=colorField?.colorGroups?.[i];
