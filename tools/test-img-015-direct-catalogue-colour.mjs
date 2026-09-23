@@ -179,17 +179,17 @@ function autoHintText(colorField, resolvedCount) {
 }
 
 // ---- Items 1-5: the spec's fixtures A, B and C --------------------------------------------------
-await test('1. Fixture A (close greys) under Auto: Auto 2, one group jet (32,32,32) 100.00%, 169 jet stones, hint "Auto: 1 colour"', () => {
+await test('1. Fixture A (close greys) under Auto: Auto 2, jet (20,20,20) 60.00% + hematite (50,50,50) 40.00%, 169 stones jet 104 hematite 65, hint "Auto: 2 colours"', () => {
   const buffer = createImageBuffer(buildCloseGreysBuffer());
   const auto = autoCountOf(buffer);
   assert.equal(auto, 2);
   const field = colorFieldOf(buffer, auto);
-  assert.deepEqual(groupsSummary(field.colorGroups), [{ id: 'jet', rgb: [32, 32, 32], share: '100.00' }]);
+  assert.deepEqual(groupsSummary(field.colorGroups), [{ id: 'jet', rgb: [20, 20, 20], share: '60.00' }, { id: 'hematite', rgb: [50, 50, 50], share: '40.00' }]);
   const layout = layoutOf(buffer, auto);
   assert.equal(layout.stones.length, 169);
-  assert.deepEqual(colourCounts(layout.stones), { jet: 169 });
-  assert.equal(field.colorGroups.length, 1, 'decision 7: hint count');
-  assert.equal(autoHintText(field, auto), 'Auto: 1 colour');
+  assert.deepEqual(colourCounts(layout.stones), { jet: 104, hematite: 65 });
+  assert.equal(field.colorGroups.length, 2, 'decision 7: hint count');
+  assert.equal(autoHintText(field, auto), 'Auto: 2 colours');
 });
 
 await test('2. Fixture B (orange + shade) under Auto: Auto 2, one group topaz (202,125,35) 100.00%, 169 topaz stones, hint "Auto: 1 colour"', () => {
@@ -487,7 +487,7 @@ await test('9. Line Design parity: the moved labeller reproduces buildLabelField
   });
   assert.equal(layout.stones.length, 545);
   const hash = crypto.createHash('sha256').update(JSON.stringify(layout.stones.map((s) => [s.xMm, s.yMm, s.sizeMm, s.color]))).digest('hex');
-  assert.equal(hash, '17b4d26911d115add0345f57127402f365631c8d7fda497e488254332385f029', 'Line Design stone list at 120mm, measured on 35302bb');
+  assert.equal(hash, 'f77b2a42e33b2cdbe5b907208372db7b2fbf5c176bad4d9d4fc14c96e3c8a894', 'Line Design stone list at 120mm, measured after IMG-016\'s ink-only line-colour vote: positions unchanged (545 stones, [xMm, yMm, sizeMm, kind] hash d2b6598943249a4d), three line stones become jet');
 });
 
 console.log('IMG-015 direct catalogue colour tests passed.');

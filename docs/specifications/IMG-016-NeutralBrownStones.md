@@ -1,11 +1,11 @@
 # IMG-016 — Neutral and Brown Stones
 
-**Status: spec only.** File:line citations are against `develop` @ `9a107de` plus this branch's
-wording-only commit to `tools/test-img-012-auto-colour-count.mjs`. Neither commit moves any line cited
-here. Figures marked "provided" come from the lead architect and are recorded as given. Figures
-marked "measured" come from this spec's own scratch probes, run on the pristine tip and on a scratch
-copy of the tree with the six entries below appended. The copy lives in the session scratchpad, not
-under `tools/scratch/`.
+**Status: implemented.** File:line citations are against `develop` @ `9a107de` plus this branch's
+wording-only commit to `tools/test-img-012-auto-colour-count.mjs`, before the build. Neither commit
+moves any line cited here. Figures marked "provided" come from the lead architect and are recorded
+as given. Figures marked "measured" come from this spec's own scratch probes, run on the pristine tip
+and on a scratch copy of the tree with the six entries below appended. The copy lives in the session
+scratchpad, not under `tools/scratch/`.
 
 ## Objective
 
@@ -333,7 +333,9 @@ any of the following holds:
 2. Any pinned select has an `<option>` or `<optgroup>` in `index.html`.
 3. Any `<select>` whose id matches `/colou?r/i` is neither in the pinned list nor in the pinned
    product-colour list (`cupColor`, `plateColor`). This catches a new colour select populated some
-   other way.
+   other way. `imgColorCount` is the image Studio's colour-count dropdown, a number rather than a
+   colour, so it is exempted by a pinned list rather than by narrowing the regex, and any future
+   exemption must be added explicitly.
 4. `populateStoneColorOptions()`'s body reads anything but `Object.values(STONE_COLORS)`, or any
    other site in `app.js` writes `innerHTML`, `.add(` or `appendChild` into a pinned select.
 5. Executed for real via the established slice-and-`new Function` pattern against a fake `el()`, the
@@ -378,6 +380,19 @@ topaz (202,125,35) 100.00%, 169 topaz stones, `'Auto: 1 colour'`. Nothing is los
 The fixture generator is pinned verbatim in IMG-015's spec, so the fixture itself does not change.
 Only the expectations do.
 
+**`tools/test-img-015-direct-catalogue-colour.mjs`, Item 9 (`:490`), found during the build.** Item 9
+hashes the Line Design stone list for IMG-010's `makeFixture()` image at 120 mm, over
+`[xMm, yMm, sizeMm, color]`. The six catalogue entries alone leave it unchanged, which is why the
+scratch run above passed it. Decision 3's ink-only line-colour vote changes it, with 17 colours or 23.
+Positions do not move: 545 stones, and the hash over `[xMm, yMm, sizeMm, kind]` is `d2b6598943249a4d`
+before and after. Three `line` stones become jet (line stones go from jet 65, emerald 2, topaz 1 to
+jet 68). No other kind of stone changes colour.
+
+| Line | Old | New |
+|---|---|---|
+| `:490` expected hash | `17b4d26911d115add0345f57127402f365631c8d7fda497e488254332385f029` | `f77b2a42e33b2cdbe5b907208372db7b2fbf5c176bad4d9d4fc14c96e3c8a894` |
+| `:490` message | `'Line Design stone list at 120mm, measured on 35302bb'` | says it was measured after IMG-016's ink-only line-colour vote, with positions unchanged (545 stones, position hash `d2b6598943249a4d`) and three line stones becoming jet |
+
 ### Unchanged, noted
 
 * **`tools/test-crystal-color-catalog.mjs`** keeps passing. Item 1 (`:58-59`) asserts `>= 17`, and
@@ -406,7 +421,7 @@ Only the expectations do.
 | `src/renderer/StoneColors.js` | `:6` | Comment "17 entries" → 23 |
 | `docs/ARCHITECTURE.md` | `:293` | "17-color" → 23, plus one sentence citing IMG-016 |
 | `tools/test-crystal-color-catalog.mjs` | `:39-43`, `:58-59`, after `:106` | Six names added, count, full 17-entry byte pin, new-entry pin |
-| `tools/test-img-015-direct-catalogue-colour.mjs` | `:182-192` | Item 1 literals, per the table above |
+| `tools/test-img-015-direct-catalogue-colour.mjs` | `:182-192`, `:490` | Item 1 and Item 9 literals, per the tables above |
 | `src/geometry/LineDesignSampler.js` | after `:60` | Export `LINE_DESIGN_INK_REFERENCE_COLOR_IDS` (the 17 pre-IMG-016 ids, in catalogue order), with a comment that the coloured-chains milestone removes it (decision 3) |
 | `src/geometry/LineDesignSampler.js` | `:682-684`, `:756-758` | Compute the ink mask once, from `buildLabelField()` on the reference subset; delete the in-closure jet mask |
 | `src/geometry/LineDesignSampler.js` | `:695-716`, `:817-820` | Optional ink-only argument on `modalColorAt()`, with the all-pixel fallback; set it for `kind === 'line'` only |

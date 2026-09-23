@@ -58,6 +58,13 @@ export const LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO = 0.8;
 // Ink structure (decision d) is exactly the per-pixel-labelled 'jet' region -- see
 // resolveJetCatalogIndex() below.
 const JET_COLOR_ID = 'jet';
+// IMG-016 decision 3: the ink structure stays the region labelled 'jet' against these 17 pre-IMG-016
+// catalogue ids, in catalogue order, so appended dark neutrals never move line geometry. Stone colours
+// still label against the whole passed palette. The coloured-chains milestone removes this constant.
+export const LINE_DESIGN_INK_REFERENCE_COLOR_IDS = Object.freeze([
+  'crystal-clear', 'crystal', 'jet', 'siam', 'light-siam', 'rose', 'fuchsia', 'amethyst', 'sapphire',
+  'light-sapphire', 'aquamarine', 'emerald', 'peridot', 'topaz', 'citrine', 'gold', 'silver'
+]);
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -681,6 +688,20 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
 
   const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs }));
 
+  // IMG-016 decision 3: the ink mask labels against the LINE_DESIGN_INK_REFERENCE_COLOR_IDS subset
+  // of the passed palette (in palette order, with its own floor and relabel), not the full palette.
+  const pixelCount = widthPx * heightPx;
+  const inkReferenceIndices = [];
+  palette.forEach((c, i) => { if (LINE_DESIGN_INK_REFERENCE_COLOR_IDS.includes(c.id)) inkReferenceIndices.push(i); });
+  const inkReferencePalette = inkReferenceIndices.map((i) => palette[i]);
+  const { finalLabel: inkReferenceLabel } = buildLabelField({
+    filledMask, inpaintedR, inpaintedG, inpaintedB,
+    palette: inkReferencePalette, catalogLabs: inkReferenceIndices.map((i) => catalogLabs[i])
+  });
+  const jetIndex = resolveJetCatalogIndex(inkReferencePalette);
+  const inkMask = new Uint8Array(pixelCount);
+  for (let i = 0; i < pixelCount; i++) inkMask[i] = (filledMask[i] && inkReferenceLabel[i] === jetIndex) ? 1 : 0;
+
   const insideAtSilhouette = (xMm, yMm) => filledMask[pixelIndexAt(xMm, yMm)] === 1;
 
   // Decision (g) follow-up (colour overrides): the same override rule imageRegionColorId() applies
@@ -692,7 +713,9 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
     const catalogId = filledMask[idx] ? palette[finalLabel[idx]].id : palette[survivingIds[0]].id;
     return colorMap[catalogId] ?? catalogId;
   };
-  const modalColorAt = (xMm, yMm, radiusMm) => {
+  // IMG-016 decision 3: `inkOnly` (line stones only) votes among ink pixels, falling back to the
+  // all-pixel vote when the disk holds no ink pixel.
+  const modalColorAt = (xMm, yMm, radiusMm, inkOnly = false) => {
     const rPx = Math.max(1, Math.round(radiusMm / mmPerPx));
     const cx = xMmToPx(xMm), cy = yMmToPx(yMm);
     const counts = new Map();
@@ -703,11 +726,12 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
         if (px < 0 || py < 0 || px >= widthPx || py >= heightPx) continue;
         const idx = py * widthPx + px;
         if (!filledMask[idx]) continue;
+        if (inkOnly && !inkMask[idx]) continue;
         const label = finalLabel[idx];
         counts.set(label, (counts.get(label) || 0) + 1);
       }
     }
-    if (counts.size === 0) return pointColorAt(xMm, yMm);
+    if (counts.size === 0) return inkOnly ? modalColorAt(xMm, yMm, radiusMm) : pointColorAt(xMm, yMm);
     let best = -1, bestCount = -1;
     for (const label of survivingIds) {
       const count = counts.get(label) || 0;
@@ -752,11 +776,6 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
 
   // ---- Decision (d): line chains -----------------------------------------------------------------
   const linePoints = time('lines', () => {
-    const pixelCount = widthPx * heightPx;
-    const jetIndex = resolveJetCatalogIndex(palette);
-    const inkMask = new Uint8Array(pixelCount);
-    for (let i = 0; i < pixelCount; i++) inkMask[i] = (filledMask[i] && finalLabel[i] === jetIndex) ? 1 : 0;
-
     const closingDiskRadiusMm = LINE_DESIGN_CLOSING_DISK_RADIUS_RATIO_OF_DIAMETER * chainSizeMm;
     const dilatedInk = dilateMask(inkMask, widthPx, heightPx, mmPerPx, closingDiskRadiusMm);
     const closedInk = erodeMask(dilatedInk, widthPx, heightPx, mmPerPx, closingDiskRadiusMm);
@@ -816,7 +835,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   // ---- Decision (g): modal colour for outline/line/fill stones ----------------------------------
   const colored = time('colour', () => [...outlinePoints, ...linePoints, ...fillPoints].map((p) => ({
     xMm: p.xMm, yMm: p.yMm, sizeMm: p.sizeMm, kind: p.kind, pathId: p.pathId ?? null,
-    color: modalColorAt(p.xMm, p.yMm, (p.sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO)
+    color: modalColorAt(p.xMm, p.yMm, (p.sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO, p.kind === 'line')
   })));
 
   // ---- Decision (f): pocket pass (GapFill.js, unmodified) -- modal colour rule, like every other

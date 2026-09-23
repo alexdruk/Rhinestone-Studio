@@ -63,7 +63,7 @@
 // src/preview3d/Preview3DRenderer.js) now owns pointer interaction on that canvas natively, and
 // does strictly more (rotate, zoom, and pan, with damping). See
 // docs/specifications/RS-1006-Real3DPreview.md. RS-1007 replaced the 7-color hard-coded palette
-// with a permanent 17-color crystal catalog (src/renderer/CrystalColors.js, re-exported unchanged
+// with a permanent 23-color crystal catalog (src/renderer/CrystalColors.js, re-exported unchanged
 // as STONE_COLORS from src/renderer/StoneColors.js -- this import line is unchanged). #stoneColor
 // is now populated at startup from STONE_COLORS (grouped into <optgroup>s by each color's `group`
 // field) instead of index.html's previous hardcoded 7 <option>s, and a live swatch next to it
@@ -234,7 +234,7 @@ const imageBufferCache=new Map();
 // like "2.0"), so the browser rendered no selection even though the underlying mm value was
 // valid. Never mutates the numeric value itself, only the displayed selection.
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
-// RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
+// RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (23 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
 // string keys STONE_COLORS is built from). Called once at startup for #stoneColor, and again
 // (RS-3014 Step 1) for each of Stamp/Trace/Paint's own #stampColor/#traceColor/#paintColor selects

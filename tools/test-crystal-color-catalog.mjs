@@ -39,7 +39,39 @@ async function test(name, fn) {
 const REQUIRED_NAMES = [
   'Crystal', 'Crystal AB', 'Jet', 'Siam', 'Light Siam', 'Rose', 'Fuchsia', 'Amethyst',
   'Sapphire', 'Light Sapphire', 'Aquamarine', 'Emerald', 'Peridot', 'Topaz', 'Citrine',
-  'Gold', 'Silver'
+  'Gold', 'Silver',
+  'Hematite', 'Black Diamond', 'Grey', 'Smoked Topaz', 'Light Colorado Topaz', 'Light Peach'
+];
+
+// IMG-016 decision 2: all 17 pre-IMG-016 entries, in catalogue order, pinned byte-for-byte.
+const PRE_IMG016_ENTRIES = [
+  ['crystal-clear', 'Clear & Neutral', '#f5f5f5', '#8a8a8a', '#ffffff', '#cfcfcf'],
+  ['crystal', 'Clear & Neutral', '#e9f7ff', '#5e7080', '#ffffff', '#92d5ff'],
+  ['jet', 'Clear & Neutral', '#141414', '#d9d9d9', '#555', '#000'],
+  ['siam', 'Red & Pink', '#9b1c1c', '#4a0d0d', '#ffd9d9', '#6e1313'],
+  ['light-siam', 'Red & Pink', '#d9534f', '#8a2f2c', '#ffe0dd', '#b5423e'],
+  ['rose', 'Red & Pink', '#ef8fb0', '#8a2c4d', '#ffe2ed', '#d75384'],
+  ['fuchsia', 'Red & Pink', '#c2185b', '#6e0d33', '#ffd6ea', '#9c1249'],
+  ['amethyst', 'Purple & Blue', '#7e3f98', '#4a2260', '#eaddf7', '#5c2d72'],
+  ['sapphire', 'Purple & Blue', '#2269d3', '#0f356f', '#b8d8ff', '#174ca2'],
+  ['light-sapphire', 'Purple & Blue', '#6fa8dc', '#2e5c8a', '#dbeeff', '#4a80b5'],
+  ['aquamarine', 'Green & Aqua', '#3fc1b0', '#1f6e64', '#d4fff9', '#2a9d8f'],
+  ['emerald', 'Green & Aqua', '#2aa66a', '#0b5633', '#c7ffdf', '#16814e'],
+  ['peridot', 'Green & Aqua', '#b5cc18', '#6c7d0e', '#f2ffcf', '#8a9c14'],
+  ['topaz', 'Yellow & Amber', '#e08e26', '#8a5210', '#ffe3b0', '#b56d1c'],
+  ['citrine', 'Yellow & Amber', '#f2c94c', '#9c7a10', '#fff6d1', '#d1a828'],
+  ['gold', 'Metallic', '#f3bd32', '#926400', '#fff1a6', '#d18a00'],
+  ['silver', 'Metallic', '#d8dde4', '#737b86', '#ffffff', '#a7b0bf']
+];
+
+// IMG-016 decision 1: the six appended entries, in order, with their pinned values.
+const IMG016_ENTRIES = [
+  ['hematite', 'Hematite', 'Metallic', '#3e3f44', '#232326', '#dededf', '#303134'],
+  ['black-diamond', 'Black Diamond', 'Clear & Neutral', '#6b6b72', '#3c3c40', '#e6e6e7', '#525258'],
+  ['grey', 'Grey', 'Clear & Neutral', '#9a9ca2', '#56575b', '#eeeeef', '#77787d'],
+  ['smoked-topaz', 'Smoked Topaz', 'Brown & Peach', '#6e4a2e', '#3e291a', '#e6e0db', '#553923'],
+  ['light-colorado', 'Light Colorado Topaz', 'Brown & Peach', '#b98a5c', '#684d34', '#f3ebe3', '#8e6a47'],
+  ['light-peach', 'Light Peach', 'Brown & Peach', '#eec6a4', '#856f5c', '#fcf5f0', '#b7987e']
 ];
 
 // The exact pre-RS-1007 palette (src/renderer/StoneColors.js, 7 entries) — every one of these ids
@@ -55,8 +87,8 @@ const LEGACY_COLORS = {
   emerald: { fill: '#2aa66a', stroke: '#0b5633', shine: '#c7ffdf', accent: '#16814e' }
 };
 
-await test('1. every required display name is present in the catalog (at least 17 colors)', () => {
-  assert.ok(CRYSTAL_COLORS.length >= 17, `expected at least 17 catalog colors, found ${CRYSTAL_COLORS.length}`);
+await test('1. every required display name is present in the catalog (23 colors since IMG-016)', () => {
+  assert.equal(CRYSTAL_COLORS.length, 23, `expected 23 catalog colors, found ${CRYSTAL_COLORS.length}`);
   const names = CRYSTAL_COLORS.map((c) => c.name);
   for (const required of REQUIRED_NAMES) {
     assert.ok(names.includes(required), `expected catalog to include a color named "${required}"`);
@@ -115,6 +147,17 @@ await test('5. the 7 pre-existing ids keep byte-identical fill/stroke/shine/acce
   }
   // 'jet' is the one documented label-only change (Jet Black -> Jet); id/values are unchanged above.
   assert.equal(getCrystalColor('jet').name, 'Jet');
+});
+
+await test('5a. IMG-016: the 17 pre-IMG-016 entries keep their catalogue position, group and four render channels byte-for-byte', () => {
+  const actual = CRYSTAL_COLORS.slice(0, 17).map((c) => [c.id, c.group, c.fill, c.stroke, c.shine, c.accent]);
+  assert.deepEqual(actual, PRE_IMG016_ENTRIES);
+});
+
+await test('5b. IMG-016: the six new entries are appended last, in order, with their pinned name, group and values', () => {
+  const actual = CRYSTAL_COLORS.slice(17).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]);
+  assert.deepEqual(actual, IMG016_ENTRIES);
+  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0])]);
 });
 
 await test('6. STONE_COLORS (id-keyed map) matches the catalog array exactly, and the StoneColors.js shim re-exports the identical map', () => {

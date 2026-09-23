@@ -290,7 +290,7 @@ ever triggers. `StoneLayout`/`GeometryEngine` are untouched; no exporter is touc
 existing `canvas.toBlob()` capture keeps working unmodified because the new `WebGLRenderer` is
 created with `preserveDrawingBuffer: true`. See `docs/specifications/RS-1006-Real3DPreview.md`.
 
-As of RS-1007, the 7-entry hard-coded stone-color palette is replaced by a permanent 17-color
+As of RS-1007, the 7-entry hard-coded stone-color palette is replaced by a permanent 23-color
 crystal-color catalog: `src/renderer/CrystalColors.js` (id/name/`previewColor`/optional
 `highlight`/`shadow`/`group`, plus the pre-existing `fill`/`stroke`/`shine`/`accent` render-channel
 fields, aliased 1:1 so both naming schemes always agree). `src/renderer/StoneColors.js` becomes a
@@ -307,6 +307,8 @@ Black" to "Jet" (same id/color) to match the new catalog's required name list. `
 each color's `group` field, with a live swatch (`#stoneColorSwatch`) showing the selected
 `previewColor`. `Stone.color` remains a free string; no catalog-id validation was added to
 `src/geometry/**`. See `docs/specifications/RS-1007-CrystalColorLibrary.md`.
+IMG-016 appended six neutral and brown entries after the original 17, leaving every existing id,
+value and palette index unchanged; see `docs/specifications/IMG-016-NeutralBrownStones.md`.
 
 ---
 
