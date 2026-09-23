@@ -85,7 +85,11 @@ rationale `toGrayscale()` already uses) and resizes each to the working resoluti
 CIE76-nearest catalog colour, drops colours under a 1.2% share (`MIN_CATALOG_COLOR_SHARE`), keeps at
 most `colorCount` of the rest by share, and relabels every dropped pixel to its nearest kept colour
 (`labelCatalogColors()`, the same rule Line Design uses) -- deterministic, see
-`docs/specifications/IMG-015-DirectCatalogueColour.md`.
+`docs/specifications/IMG-015-DirectCatalogueColour.md`. A third param, `vividness` (default 1), reaches
+`labelCatalogColors()` as `chromaScale`: each pixel's Lab a\* and b\* are multiplied by it before
+matching (L\* untouched), and 1 skips the multiply entirely. The floor, the cap and the relabelling all
+act on the scaled labels; `colorGroups` `rgb` means stay the real pixel means. See
+`docs/specifications/IMG-017-Vividness.md`.
 
 ## Transparency policy (IMG-001)
 

@@ -1,6 +1,6 @@
 # IMG-017 — Vividness
 
-**Status: specified, not built.** File:line citations are against `develop` @ `99d1d7c` (the IMG-016
+**Status: built.** File:line citations are against `develop` @ `99d1d7c` (the IMG-016
 merge). Every anchor below was re-grepped on that tip. The figures were measured by the lead
 architect on `99d1d7c`. This spec's own scratch probes re-derived every fixture figure (T1 to T5,
 including T5's mutant) and every photo figure, on a scratch copy of the tree with decisions 1 to 4

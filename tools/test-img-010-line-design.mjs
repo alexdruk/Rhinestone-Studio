@@ -547,13 +547,13 @@ function buildGenerateImageStonesLive(source, deps) {
     'imageBufferCache', 'decodeDataUrlToBuffer', 'resolveImageFillMode', 'resolveImageTransparentMode',
     'resolveImageMaskMode', 'resolveImageColorCount', 'imageColorPalette', 'resolveImageSeed',
     'resolveImageSpread', 'resolveImageEdgeWidth', 'resolveImageEdgeThinning', 'resolveImageBrightnessThinning',
-    'mixedSizeParamsFor', 'lineDesignStoneCache', 'lineDesignFrozen', 'lineDesignColorMapKey',
+    'mixedSizeParamsFor', 'lineDesignStoneCache', 'lineDesignFrozen', 'lineDesignColorMapKey', 'resolveImageVividness',
     `return ${rewritten};`
   )(
     deps.imageBufferCache, deps.decodeDataUrlToBuffer, deps.resolveImageFillMode, deps.resolveImageTransparentMode,
     deps.resolveImageMaskMode, deps.resolveImageColorCount, deps.imageColorPalette, deps.resolveImageSeed,
     deps.resolveImageSpread, deps.resolveImageEdgeWidth, deps.resolveImageEdgeThinning, deps.resolveImageBrightnessThinning,
-    deps.mixedSizeParamsFor, deps.lineDesignStoneCache, deps.lineDesignFrozen, deps.lineDesignColorMapKey
+    deps.mixedSizeParamsFor, deps.lineDesignStoneCache, deps.lineDesignFrozen, deps.lineDesignColorMapKey, deps.resolveImageVividness
   );
   return fn;
 }
@@ -584,7 +584,8 @@ async function callRealGenerateImageStonesLive(layer, imageBufferCacheEntries, l
     mixedSizeParamsFor: () => ({}),
     lineDesignStoneCache,
     lineDesignFrozen,
-    lineDesignColorMapKey: lineDesignColorMapKeyForTest
+    lineDesignColorMapKey: lineDesignColorMapKeyForTest,
+    resolveImageVividness: (v) => ([1, 1.2, 1.4, 1.6].includes(v) ? v : 1)
   });
   return { fn: generateImageStonesLive, source };
 }

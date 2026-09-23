@@ -715,6 +715,12 @@ function resolveImageTransparentMode(value){return IMAGE_TRANSPARENT_MODES.has(v
 // permissive-default convention -- see docs/specifications/IMG-009-SubjectMask.md decision 3. This is
 // the one function every one of the five sites in decision 6's table resolves maskMode through.
 function resolveImageMaskMode(value){return value==='subject'?'subject':'threshold'}
+// IMG-017: layer.vividness, the chroma factor applied before catalogue matching. Exactly one of the
+// four Studio steps, anything else (missing, a string, an off-step number) -> 1, which is the
+// shipped arithmetic -- see docs/specifications/IMG-017-Vividness.md decision 3. Plain literals: this
+// span is new Function()-evaluated by several test harnesses (see imageColorPalette() below).
+const IMAGE_VIVIDNESS_STEPS=[1,1.2,1.4,1.6];
+function resolveImageVividness(value){return IMAGE_VIVIDNESS_STEPS.includes(value)?value:1}
 // IMG-002: {id, hex} palette entries GeometryEngine.generateImageLayout()'s quantizer clusters
 // against -- built once from STONE_COLORS (the same re-exported CRYSTAL_COLORS catalog data
 // populateStoneColorOptions() already crosses the src/renderer -> app.js boundary with), in the
@@ -758,7 +764,7 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 function autoColorCountKeyParts(layer){
   const maskMode=resolveImageMaskMode(layer.maskMode);
   const transparent=resolveImageTransparentMode(layer.transparent);
-  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent];
+  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,resolveImageVividness(layer.vividness)];
   if(maskMode==='threshold')parts.push(layer.threshold);
   return parts.join('|');
 }
@@ -779,7 +785,7 @@ function resolveImageColorCount(layer){
   const cached=autoColorCountCache.get(key);
   if(cached!=null){autoColorCountLastResolved.set(layer.id,cached);return cached}
   const field=prepareAutoColorField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
-  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette());
+  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette(),{chromaScale:resolveImageVividness(layer.vividness)});
   autoColorCountCache.set(key,resolvedCount);
   if(autoColorCountCache.size>2)autoColorCountCache.delete(autoColorCountCache.keys().next().value);
   autoColorCountLastResolved.set(layer.id,resolvedCount);
@@ -819,10 +825,11 @@ function computeImageColorField(layer){
   // against the threshold mask regardless of the layer's actual maskMode (a pre-existing gap this
   // function's own prior version had -- see docs/specifications/IMG-012-AutoColourCount.md section A).
   const maskMode=resolveImageMaskMode(layer.maskMode);
-  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode].join('|');
+  const vividness=resolveImageVividness(layer.vividness);
+  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode,vividness].join('|');
   const cached=imageColorFieldCache.get(key);
   if(cached)return cached;
-  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,palette:imageColorPalette()});
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,vividness,palette:imageColorPalette()});
   imageColorFieldCache.set(key,field);
   if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
   return field;
@@ -1133,7 +1140,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
   // freeze fallback below.
   if(mode==='line-design'){
-    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap)].join('|');
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness)].join('|');
     let cached=lineDesignStoneCache.get(key);
     if(!cached&&lineDesignFrozen){
       for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
@@ -1143,7 +1150,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
       // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
       // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
       // default for either field.
-      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness)};
       const result=this.permanentEngine.generateImageLayout(params);
       cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
       lineDesignStoneCache.set(key,cached);
@@ -1151,7 +1158,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     }
     return includeStats?cached:cached.stones;
   }
-  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2626,7 +2633,7 @@ function syncSelectedControlsFromLayer(){
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2793,6 +2800,9 @@ function writeSelectedControlsToLayer(){
   // to NaN and falls back to 1, which would silently store colorCount:1 (single colour) for a
   // dropdown pick of "Auto (best fit)", the opposite of what was asked.
   l.colorCount=el('imgColorCount').value==='auto'?'auto':Math.max(1,Math.min(8,parseIntOr(el('imgColorCount').value,1)));
+  // IMG-017: Number() first -- a select value is a string, and resolveImageVividness() accepts only
+  // the four numeric steps, so the raw string would read back as 1 and the control would do nothing.
+  l.vividness=resolveImageVividness(Number(el('imgVividness').value));
   const colorField=computeImageColorField(l);
   if(colorField){
     const colorMap={...l.colorMap};
@@ -3399,7 +3409,7 @@ function resolveImageExportRegions(project){
     if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
-    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
     const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
     for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
   }
@@ -5045,7 +5055,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 // IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
 // #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
@@ -5510,7 +5520,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;

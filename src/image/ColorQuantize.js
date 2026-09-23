@@ -61,11 +61,14 @@ export const MIN_CATALOG_COLOR_SHARE = 0.012;
  *   them; computed from `palette` otherwise.
  * @param {number} [args.minShare] Default MIN_CATALOG_COLOR_SHARE.
  * @param {number} [args.maxColors] Default Infinity (no cap).
+ * @param {number} [args.chromaScale] IMG-017: multiplies each pixel's Lab a* and b* before matching
+ *   (L* untouched, hue preserved). Default 1, where the multiply is skipped entirely so the arithmetic
+ *   is exactly the pre-IMG-017 one.
  * @returns {{labels: Uint8Array, keptIds: number[], rawCounts: number[], finalCounts: number[], eligibleCount: number}}
  *   `labels` holds palette indices, 255 where ineligible; `keptIds` holds palette indices in palette
  *   order.
  */
-export function labelCatalogColors({ r, g, b, eligible, palette, catalogLabs = palette.map((entry) => rgbToLab(...hexToRgb(entry.hex))), minShare = MIN_CATALOG_COLOR_SHARE, maxColors = Infinity }) {
+export function labelCatalogColors({ r, g, b, eligible, palette, catalogLabs = palette.map((entry) => rgbToLab(...hexToRgb(entry.hex))), minShare = MIN_CATALOG_COLOR_SHARE, maxColors = Infinity, chromaScale = 1 }) {
   const pixelCount = eligible.length;
   const rawLabel = new Uint8Array(pixelCount).fill(255);
   const labL = new Float64Array(pixelCount);
@@ -78,6 +81,7 @@ export function labelCatalogColors({ r, g, b, eligible, palette, catalogLabs = p
     if (!eligible[i]) continue;
     eligibleCount++;
     const lab = rgbToLab(r[i], g[i], b[i]);
+    if (chromaScale !== 1) { lab[1] *= chromaScale; lab[2] *= chromaScale; }
     labL[i] = lab[0]; labA[i] = lab[1]; labB[i] = lab[2];
     let best = 0, bestD = Infinity;
     for (let c = 0; c < catalogLabs.length; c++) {
@@ -139,15 +143,17 @@ export function labelCatalogColors({ r, g, b, eligible, palette, catalogLabs = p
  * @param {number} args.colorCount Integer >= 1. The upper bound on groups; fewer than `colorCount`
  *   groups result when fewer catalog colours clear the share floor.
  * @param {{id: string, hex: string}[]} args.palette Catalog entries each pixel is labelled against.
+ * @param {number} [args.chromaScale] IMG-017 vividness, forwarded to labelCatalogColors(). Default 1.
+ *   Group `rgb` means stay the real (unscaled) pixel means.
  * @returns {{labels: Uint8ClampedArray, colorGroups: {rgb: number[], pixelShare: number, nearestId: string}[]}}
  */
-export function quantizeColors({ r, g, b, data, colorCount, palette }) {
+export function quantizeColors({ r, g, b, data, colorCount, palette, chromaScale = 1 }) {
   const labels = new Uint8ClampedArray(data.length).fill(NO_LABEL);
   const eligible = new Uint8Array(data.length);
   for (let i = 0; i < data.length; i++) eligible[i] = data[i] >= FIELD_ON_THRESHOLD ? 1 : 0;
 
   const { labels: catalogLabels, keptIds, finalCounts, eligibleCount } = labelCatalogColors({
-    r, g, b, eligible, palette, maxColors: colorCount
+    r, g, b, eligible, palette, maxColors: colorCount, chromaScale
   });
   if (eligibleCount === 0) {
     return { labels, colorGroups: [] };
