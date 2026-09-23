@@ -43,7 +43,8 @@ function defineColor({ id, name, group, fill, stroke, shine, accent }) {
   };
 }
 
-// Order is deliberate: it is the order the color selector UI groups/lists colors in.
+// Order is deliberate: it is the order the color selector UI groups/lists colors in. Groups are
+// ordered by first appearance, so an appended entry joins the end of its group (IMG-016).
 const CRYSTAL_COLOR_LIST = [
   // -- Clear & Neutral -----------------------------------------------------------------------
   defineColor({
@@ -126,6 +127,33 @@ const CRYSTAL_COLOR_LIST = [
     // Pre-existing id/values (RS-0003.5C2) — kept byte-identical.
     id: 'silver', name: 'Silver', group: 'Metallic',
     fill: '#d8dde4', stroke: '#737b86', shine: '#ffffff', accent: '#a7b0bf'
+  }),
+  // -- IMG-016: appended after every pre-existing entry, so no existing palette index moves ------
+  // stroke/shine/accent follow one rule per sRGB channel v of fill: round(0.56*v), round(v +
+  // 0.83*(255-v)), round(0.77*v). See docs/specifications/IMG-016-NeutralBrownStones.md decision 1.
+  defineColor({
+    id: 'hematite', name: 'Hematite', group: 'Metallic',
+    fill: '#3e3f44', stroke: '#232326', shine: '#dededf', accent: '#303134'
+  }),
+  defineColor({
+    id: 'black-diamond', name: 'Black Diamond', group: 'Clear & Neutral',
+    fill: '#6b6b72', stroke: '#3c3c40', shine: '#e6e6e7', accent: '#525258'
+  }),
+  defineColor({
+    id: 'grey', name: 'Grey', group: 'Clear & Neutral',
+    fill: '#9a9ca2', stroke: '#56575b', shine: '#eeeeef', accent: '#77787d'
+  }),
+  defineColor({
+    id: 'smoked-topaz', name: 'Smoked Topaz', group: 'Brown & Peach',
+    fill: '#6e4a2e', stroke: '#3e291a', shine: '#e6e0db', accent: '#553923'
+  }),
+  defineColor({
+    id: 'light-colorado', name: 'Light Colorado Topaz', group: 'Brown & Peach',
+    fill: '#b98a5c', stroke: '#684d34', shine: '#f3ebe3', accent: '#8e6a47'
+  }),
+  defineColor({
+    id: 'light-peach', name: 'Light Peach', group: 'Brown & Peach',
+    fill: '#eec6a4', stroke: '#856f5c', shine: '#fcf5f0', accent: '#b7987e'
   })
 ];
 
