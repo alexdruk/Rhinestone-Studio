@@ -367,13 +367,13 @@ function buildGenerateImageStonesLive(source, deps) {
     'imageBufferCache', 'decodeDataUrlToBuffer', 'resolveImageFillMode', 'resolveImageTransparentMode',
     'resolveImageMaskMode', 'resolveImageColorCount', 'imageColorPalette', 'resolveImageSeed',
     'resolveImageSpread', 'resolveImageEdgeWidth', 'resolveImageEdgeThinning', 'resolveImageBrightnessThinning',
-    'mixedSizeParamsFor',
+    'mixedSizeParamsFor', 'resolveImageVividness',
     `return ${rewritten};`
   )(
     deps.imageBufferCache, deps.decodeDataUrlToBuffer, deps.resolveImageFillMode, deps.resolveImageTransparentMode,
     deps.resolveImageMaskMode, deps.resolveImageColorCount, deps.imageColorPalette, deps.resolveImageSeed,
     deps.resolveImageSpread, deps.resolveImageEdgeWidth, deps.resolveImageEdgeThinning, deps.resolveImageBrightnessThinning,
-    deps.mixedSizeParamsFor
+    deps.mixedSizeParamsFor, deps.resolveImageVividness
   );
   return fn;
 }
@@ -397,7 +397,8 @@ await test('12. Engine-level forwarding: the real (extracted, not hand-copied) g
     resolveImageEdgeWidth: (v) => v ?? 6,
     resolveImageEdgeThinning: (v) => v ?? 1,
     resolveImageBrightnessThinning: (v) => v ?? 0,
-    mixedSizeParamsFor: () => ({})
+    mixedSizeParamsFor: () => ({}),
+    resolveImageVividness: (v) => ([1, 1.2, 1.4, 1.6].includes(v) ? v : 1)
   });
 
   const baseLayer = {

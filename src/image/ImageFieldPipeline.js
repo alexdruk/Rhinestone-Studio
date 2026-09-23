@@ -98,7 +98,12 @@ function normalizeParams(params) {
   // docs/specifications/IMG-009-SubjectMask.md decision 3.
   const maskMode = params.maskMode === 'subject' ? 'subject' : 'threshold';
 
-  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette, maskMode };
+  // IMG-017: read-site permissive default, like maskMode above -- any finite number in [1, 2], 1
+  // otherwise, so every saved project (no stored vividness) stays byte-identical. See
+  // docs/specifications/IMG-017-Vividness.md decision 3.
+  const vividness = typeof params.vividness === 'number' && Number.isFinite(params.vividness) && params.vividness >= 1 && params.vividness <= 2 ? params.vividness : 1;
+
+  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette, maskMode, vividness };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -207,7 +212,7 @@ export function prepareImageField(imageBuffer, params = {}) {
     const g = resizeField(gNative, options.maxWidthPx, options.maxHeightPx);
     const b = resizeField(bNative, options.maxWidthPx, options.maxHeightPx);
     const { labels, colorGroups } = quantizeColors({
-      r: r.data, g: g.data, b: b.data, data: field.data, colorCount: options.colorCount, palette: options.palette
+      r: r.data, g: g.data, b: b.data, data: field.data, colorCount: options.colorCount, palette: options.palette, chromaScale: options.vividness
     });
     field.labels = labels;
     field.colorGroups = colorGroups;

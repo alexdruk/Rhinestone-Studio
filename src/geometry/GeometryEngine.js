@@ -1215,7 +1215,8 @@ export class GeometryEngine {
       transparent: options.transparent,
       colorCount: options.colorCount,
       palette: options.palette,
-      maskMode: options.maskMode
+      maskMode: options.maskMode,
+      vividness: options.vividness
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
@@ -1281,7 +1282,7 @@ export class GeometryEngine {
       // isBrightness branch below already uses; `kind` is carried in metadata only (introspection/
       // testing), never read by any renderer or exporter.
       const linePoints = generateLineDesignStonePoints({
-        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap, palette: options.palette
+        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap, palette: options.palette, chromaScale: options.vividness
       });
       stones = linePoints.map((point, index) => new Stone({
         xMm: point.xMm,
@@ -1415,7 +1416,8 @@ export class GeometryEngine {
       transparent: options.transparent,
       colorCount: options.colorCount,
       palette: options.palette,
-      maskMode: options.maskMode
+      maskMode: options.maskMode,
+      vividness: options.vividness
     });
 
     const targetSpacingMm = options.stoneSizeMm + options.gapMm;
@@ -2542,6 +2544,11 @@ function normalizeImageParams(params) {
     palette: params.palette ?? null,
     colorMap: params.colorMap ?? {},
     maskMode,
+    // IMG-017: read-site permissive default, mirroring src/image/ImageFieldPipeline.js's own
+    // normalizeParams() -- any finite number in [1, 2], 1 otherwise, never a throw. No
+    // validateProject() change, no project version bump. See
+    // docs/specifications/IMG-017-Vividness.md decision 3.
+    vividness: typeof params.vividness === 'number' && Number.isFinite(params.vividness) && params.vividness >= 1 && params.vividness <= 2 ? params.vividness : 1,
     // IMG-003: read-site permissive defaults, the same precedent colorCount/palette/colorMap
     // (IMG-002) and transparent (IMG-001) already established -- no validateProject() change, no
     // project version bump. Invalid values (non-integer seed, spread < 1) fall back to 1 rather than

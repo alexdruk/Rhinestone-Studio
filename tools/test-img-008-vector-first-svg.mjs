@@ -357,7 +357,7 @@ await test('9. App-path source-text guard: resolveImageExportRegions() and the e
   for (const needle of [
     'threshold:', 'invert:', 'blurRadiusPx:', 'maxWidthPx:', 'maxHeightPx:',
     'transparent:resolveImageTransparentMode(', 'maskMode:', 'colorCount:', 'palette:imageColorPalette()',
-    'colorMap:', 'edgeWidthMm:resolveImageEdgeWidth(', 'stoneSizeMm:', 'gapMm:',
+    'colorMap:', 'edgeWidthMm:resolveImageEdgeWidth(', 'stoneSizeMm:', 'gapMm:', 'vividness:',
     'permanentEngine.resolveImagePolygons(', 'imageBufferCache.get('
   ]) {
     assert.ok(body.includes(needle), `resolveImageExportRegions() is missing "${needle}"`);

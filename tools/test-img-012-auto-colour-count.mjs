@@ -153,11 +153,12 @@ function buildResolveImageColorCount(source, overrides = {}) {
   const prepareAutoColorFieldFn = overrides.prepareAutoColorField || prepareAutoColorField;
   const chooseAutoColorCountFn = overrides.chooseAutoColorCount || chooseAutoColorCount;
   const imageColorPaletteFn = overrides.imageColorPalette || (() => PALETTE);
+  const resolveImageVividness = overrides.resolveImageVividness || ((v) => ([1, 1.2, 1.4, 1.6].includes(v) ? v : 1));
   // eslint-disable-next-line no-new-func
   const built = new Function(
-    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'prepareAutoColorField', 'chooseAutoColorCount', 'imageColorPalette',
+    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'prepareAutoColorField', 'chooseAutoColorCount', 'imageColorPalette', 'resolveImageVividness',
     `${source}\nreturn { resolveImageColorCount, autoColorCountCache, autoColorCountLastResolved, setFrozen: (v) => { autoColorCountFrozen = v; } };`
-  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, prepareAutoColorFieldFn, chooseAutoColorCountFn, imageColorPaletteFn);
+  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, prepareAutoColorFieldFn, chooseAutoColorCountFn, imageColorPaletteFn, resolveImageVividness);
   return { ...built, imageBufferCache };
 }
 
@@ -341,18 +342,19 @@ await test("9. D2: computeImageColorField() for a subject-mode layer returns col
   const resolveImageTransparentMode = (value) => new Set(['white', 'ignore']).has(value) ? value : 'white';
   const resolveImageMaskMode = (value) => value === 'subject' ? 'subject' : 'threshold';
   const imageColorPalette = () => PALETTE;
+  const resolveImageVividness = (v) => ([1, 1.2, 1.4, 1.6].includes(v) ? v : 1);
 
   // eslint-disable-next-line no-new-func
   const { resolveImageColorCount } = new Function(
-    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'prepareAutoColorField', 'chooseAutoColorCount', 'imageColorPalette',
+    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'prepareAutoColorField', 'chooseAutoColorCount', 'imageColorPalette', 'resolveImageVividness',
     `${resolverSource}\nreturn { resolveImageColorCount };`
-  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, prepareAutoColorField, chooseAutoColorCount, imageColorPalette);
+  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, prepareAutoColorField, chooseAutoColorCount, imageColorPalette, resolveImageVividness);
 
   // eslint-disable-next-line no-new-func
   const computeImageColorField = new Function(
-    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'resolveImageColorCount', 'prepareImageField', 'imageColorPalette',
+    'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'resolveImageColorCount', 'prepareImageField', 'imageColorPalette', 'resolveImageVividness',
     `${colorFieldSource}\nreturn computeImageColorField;`
-  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, resolveImageColorCount, prepareImageField, imageColorPalette);
+  )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, resolveImageColorCount, prepareImageField, imageColorPalette, resolveImageVividness);
 
   const layer = { type: 'image', id: 'L1', imageSrc: 'img1', colorCount: 4, maskMode: 'subject', threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 400, maxHeightPx: 400, transparent: 'white' };
   const studioField = computeImageColorField(layer);

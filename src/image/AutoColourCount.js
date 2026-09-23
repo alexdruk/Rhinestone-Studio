@@ -56,16 +56,18 @@ export function prepareAutoColorField(imageBuffer, params = {}) {
  * @param {{r: Uint8ClampedArray, g: Uint8ClampedArray, b: Uint8ClampedArray, data: Uint8ClampedArray}} field
  *   Same shape quantizeColors() itself takes (r/g/b/data), e.g. from prepareAutoColorField().
  * @param {{id: string, hex: string}[]} palette Catalog entries, same shape quantizeColors() takes.
+ * @param {{chromaScale?: number}} [options] IMG-017: the layer's resolved vividness, so Auto counts
+ *   the same scaled labels the pipeline will. Default 1.
  * @returns {{resolvedCount: number}}
  */
-export function chooseAutoColorCount(field, palette) {
+export function chooseAutoColorCount(field, palette, { chromaScale = 1 } = {}) {
   const { r, g, b, data } = field;
 
   // Mirrors quantizeColors()'s own eligibility rule (FIELD_ON_THRESHOLD on `data`) exactly, so "no
   // subject pixels" is detected the same way quantizeColors() itself would report colorGroups:[].
   const eligible = new Uint8Array(data.length);
   for (let i = 0; i < data.length; i++) eligible[i] = data[i] >= FIELD_ON_THRESHOLD ? 1 : 0;
-  const { keptIds, eligibleCount } = labelCatalogColors({ r, g, b, eligible, palette, maxColors: AUTO_MAX_K });
+  const { keptIds, eligibleCount } = labelCatalogColors({ r, g, b, eligible, palette, maxColors: AUTO_MAX_K, chromaScale });
   if (eligibleCount === 0) {
     return { resolvedCount: 1 };
   }

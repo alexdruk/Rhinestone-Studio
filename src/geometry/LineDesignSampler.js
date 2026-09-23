@@ -175,9 +175,9 @@ function computeFilledMaskAndInpaint(imageBuffer) {
 
 // ---- Stage (b): direct per-pixel CIE76 catalog labelling, 1.2% share floor + relabel ------------
 
-function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs }) {
+function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs, chromaScale = 1 }) {
   const { labels, keptIds } = labelCatalogColors({
-    r: inpaintedR, g: inpaintedG, b: inpaintedB, eligible: filledMask, palette, catalogLabs, minShare: LINE_DESIGN_MIN_COLOR_SHARE
+    r: inpaintedR, g: inpaintedG, b: inpaintedB, eligible: filledMask, palette, catalogLabs, minShare: LINE_DESIGN_MIN_COLOR_SHARE, chromaScale
   });
   return { finalLabel: labels, survivingIds: keptIds };
 }
@@ -650,9 +650,11 @@ function densifyRingForWalk(loop, stepMm) {
  *   unlike other modes' `palette` (only required when colorCount > 1), this one is always required.
  *   Must include a 'jet' entry (decision d's ink structure).
  * @param {(stage:string, elapsedMs:number)=>void} [args.onStageTiming] Optional per-stage timing hook (D4).
+ * @param {number} [args.chromaScale] IMG-017 vividness, default 1. Reaches only the colour labelling
+ *   pass, never the ink reference pass, so Line Design geometry is identical at every factor.
  * @returns {{xMm:number,yMm:number,sizeMm:number,color:string,kind:('outline'|'line'|'fill'|'pocket')}[]}
  */
-export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, palette, onStageTiming }) {
+export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, palette, onStageTiming, chromaScale = 1 }) {
   if (!Array.isArray(palette) || palette.length === 0) {
     throw new TypeError('generateLineDesignStonePoints requires a non-empty palette.');
   }
@@ -686,10 +688,11 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   const { filledMask, inpaintedR, inpaintedG, inpaintedB, holeCount } = time('mask', () => computeFilledMaskAndInpaint(imageBuffer));
   time('inpaint', () => holeCount); // inpainting already ran inside computeFilledMaskAndInpaint(); measured jointly with mask above -- see report.
 
-  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs }));
+  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs, chromaScale }));
 
   // IMG-016 decision 3: the ink mask labels against the LINE_DESIGN_INK_REFERENCE_COLOR_IDS subset
   // of the passed palette (in palette order, with its own floor and relabel), not the full palette.
+  // IMG-017 decision 4: this call never receives chromaScale -- forwarding it changes geometry.
   const pixelCount = widthPx * heightPx;
   const inkReferenceIndices = [];
   palette.forEach((c, i) => { if (LINE_DESIGN_INK_REFERENCE_COLOR_IDS.includes(c.id)) inkReferenceIndices.push(i); });
