@@ -23,7 +23,6 @@
 
 import { computeSubjectMask } from '../image/SubjectMask.js';
 import { rgbToLab, cie76Distance } from '../image/ColorSpace.js';
-import { CRYSTAL_COLORS } from '../renderer/CrystalColors.js';
 import { rawGridDistanceTransform, computeSingleDistanceRing, computeInwardRingPolygons } from './ContourRingSampler.js';
 import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
 import { selectNonOverlappingSizedStones } from './MixedSizeGenerator.js';
@@ -53,8 +52,8 @@ export const LINE_DESIGN_MIN_COLOR_SHARE = 0.012;
 // Decision (g): modal colour vote over every silhouette pixel within this fraction of a stone's own
 // radius of its centre.
 export const LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO = 0.8;
-// Ink structure (decision d) is exactly the per-pixel-labelled 'jet' region -- see this module's own
-// doc comment on jetCatalogIndex() below.
+// Ink structure (decision d) is exactly the per-pixel-labelled 'jet' region -- see
+// resolveJetCatalogIndex() below.
 const JET_COLOR_ID = 'jet';
 
 function hexToRgb(hex) {
@@ -62,12 +61,21 @@ function hexToRgb(hex) {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-const CATALOG_LABS = CRYSTAL_COLORS.map((c) => rgbToLab(...hexToRgb(c.fill)));
+// src/geometry/** must never import src/renderer/** (tools/test-architecture-module-boundaries.mjs
+// enforces this) -- every other image mode already resolves its catalog through the `palette`
+// GeometryEngine.generateImageLayout() forwards from options.palette (app.js's imageColorPalette(),
+// the same {id,hex} shape normalizeImageParams() already documents), and this mode now does too,
+// instead of importing CrystalColors.js directly. Computed fresh per call (a few dozen Lab
+// conversions, negligible next to this mode's own ~0.6-0.8s budget) since `palette` is a per-call
+// argument, not a module-level constant.
+function catalogLabsFor(palette) {
+  return palette.map((c) => rgbToLab(...hexToRgb(c.hex)));
+}
 
-function jetCatalogIndex() {
-  const index = CRYSTAL_COLORS.findIndex((c) => c.id === JET_COLOR_ID);
+function resolveJetCatalogIndex(palette) {
+  const index = palette.findIndex((c) => c.id === JET_COLOR_ID);
   if (index === -1) {
-    throw new Error('LineDesignSampler expected a "jet" entry in CRYSTAL_COLORS.');
+    throw new Error('LineDesignSampler expected a "jet" entry in the passed palette.');
   }
   return index;
 }
@@ -157,13 +165,13 @@ function computeFilledMaskAndInpaint(imageBuffer) {
 
 // ---- Stage (b): direct per-pixel CIE76 catalog labelling, 1.2% share floor + relabel ------------
 
-function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx }) {
+function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx, catalogLabs }) {
   const pixelCount = widthPx * heightPx;
   const rawLabel = new Uint8Array(pixelCount).fill(255);
   const labL = new Float64Array(pixelCount);
   const labA = new Float64Array(pixelCount);
   const labB = new Float64Array(pixelCount);
-  const counts = new Array(CRYSTAL_COLORS.length).fill(0);
+  const counts = new Array(catalogLabs.length).fill(0);
   let silhouettePixelCount = 0;
 
   for (let i = 0; i < pixelCount; i++) {
@@ -172,8 +180,8 @@ function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, width
     const lab = rgbToLab(inpaintedR[i], inpaintedG[i], inpaintedB[i]);
     labL[i] = lab[0]; labA[i] = lab[1]; labB[i] = lab[2];
     let best = 0, bestD = Infinity;
-    for (let c = 0; c < CATALOG_LABS.length; c++) {
-      const d = cie76Distance(lab, CATALOG_LABS[c]);
+    for (let c = 0; c < catalogLabs.length; c++) {
+      const d = cie76Distance(lab, catalogLabs[c]);
       if (d < bestD) { bestD = d; best = c; }
     }
     rawLabel[i] = best;
@@ -199,7 +207,7 @@ function buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, width
     const lab = [labL[i], labA[i], labB[i]];
     let best = survivingIds[0], bestD = Infinity;
     for (const c of survivingIds) {
-      const d = cie76Distance(lab, CATALOG_LABS[c]);
+      const d = cie76Distance(lab, catalogLabs[c]);
       if (d < bestD) { bestD = d; best = c; }
     }
     finalLabel[i] = best;
@@ -670,10 +678,19 @@ function densifyRingForWalk(loop, stepMm) {
  *   imageRegionColorId() applies for every other mode, resolved against the catalog id each stone
  *   would otherwise get (its own direct per-pixel label, not a quantized cluster -- this mode never
  *   quantizes/clusters at all, so colour COUNT stays entirely unaffected by this map).
+ * @param {{id:string,hex:string}[]} args.palette The full colour catalog (app.js's own
+ *   imageColorPalette(), forwarded via options.palette exactly like every other mode) -- this mode
+ *   labels every silhouette pixel against the WHOLE catalog directly (never a quantized subset), so
+ *   unlike other modes' `palette` (only required when colorCount > 1), this one is always required.
+ *   Must include a 'jet' entry (decision d's ink structure).
  * @param {(stage:string, elapsedMs:number)=>void} [args.onStageTiming] Optional per-stage timing hook (D4).
  * @returns {{xMm:number,yMm:number,sizeMm:number,color:string,kind:('outline'|'line'|'fill'|'pocket')}[]}
  */
-export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, onStageTiming }) {
+export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, palette, onStageTiming }) {
+  if (!Array.isArray(palette) || palette.length === 0) {
+    throw new TypeError('generateLineDesignStonePoints requires a non-empty palette.');
+  }
+  const catalogLabs = catalogLabsFor(palette);
   const time = (stage, fn) => {
     const t0 = performance.now();
     const result = fn();
@@ -703,7 +720,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   const { filledMask, inpaintedR, inpaintedG, inpaintedB, holeCount } = time('mask', () => computeFilledMaskAndInpaint(imageBuffer));
   time('inpaint', () => holeCount); // inpainting already ran inside computeFilledMaskAndInpaint(); measured jointly with mask above -- see report.
 
-  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx }));
+  const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, widthPx, heightPx, catalogLabs }));
 
   const insideAtSilhouette = (xMm, yMm) => filledMask[pixelIndexAt(xMm, yMm)] === 1;
 
@@ -713,7 +730,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   // the pocket pass's colorAt) picks it up automatically.
   const pointColorAt = (xMm, yMm) => {
     const idx = pixelIndexAt(xMm, yMm);
-    const catalogId = filledMask[idx] ? CRYSTAL_COLORS[finalLabel[idx]].id : CRYSTAL_COLORS[survivingIds[0]].id;
+    const catalogId = filledMask[idx] ? palette[finalLabel[idx]].id : palette[survivingIds[0]].id;
     return colorMap[catalogId] ?? catalogId;
   };
   const modalColorAt = (xMm, yMm, radiusMm) => {
@@ -737,7 +754,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
       const count = counts.get(label) || 0;
       if (count > bestCount) { bestCount = count; best = label; }
     }
-    const catalogId = CRYSTAL_COLORS[best].id;
+    const catalogId = palette[best].id;
     return colorMap[catalogId] ?? catalogId;
   };
 
@@ -777,7 +794,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   // ---- Decision (d): line chains -----------------------------------------------------------------
   const linePoints = time('lines', () => {
     const pixelCount = widthPx * heightPx;
-    const jetIndex = jetCatalogIndex();
+    const jetIndex = resolveJetCatalogIndex(palette);
     const inkMask = new Uint8Array(pixelCount);
     for (let i = 0; i < pixelCount; i++) inkMask[i] = (filledMask[i] && finalLabel[i] === jetIndex) ? 1 : 0;
 

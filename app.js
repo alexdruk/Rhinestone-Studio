@@ -824,13 +824,17 @@ function computeImageColorField(layer){
 }
 // IMG-010 (D4): a line-design layer's own stone list is expensive (~0.6-0.8s measured on a
 // realistic fixture) and LineDesignSampler.js reads the full-resolution decoded buffer directly,
-// ignoring threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent/colorCount/palette/
+// ignoring threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent/colorCount/
 // seed/spread/edgeWidthMm/edgeThinning/brightnessThinning/stoneSize/sizeMode entirely for this mode
 // -- see its own doc comment -- so none of those belong in the cache key below. colorMap IS read
 // (IMG-010 follow-up: colour overrides) and so IS in the key, via lineDesignColorMapKey()'s stable
-// serialization below. Mirrors imageColorFieldCache's own shape/2-entry LRU cap exactly. Keyed on
-// layer.id too (unlike imageColorFieldCache) because the cached value already carries stones
-// stamped with a specific layerId, so two different layers must never share a slot.
+// serialization below. `palette` (IMG-010 second follow-up) is also read now -- LineDesignSampler.js
+// no longer imports src/renderer/CrystalColors.js directly (src/geometry/** may never import
+// src/renderer/**) -- but stays OUT of the key: imageColorPalette() below is a cached, static read
+// of the never-mutated STONE_COLORS catalog, so it always returns the exact same array and can never
+// be the reason a cached entry goes stale. Mirrors imageColorFieldCache's own shape/2-entry LRU cap
+// exactly. Keyed on layer.id too (unlike imageColorFieldCache) because the cached value already
+// carries stones stamped with a specific layerId, so two different layers must never share a slot.
 const lineDesignStoneCache=new Map();
 // IMG-010 follow-up: a plain object's key order is insertion order, not a canonical one (l.colorMap
 // is rebuilt via `{...l.colorMap}` in writeSelectedControlsToLayer(), so two calls with the same
@@ -1134,7 +1138,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
       // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
       // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
       // default for either field.
-      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};
       const result=this.permanentEngine.generateImageLayout(params);
       cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
       lineDesignStoneCache.set(key,cached);

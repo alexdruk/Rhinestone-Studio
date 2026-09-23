@@ -113,9 +113,13 @@ await test('7. resize drags are never snap-aware, and visible guide lines are ga
   // M14 (perf/move-drag-translate-fast-path): the pointerup handler is now the shared endActiveDrag(),
   // also bound to pointercancel. It still clears `drag` and the active snap guides; a move drag
   // additionally gets exactly one canonical updateAll(true) so the translation fast path's transient
-  // preview never persists. Resize/rotate drags do not (they already regenerate every pointermove).
+  // preview never persists. Resize/rotate drags do not, in general -- they already regenerate every
+  // pointermove -- EXCEPT a resize that froze lineDesignFrozen (IMG-010 follow-up: a line-design
+  // image layer's own resize drag showed stale frozen-fallback stones for its whole duration), which
+  // gets its own one-time unfreeze + invalidateLineDesignCache() + updateAll(true) at release. No
+  // branch calls commitHistory() -- history is committed once at drag start, never again here.
   assert.match(appJs, /window\.addEventListener\('pointerup',endActiveDrag\);\nwindow\.addEventListener\('pointercancel',endActiveDrag\);/);
-  assert.match(appJs, /function endActiveDrag\(\)\{\s*const ended=drag;\s*drag=null;\s*if\(activeGuides\.length\)\{activeGuides=\[\];drawLayout\(\)\}\s*if\(ended&&ended\.kind==='move'\)updateAll\(true\);\s*\}/);
+  assert.match(appJs, /function endActiveDrag\(\)\{\s*const ended=drag;\s*drag=null;\s*if\(activeGuides\.length\)\{activeGuides=\[\];drawLayout\(\)\}\s*if\(ended&&ended\.kind==='move'\)updateAll\(true\);\s*else if\(ended&&ended\.kind==='resize'&&lineDesignFrozen\)\{\s*lineDesignFrozen=false;\s*invalidateLineDesignCache\(ended\.layerId\);\s*updateAll\(true\);\s*\}\s*\}/);
 });
 
 await test('8. Shift held during a move-drag constrains movement to one axis (applied after snapping, so the locked axis never drifts); Alt/Option held on pointerdown duplicates the selection and drags the copies via selectMany()', () => {

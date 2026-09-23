@@ -14,6 +14,14 @@ import { GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { rgbToLab, cie76Distance } from '../src/image/ColorSpace.js';
 import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
 
+// IMG-010 second follow-up: generateLineDesignStonePoints() now requires a `palette` (the
+// src/renderer/** import it used to reach directly is forbidden for src/geometry/**, per
+// tools/test-architecture-module-boundaries.mjs) -- mirrors app.js's own imageColorPalette() shape
+// ({id,hex}, hex from previewColor/fill, identical values) for every direct engine.generateImageLayout()
+// call below with mode:'line-design'. Tests may import src/renderer/** freely; only src/geometry/**
+// itself may not.
+const LINE_DESIGN_PALETTE = CRYSTAL_COLORS.map((c) => ({ id: c.id, hex: c.previewColor }));
+
 // IMG-010 -- Line Design: a filled subject traced as an outline chain plus skeleton-derived line
 // chains at SS6 (2.0mm), the interior filled with SS10 (2.8mm) rings, and the existing IMG-013
 // gap-fill pass pocketing the leftover space with SS6 fillers. See
@@ -156,7 +164,7 @@ function runFixture(widthMm, { dotPitchPx = 9, gapMm = 0.3, extra = {} } = {}) {
   const buffer = makeFixture({ dotPitchPx });
   const layout = engine.generateImageLayout({
     imageBuffer: buffer, layerId: 'img010-fixture', xMm: 0, yMm: 0, widthMm, heightMm,
-    stoneSizeMm: 2.8, gapMm, mode: 'line-design', color: 'jet',
+    stoneSizeMm: 2.8, gapMm, mode: 'line-design', color: 'jet', palette: LINE_DESIGN_PALETTE,
     maxWidthPx: 2000, maxHeightPx: 2000, ...extra
   });
   return { layout, widthMm, heightMm, mmPerPx: widthMm / FIXTURE_W };
@@ -467,7 +475,8 @@ await test('10. Fixed-size stones regardless of layer stoneSizeMm: chain/fill si
     const buffer = makeFixture();
     const layout = engine.generateImageLayout({
       imageBuffer: buffer, layerId: 'fixed-size', xMm: 0, yMm: 0, widthMm: 130, heightMm,
-      stoneSizeMm, gapMm: 0.3, mode: 'line-design', color: 'jet', maxWidthPx: 2000, maxHeightPx: 2000
+      stoneSizeMm, gapMm: 0.3, mode: 'line-design', color: 'jet', palette: LINE_DESIGN_PALETTE,
+      maxWidthPx: 2000, maxHeightPx: 2000
     });
     sizes.push(layout.stones.map((s) => [s.xMm, s.yMm, s.sizeMm, s.color]));
   }
@@ -631,7 +640,8 @@ await test('15. D3: with Mixed Stone Size on (sizeMode:mixed) and mode:line-desi
   const buffer = makeFixture();
   const baseParams = {
     imageBuffer: buffer, layerId: 'mixed-noop', xMm: 0, yMm: 0, widthMm: 130, heightMm,
-    stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet', maxWidthPx: 2000, maxHeightPx: 2000
+    stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet', palette: LINE_DESIGN_PALETTE,
+    maxWidthPx: 2000, maxHeightPx: 2000
   };
   const off = engine.generateImageLayout({ ...baseParams, sizeMode: 'uniform' });
   const on = engine.generateImageLayout({
@@ -822,7 +832,7 @@ await test('20. IMG-010 follow-up: a pocket stone straddling a colour boundary t
   const layout = engine.generateImageLayout({
     imageBuffer: { widthPx: WIDTH_PX, heightPx: HEIGHT_PX, data }, layerId: 'img010-pocket-boundary',
     xMm: 0, yMm: 0, widthMm, heightMm, stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet',
-    maxWidthPx: 2000, maxHeightPx: 2000
+    palette: LINE_DESIGN_PALETTE, maxWidthPx: 2000, maxHeightPx: 2000
   });
   const pockets = layout.stones.filter((s) => (s.metadata.kind || 'pocket') === 'pocket');
   assert.ok(pockets.length > 0, 'expected this narrow strip to produce pocket fillers (too narrow for a fill ring)');

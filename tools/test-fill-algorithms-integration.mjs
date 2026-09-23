@@ -109,7 +109,13 @@ await test('7. generateSvgStonesLive resolves mode via resolveVectorFillMode(lay
 });
 
 await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(layer.fillMode) -- previously no mode was forwarded at all', () => {
-  assert.match(appJs, /mode:resolveImageFillMode\(layer\.fillMode\),color:layer\.color,threshold:layer\.threshold/);
+  // IMG-010 hoisted the resolveImageFillMode(layer.fillMode) call into a single `mode` const, shared
+  // by both the line-design branch's own params object and the ordinary-path one below it (rather
+  // than each re-deriving mode inline, which is what the old, now-stale regex pinned) -- so this
+  // proves the resolution once, then proves each params object forwards that same `mode` binding.
+  assert.match(appJs, /const mode=resolveImageFillMode\(layer\.fillMode\);/, 'expected mode to be resolved once via resolveImageFillMode(layer.fillMode)');
+  assert.match(appJs, /gapMm:layer\.gap,mode,color:layer\.color,colorMap:layer\.colorMap\?\?\{\},palette:imageColorPalette\(\)/, 'expected the line-design params object to forward the shared mode');
+  assert.match(appJs, /gapMm:layer\.gap,mode,color:layer\.color,threshold:layer\.threshold/, 'expected the ordinary-path params object to forward the shared mode');
 });
 
 await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(layer.fillMode) -- previously hard-coded to \'outline\'', () => {
