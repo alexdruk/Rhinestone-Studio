@@ -124,7 +124,7 @@ A select offers four named steps:
 The upper limit is 1.6 because at 1.8 every coloured test image degrades:
 
 * tiger's nose goes to siam;
-* Einstein's face reaches siam 22.7% at the decision stage;
+* Einstein's siam reaches 22.7% at the decision stage (sweater and face) and light-siam 16.7%;
 * furry's face takes aquamarine;
 * cartoon's orange goes to siam.
 
@@ -190,7 +190,7 @@ Each anchor below was re-grepped on `99d1d7c`, and the line given is the actual 
 | | `:3402` | `resolveImageExportRegions()` params pass `vividness`. |
 | | `:5513` | The `importImageFile` new-layer factory sets `vividness:1`. |
 | | `:2629` | The Studio control read (`syncSelectedControlsFromLayer()`, image branch): `el('imgVividness').value = resolveImageVividness(l.vividness)`. |
-| | `:2785`, `:2795` | The write in `writeSelectedControlsToLayer()`. The image branch opens at `:2785`, and the neighbouring `imgColorCount` write is at `:2795`. The new write is a separate statement, so `:2795` stays byte-identical (see "Existing tests"). |
+| | `:2785`, `:2795` | The write in `writeSelectedControlsToLayer()`. The image branch opens at `:2785`, and the neighbouring `imgColorCount` write is at `:2795`. The new write is exactly `l.vividness=resolveImageVividness(Number(el('imgVividness').value));`, as its own statement, so `:2795` stays byte-identical (see "Existing tests"). The `Number(` is required: a select value is a string, and `resolveImageVividness()` accepts only the four numbers, so a write without it stores a string that reads back as 1, and the control does nothing. |
 | | `:5048` | `HISTORY_TRACKED_CONTROL_IDS` gains `'imgVividness'`. |
 | `index.html` | after `:1192` | A new `<select id="imgVividness">`, labelled "Colour vividness". It goes directly after `#imgColorCount`, in `#imageStudioGroupColors` (`:1190`). The hint text is "Pushes colours toward brighter stones. No effect on black-and-white images or single-colour layers." The options are Natural 1, Rich 1.2, Vivid 1.4 and Bold 1.6, in that order. |
 
@@ -238,7 +238,7 @@ defaults listed under "Measurement settings". It is 120×60 px, with 3640 eligib
 
 ## Tests the build must add
 
-T1 to T6 go in a new `tools/test-img-017-vividness.mjs`. T7 is a check on existing test files. Each
+T1 to T6 and T8 go in a new `tools/test-img-017-vividness.mjs`. T7 is a check on existing test files. Each
 test lists its expected figures and the mutant it kills. The build mutation-tests each of T1 to T5
 against its named mutant.
 
@@ -317,11 +317,27 @@ Kills two mutants:
 * the import factory (`vividness:1`);
 * `HISTORY_TRACKED_CONTROL_IDS`.
 
+These Studio control guards are also source-text checks on `app.js`:
+
+* the read in `syncSelectedControlsFromLayer()` sets `el('imgVividness').value` from
+  `resolveImageVividness(l.vividness)`;
+* the write statement `l.vividness=resolveImageVividness(Number(el('imgVividness').value));` appears
+  verbatim (D5);
+* the `:782` `chooseAutoColorCount()` call passes `chromaScale`;
+* the `:825` `prepareImageField()` call passes `vividness`.
+
 In addition, `#imgVividness` exists in `index.html` with exactly the four options, in order.
 
 **T7. Byte identity.** Every pinned count and hash in `tools/test-img-015-direct-catalogue-colour.mjs`
 and `tools/test-img-016-neutral-brown-stones.mjs` stays unchanged. Default vividness is exactly the
 shipped arithmetic.
+
+**T8. `resolveImageVividness()`.** The function is extracted from `app.js` and evaluated.
+
+* 1, 1.2, 1.4 and 1.6 return themselves.
+* 1.3, 2, 0.5, 0, `NaN`, `undefined`, `null`, the string `'1.4'` and the string `'x'` return 1.
+
+Kills two mutants: a resolver that accepts any number, and one that coerces strings.
 
 ## Existing tests
 
@@ -370,6 +386,18 @@ These tests' fixtures never set `layer.vividness`, so every expected value in th
 * **Tests that match `HISTORY_TRACKED_CONTROL_IDS` with a regex**
   (`tools/test-s200-app-integration.mjs:104`, `:192`, `tools/test-crystal-color-integration.mjs:92`
   and others) require a flat list of string literals. Appending `'imgVividness'` keeps that.
+
+## Build housekeeping
+
+* The `docs/BACKLOG.md` row beginning "A larger catalogue drowns saturated colours" gains
+  **Implemented:** `docs/specifications/IMG-017-Vividness.md`, keeping its finding text, per the
+  BACKLOG convention for closed rows.
+* `tools/test-img-017-vividness.mjs` is registered in `tools/test-groups.mjs` in the same groups as
+  `tools/test-img-016-neutral-brown-stones.mjs` (`core` and `geometry` on `96c2b7d`).
+* Any doc that describes `labelCatalogColors()` parameters is updated for `chromaScale`. On
+  `96c2b7d`, a grep of `src/image/README.md` and `docs/ARCHITECTURE.md` finds one:
+  `src/image/README.md:87`. `docs/ARCHITECTURE.md` does not mention `labelCatalogColors()`.
+* This spec's Status line becomes "built" in the build commit.
 
 ## Out of scope
 
