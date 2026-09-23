@@ -206,7 +206,7 @@ await test('5. Largest-component reduction: a detached 3x3 speckle is dropped (s
   assert.equal(holePixelCount, 36);
   const holeBuffer = createImageBuffer({ widthPx: N, heightPx: N, data: holeData });
   const holeOn = countMaskOn(computeSubjectMask(holeBuffer, {}).mask);
-  assert.equal(cleanOn - holeOn, holePixelCount, 'the hole must reduce coverage by exactly its own pixel count, no more (it stays a hole, not a component-severing cut)');
+  assert.equal(cleanOn - holeOn, 0, 'IMG-014 decision 3: an enclosed background-coloured hole is no longer excluded -- it is unreached by the border flood fill, so it is filled in as subject, not held out as a hole');
 });
 
 // ---- Item 6: colour recovery ------------------------------------------------------------------

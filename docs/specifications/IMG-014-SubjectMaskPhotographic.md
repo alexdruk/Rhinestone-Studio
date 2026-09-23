@@ -1,7 +1,9 @@
 # IMG-014 — Subject Mask on Photographic Backgrounds
 
-**Status: spec only.** No source file changes in this step; see the measurement and grep sections
-below for what a future implementation step touches.
+**Status: implemented.** `src/image/SubjectMask.js`'s background route now runs decisions 1-4 as
+specified; `tools/test-img-014-subject-mask-photographic.mjs` pins the fixtures below, and
+`tools/test-img-009-subject-mask.mjs` Item 5's hole sub-case and `tools/test-img-010-line-design.mjs`
+Item 20 were updated per "Existing tests" below.
 
 ## Objective
 

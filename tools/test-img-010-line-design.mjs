@@ -12,6 +12,7 @@ import {
 import { rawGridDistanceTransform } from '../src/geometry/ContourRingSampler.js';
 import { GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { rgbToLab, cie76Distance } from '../src/image/ColorSpace.js';
+import { computeSubjectMask } from '../src/image/index.js';
 import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
 
 // IMG-010 second follow-up: generateLineDesignStonePoints() now requires a `palette` (the
@@ -806,31 +807,54 @@ await test('19. IMG-010 follow-up: a simulated resize drag (frozen) reuses the d
 await test('20. IMG-010 follow-up: a pocket stone straddling a colour boundary takes the majority colour under its own 80% radius, not the single pixel at its centre', () => {
   // A narrow 2-colour strip: too short (14px tall) for any SS10 fill ring to fit between its two
   // outline chains, so its whole interior is covered by GapFill's own SS6 pocket pass alone --
-  // easy to reason about (a hard vertical colour split) and empirically tuned (SPLIT_PX=98) so one
-  // pocket's own centre lands within its own modal-colour radius of the boundary.
-  const WIDTH_PX = 200, HEIGHT_PX = 14, SPLIT_PX = 98;
+  // easy to reason about (a hard vertical colour split) and empirically tuned (RAW_SPLIT_PX=98) so
+  // one pocket's own centre lands within its own modal-colour radius of the boundary.
+  //
+  // IMG-014: this fixture is fully opaque with no real background at all, so it used to reach
+  // computeSubjectMask()'s background route -- decision 1's modal-colour step cannot tell that apart
+  // from a real image with a genuinely dominant border colour (see
+  // docs/specifications/IMG-014-SubjectMaskPhotographic.md, "The Item 20 decision"). Padded here to a
+  // 204x18 canvas with a 2px fully-transparent margin on every side (the strip and the poke shifted
+  // +2 in x and y, preserving their relative geometry) so `transparentFraction` clears
+  // SUBJECT_ALPHA_PRESENCE_FRACTION and the fixture takes the alpha route instead -- the same
+  // mechanism makeFixture() already uses elsewhere in this file.
+  const RAW_WIDTH_PX = 200, RAW_HEIGHT_PX = 14, RAW_SPLIT_PX = 98;
+  const MARGIN_PX = 2;
+  const WIDTH_PX = RAW_WIDTH_PX + MARGIN_PX * 2, HEIGHT_PX = RAW_HEIGHT_PX + MARGIN_PX * 2;
+  const SPLIT_PX = RAW_SPLIT_PX + MARGIN_PX;
   const COLOR_A = [0x2f, 0x6f, 0xd0], COLOR_B = [0x31, 0xa8, 0x6d]; // -> catalog 'sapphire' / 'emerald'
-  const data = new Uint8ClampedArray(WIDTH_PX * HEIGHT_PX * 4);
-  for (let y = 0; y < HEIGHT_PX; y++) {
-    for (let x = 0; x < WIDTH_PX; x++) {
-      const i = (y * WIDTH_PX + x) * 4;
-      const c = x < SPLIT_PX ? COLOR_A : COLOR_B;
+  const data = new Uint8ClampedArray(WIDTH_PX * HEIGHT_PX * 4); // transparent black everywhere by default
+  for (let y = 0; y < RAW_HEIGHT_PX; y++) {
+    for (let x = 0; x < RAW_WIDTH_PX; x++) {
+      const i = ((y + MARGIN_PX) * WIDTH_PX + (x + MARGIN_PX)) * 4;
+      const c = x < RAW_SPLIT_PX ? COLOR_A : COLOR_B;
       data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
     }
   }
   // Poke the single pixel pointColorAt() itself would sample for the straddling stone found below
-  // (px=97,py=4, empirically located) to the OTHER colour -- verified (against a deliberately broken
-  // copy of the pocket pass) that this exact poke is what makes the point-sample and modal-majority
-  // rules actually disagree; without it, this stone's single centre pixel happens to already agree
-  // with its own radius's majority, and the test would pass even with the modal rule reverted to a
-  // point sample.
+  // (raw px=98,py=5, i.e. padded px=100,py=7 -- empirically re-located against the padded fixture's
+  // own geometry, since padding changes the outline chain and pocket grid enough that the original
+  // unpadded fixture's px=97,py=4 no longer lands on the same stone's sample pixel) to the OTHER
+  // colour -- verified (against a deliberately broken copy of the pocket pass) that this exact poke
+  // is what makes the point-sample and modal-majority rules actually disagree; without it, this
+  // stone's single centre pixel happens to already agree with its own radius's majority, and the
+  // test would pass even with the modal rule reverted to a point sample.
   {
-    const pokeX = 97, pokeY = 4, i = (pokeY * WIDTH_PX + pokeX) * 4;
-    data[i] = COLOR_B[0]; data[i + 1] = COLOR_B[1]; data[i + 2] = COLOR_B[2]; data[i + 3] = 255;
+    const pokeX = 98 + MARGIN_PX, pokeY = 5 + MARGIN_PX, i = (pokeY * WIDTH_PX + pokeX) * 4;
+    data[i] = COLOR_A[0]; data[i + 1] = COLOR_A[1]; data[i + 2] = COLOR_A[2]; data[i + 3] = 255;
   }
-  const widthMm = 100, heightMm = widthMm * HEIGHT_PX / WIDTH_PX, mmPerPx = widthMm / WIDTH_PX;
+
+  const imageBuffer = { widthPx: WIDTH_PX, heightPx: HEIGHT_PX, data };
+  const maskResult = computeSubjectMask(imageBuffer, {});
+  assert.equal(maskResult.route, 'alpha', 'expected the padded fixture (2px fully-transparent margin) to take the alpha route, not the background route');
+
+  // mmPerPx is derived from the raw content's own physical scale (100mm across its original 200px),
+  // then carried unchanged onto the padded canvas -- not recomputed from the padded width, which
+  // would compress the whole fixture into the same 100mm and disturb the original SPLIT_PX=98/
+  // poke=(97,4) empirical tuning relative to the SS6 pocket grid.
+  const mmPerPx = 100 / RAW_WIDTH_PX, widthMm = WIDTH_PX * mmPerPx, heightMm = HEIGHT_PX * mmPerPx;
   const layout = engine.generateImageLayout({
-    imageBuffer: { widthPx: WIDTH_PX, heightPx: HEIGHT_PX, data }, layerId: 'img010-pocket-boundary',
+    imageBuffer, layerId: 'img010-pocket-boundary',
     xMm: 0, yMm: 0, widthMm, heightMm, stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet',
     palette: LINE_DESIGN_PALETTE, maxWidthPx: 2000, maxHeightPx: 2000
   });
