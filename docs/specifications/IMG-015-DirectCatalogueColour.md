@@ -64,7 +64,9 @@ The **primary** columns use decision 2's definitions, measured here: shares and 
 1.2% floor, relabelling and the 8-colour cap. The **raw** columns are nearest-colour labelling over
 the full catalogue *before* the floor, relabelling and cap. That is the stage the architect's
 figures were taken at, and the colour lists name the colours that clear the floor. Every raw figure
-measured here agrees with the provided figure at the precision it was given.
+measured here agrees with the provided figure at the precision it was given. "Auto (proposed)" is
+decision 7's resolved value, `max(2, n)`. Each of the seven photographs has n ≥ 3, so decision 7
+leaves every figure in this table unchanged.
 
 | Image | Auto (proposed) | Mean ΔE | Colours kept, share % (primary) | Raw, before floor and relabel (provided) | Raw, measured |
 |---|---|---|---|---|---|
@@ -166,9 +168,10 @@ on the group.
 ### 3. Auto resolves to the number of colours clearing the floor, capped at 8
 
 `chooseAutoColorCount(field, palette)` (`src/image/AutoColourCount.js:79`) keeps its name, signature
-and `resolvedCount`. It runs decision 1's labelling once over the same subject pixels and returns the
-number of colours that clear the floor, capped at 8 (`AUTO_MAX_K`). No subject pixels still resolves
-to 1. `app.js` reads only `resolvedCount` (`app.js:778`), so its call site, cache and freeze
+and `resolvedCount`. It runs decision 1's labelling once over the same subject pixels and counts n,
+the colours that clear the floor, capped at 8 (`AUTO_MAX_K`). It returns decision 7's
+`max(2, n)`. No subject pixels still resolves to 1. Everywhere in this spec, "Auto" means that
+resolved value. `app.js` reads only `resolvedCount` (`app.js:778`), so its call site, cache and freeze
 (`app.js:754-783`) are unchanged in code. Their comment at `:726-753`, which describes "the 7-call
 sweep", is updated.
 
@@ -255,19 +258,47 @@ roughly halves rose (55 → 28), the smallest kept colour at 1.50%.
 * Adding catalogue colours.
 * Chains (Line Design's outline and line chains) in any colour other than jet.
 
-## Finding for the lead: a subject with one surviving colour resolves Auto to 1
+### 7. Auto never takes the uncoloured path
 
-Decision 3, as written, resolves Auto to **1** when exactly one colour clears the floor. `colorCount`
-1 is IMG-002's uncoloured path, where every stone takes `layer.color` (gold for a new import,
-`app.js:5508`). So a genuinely one-colour subject would lose its catalogue colour and render in the
-layer colour. Fixtures A and B below both hit this: each resolves to Auto 1 and 169 gold stones,
-although labelling alone gives 169 jet and 169 topaz respectively. The shipped sweep resolves both
-fixtures to 2 (it only scores k=2..8), and it gives 2 or more on all seven photographs above.
+When there are subject pixels, `chooseAutoColorCount()` returns `resolvedCount = max(2, n)`, where
+n is the number of colours clearing the floor, capped at 8 (decision 3). With no subject pixels it
+still returns 1. The explicit "1 (single colour)" option keeps IMG-002's uncoloured path, where every
+stone takes `layer.color`, unchanged.
 
-This spec does not decide the case. One option is to resolve Auto to `max(2, n)` whenever there are
-subject pixels: `quantizeColors()` then returns the single surviving group and every stone gets its
-real catalogue colour. That keeps "Auto: N colours" honest only if the Studio hint reports the group
-count rather than `resolvedCount`.
+*Rationale.* Auto means "the image's own stones". A one-colour subject must render in its catalogue
+colour, not in `layer.color` (gold for a new import, `app.js:5508`). `quantizeColors()` already
+returns fewer groups than `colorCount` when fewer survive (decision 2). So with n = 1 it returns
+`colorCount` 2 and a single group, and that group reaches every stone.
+
+**Studio hint.** "Auto: N colours" (`app.js:6535`) reports the number of groups in the layer's
+resolved colour field instead of `resolvedCount`. Those groups are the rows the Colours section
+renders.
+* **Source of the count.** It is `colorField.colorGroups.length`, where `colorField` is the
+  `computeImageColorField(l)` result already bound at `app.js:6529`, just above the hint. The
+  row loop at `app.js:6536-6548` reads the same `colorGroups` array.
+* **No colour field.** When `colorField` is null, the hint falls back to
+  `resolveImageColorCount(l)`, as today. That happens when there are no subject pixels (the resolved
+  count is 1) or before the source image is decoded.
+* **Stone Colour control.** The `multiColorImage` flag at `app.js:278` stays keyed on
+  `resolveImageColorCount(sel) > 1`. A one-group Auto layer resolves to 2, so it keeps `#stoneColor`
+  disabled, shows its single Colours row, and stays overridable through `colorMap` like any other
+  group.
+
+*Measured on the scratch copy* with decision 7 applied:
+
+| Fixture | Auto | `colorGroups` | Hint count | Stones |
+|---|---|---|---|---|
+| A | 2 | jet (32,32,32) 100.00% | 1 | 169 jet |
+| B | 2 | topaz (202,125,35) 100.00% | 1 | 169 topaz |
+| C | 2 | jet (21,20,20) 91.00%, silver (216,221,228) 9.00% | 2 | 169: jet 157, silver 12 |
+
+With no subject pixels, Auto is still 1. The seven photographs resolve to 6, 3, 3, 7, 8, 8 and 8,
+unchanged from decision 3.
+
+## Resolved finding
+
+A one-colour subject under Auto would have fallen to the uncoloured path (`layer.color`); see
+decision 7.
 
 ## Synthetic fixtures
 
@@ -323,11 +354,9 @@ Measured on the pristine tip (shipped) and on the proposal:
 | Fixture | Pipeline | Auto | `colorCount` | `colorGroups` (id, rgb, share) | Stones |
 |---|---|---|---|---|---|
 | A close greys | shipped | 2 | 2 | jet (20,20,20) 60.00%, **light-sapphire** (50,50,50) 40.00% | 169: jet 104, light-sapphire 65 |
-| A close greys | proposed | 1 | 2 | jet (32,32,32) 100.00% | 169: jet 169 |
-| A close greys | proposed | 1 | 1 (Auto) | — | 169: gold 169 (see Finding) |
+| A close greys | proposed | 2 | 2 (Auto) | jet (32,32,32) 100.00% | 169: jet 169 |
 | B orange + shade | shipped | 2 | 2 | **siam** (170,100,30) 40.00%, topaz (224,142,38) 60.00% | 169: topaz 104, siam 65 |
-| B orange + shade | proposed | 1 | 2 | topaz (202,125,35) 100.00% | 169: topaz 169 |
-| B orange + shade | proposed | 1 | 1 (Auto) | — | 169: gold 169 (see Finding) |
+| B orange + shade | proposed | 2 | 2 (Auto) | topaz (202,125,35) 100.00% | 169: topaz 169 |
 | C floor | shipped | 3 | 3 | jet (20,20,20) 90.00%, siam (155,28,28) 1.00%, silver (216,221,228) 9.00% | 169: jet 156, siam 1, silver 12 |
 | C floor | proposed | 2 | 3 | jet (21,20,20) 91.00%, silver (216,221,228) 9.00% | 169: jet 157, silver 12 |
 | C floor | proposed | 2 | 2 (Auto) | jet (21,20,20) 91.00%, silver (216,221,228) 9.00% | 169: jet 157, silver 12 |
@@ -424,7 +453,12 @@ img-002, img-008, img-009 and img-012.
   Every stone count and every other entry is unchanged. The fixture is four exact catalogue colours,
   so under direct labelling k=2 and k=3 keep the top shares by palette order, where the shipped
   k-means blend claimed light-sapphire, topaz and jet, none of which is in the image.
-- Items 4, 5 and 6, and 8-13, are unchanged. Item 4's subject 4 / threshold 3 still hold.
+- Items 10 and 14 (decision 7): `extractAutoHintSource()`'s exact-source marker (`:401`) no longer
+  matches once the hint reads the group count.
+  - Both items then inject a stub colour field alongside the `resolveImageColorCount` stub.
+  - Their expected texts are unchanged: `'Auto: 4 colours'` (`:417`, `:494`) and `'Auto: 1 colour'`
+    (`:493`).
+- Items 4, 5 and 6, 8, 9, and 11-13 are unchanged. Item 4's subject 4 / threshold 3 still hold.
 
 ### Unchanged, noted
 
@@ -446,7 +480,7 @@ img-002, img-008, img-009 and img-012.
 | | `:21` | import kept (the labeller needs `rgbToLab`/`cie76Distance`) |
 | | `:32-233` | `CHANNEL_KEYS`, `parseHexColor`, histogram, median cut, k-means, `assignNearestIds()` removed; the moved labeller and share constant added |
 | | `:235-298` | `quantizeColors()` doc and body per decision 2 |
-| `src/image/AutoColourCount.js` | `:1-18`, `:20-23`, `:25-38`, `:73-120`, `:122-142` | header; imports; constants; `chooseAutoColorCount()` body; `pickAutoColorCountWinner()` removed (decision 3) |
+| `src/image/AutoColourCount.js` | `:1-18`, `:20-23`, `:25-38`, `:73-120`, `:122-142` | header; imports; constants; `chooseAutoColorCount()` body returning `max(2, n)` with subject pixels (decisions 3, 7); `pickAutoColorCountWinner()` removed |
 | `src/image/README.md` | `:69-75`, `:77-84`, `:136-138` | describe per-pixel catalogue labelling |
 | `src/geometry/LineDesignSampler.js` | `:5-8` | header's "decision b" now points at the moved function |
 | | `:24-25` | new import |
@@ -461,8 +495,11 @@ img-002, img-008, img-009 and img-012.
 | | `:1258-1269` | `colorAt(xMm, yMm, sizeMm)` |
 | | `:1310`, `:1319`, `:1349` | pass sizes |
 | | `:1369` | gap-fill closure |
-| `app.js` | `:726-753`, `:791-797` | comments only (Auto sweep and "median-cut + 8 k-means passes" cost notes); no code change |
+| `app.js` | `:726-753`, `:791-797` | comments only (Auto sweep and "median-cut + 8 k-means passes" cost notes) |
+| | `:6535` | Auto hint reports `colorField.colorGroups.length` (decision 7), with `resolveImageColorCount(l)` as the fallback when `colorField` is null |
+| | `:278` | unchanged: `multiColorImage` stays `resolveImageColorCount(sel) > 1` (decision 7) |
 | `tools/test-img-002-color-layers.mjs`, `tools/test-img-008-vector-first-svg.mjs`, `tools/test-img-009-subject-mask.mjs`, `tools/test-img-012-auto-colour-count.mjs`, `tools/test-img-013-fill-empty-slots.mjs` | as listed above | |
-| new `tools/test-img-015-direct-catalogue-colour.mjs` | | fixtures A-C, the Line Design hash parity, decision 4's modal rule |
+| new `tools/test-img-015-direct-catalogue-colour.mjs` | | fixtures A-C, the Line Design hash parity, decision 4's modal rule; decision 7: fixtures A and B under Auto give 169 jet and 169 topaz, and the hint count is 1 |
+| `tools/test-img-012-auto-colour-count.mjs` | `:401`, items 10 and 14 | hint marker and stubs (decision 7) |
 
 `index.html`'s "Auto (best fit)" option label (`:1192`) is left as is.
