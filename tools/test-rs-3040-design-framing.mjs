@@ -44,6 +44,9 @@ globalThis.document = new Proxy(self.document, {
 
 const canvas = self.document.createElement('canvas');
 self.document.body.appendChild(canvas);
+// exit() resets canvasEl's 2D transform. jsdom has a real 2D context only when the optional canvas
+// npm package happens to resolve, so the stub context is used always, with or without it.
+canvas.getContext = fakeCanvas().getContext;
 let cssBox = null;
 canvas.getBoundingClientRect = () => (cssBox
   ? { x: 0, y: 0, left: 0, top: 0, width: cssBox.width, height: cssBox.height, right: cssBox.width, bottom: cssBox.height }
