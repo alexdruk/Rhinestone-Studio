@@ -54,8 +54,10 @@ cd Rhinestone-Studio
 npm install
 ```
 
-Run the app locally (a static file server; the app itself is a browser-only ES module app with no
-build step):
+Run the app locally (a static file server, `tools/dev-server.mjs`; the app itself is a
+browser-only ES module app with no build step). Every response carries
+`Cache-Control: no-cache, no-store`, so the browser always loads the current modules after a pull
+or checkout:
 
 ```bash
 npm run dev
@@ -69,21 +71,20 @@ minimum-baseline rationale and what it covers).
 
 ### Older Macs (e.g. macOS Sierra)
 
-`npm run dev` shells out to `python3`, which isn't available on some older
-macOS installs (Sierra lacks it, but ships Python 2 built in).
-
 With Node available on that Mac, run the two commands below, then open
 http://localhost:5173.
 
 ```bash
 npm ci --omit=dev
-python -m SimpleHTTPServer 5173
+npm run dev
 ```
 
 Without Node on that Mac, run `npm ci --omit=dev` on another machine and
 copy the whole project folder, including `node_modules`, over to the old
-Mac. On the old Mac, run only `python -m SimpleHTTPServer 5173`, then open
-http://localhost:5173.
+Mac. On the old Mac, run only `python -m SimpleHTTPServer 5173` (Sierra
+ships Python 2 built in), then open http://localhost:5173. That server does
+not send the no-cache header, so reload with the browser cache disabled
+after updating the folder.
 
 Run the automated test suite (plain Node scripts under `tools/test-*.mjs`, no browser required):
 
