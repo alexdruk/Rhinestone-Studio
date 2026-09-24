@@ -546,22 +546,24 @@ function resolveImageFillMode(value) {
  */
 export async function generateProjectStoneLayout(rhsProject, permanentEngine, options = {}) {
   const { resolveImageBuffer } = options;
+  // Each layer's stones are appended one-by-one, not spread: a large layer's array overflows the
+  // JS call stack as call arguments (RS-3039). Same dispatch as app.js's generate().
   let raw = [];
   for (const layer of rhsProject.layers) {
     if (layer.visible === false) continue;
     if (layer.type === 'text') {
-      raw.push(...await generateTextStonesForLayer(layer, rhsProject.canvas, permanentEngine));
+      for (const stone of await generateTextStonesForLayer(layer, rhsProject.canvas, permanentEngine)) raw.push(stone);
     } else if (layer.type === 'circle' || layer.type === 'rectangle') {
-      raw.push(...generateShapeStonesForLayer(layer, permanentEngine));
+      for (const stone of generateShapeStonesForLayer(layer, permanentEngine)) raw.push(stone);
     } else if (layer.type === 'svg') {
-      raw.push(...generateSvgStonesForLayer(layer, permanentEngine));
+      for (const stone of generateSvgStonesForLayer(layer, permanentEngine)) raw.push(stone);
     } else if (layer.type === 'image') {
       if (typeof resolveImageBuffer !== 'function') {
         throw new Error(`generateProjectStoneLayout: image layer "${layer.id}" requires options.resolveImageBuffer (no PNG/JPEG/WebP decoder is bundled in Node).`);
       }
-      raw.push(...await generateImageStonesForLayer(layer, permanentEngine, resolveImageBuffer));
+      for (const stone of await generateImageStonesForLayer(layer, permanentEngine, resolveImageBuffer)) raw.push(stone);
     } else if (layer.type === 'path') {
-      raw.push(...generatePathStonesForLayer(layer, permanentEngine));
+      for (const stone of generatePathStonesForLayer(layer, permanentEngine)) raw.push(stone);
     }
   }
   const deduped = dedupeStonesByRadius(raw);

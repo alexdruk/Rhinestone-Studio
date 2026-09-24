@@ -1077,7 +1077,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     if(!scaleResult.ok)delete l.authoredScale;
   }
  }
- async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ // RS-3039: each visible layer's Live call runs in its own try/catch, so one failing layer contributes
+ // no stones instead of blanking every layer; its failure is logged and returned in `failures`
+ // ({layerId,layer,error}, in project.layers order) for updateAll()'s status line. Stones are appended
+ // one-by-one, not spread: a large layer's array overflows the JS call stack as call arguments.
+ // recoverStaleAuthoredScales() stays outside the per-layer try (see its own comment).
+ async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];const failures=[];for(const l of project.layers){if(!l.visible)continue;try{if(l.type==='text')for(const s of await this.generateTextStonesLive(l,project))raw.push(s);if(SHAPE_LAYER_TYPES.has(l.type))for(const s of await this.generateShapeStonesLive(l))raw.push(s);if(l.type==='svg')for(const s of await this.generateSvgStonesLive(l))raw.push(s);if(l.type==='image')for(const s of await this.generateImageStonesLive(l))raw.push(s);if(l.type==='path')for(const s of await this.generatePathStonesLive(l))raw.push(s);}catch(error){console.error(`Layer ${l.id} generation failed`,error);failures.push({layerId:l.id,layer:l,error})}}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return{layout:new StoneLayout({layerId:'project',stones}),failures}}
  // Stone Size overlap guard: the same per-type Live dispatch generate() uses just above, factored
  // out (not shared with generate() itself, to avoid touching that method's tested source shape) so
  // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
@@ -2969,11 +2974,14 @@ function translateLayoutForMoveDrag(baseLayout,movedLayerIds,dxMm,dyMm){
 // entry points (createShapeLayer(), addText(), the #fitTextToShapeBtn click) -- never from
 // engine.generate() or generateTextStonesLive(). So a move drag can never invalidate a stored fit,
 // and the fast path needs no fit-related fallback.
-async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
-  // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
-  // leaves this exact status message behind -- once generation succeeds again, it must not keep
-  // reading as broken even though the canvas has already recovered.
-  if(el('status').textContent.startsWith('Text generation failed'))el('status').textContent='Ready';
+async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated,failures;try{({layout:generated,failures}=await engine.generate(project))}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Layout generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
+  // RS-3039: a layer that failed inside generate() is named via layerLabel() (the Layers list's own
+  // label); the other layers' stones are already in `layout` and the rest of this pass runs normally.
+  // MONO-006A: otherwise a prior failure message (a stale authoredScale rejected by GeometryEngine,
+  // or an earlier layer failure) is cleared once generation succeeds again, so the status line does
+  // not keep reading as broken after the canvas has recovered.
+  if(failures.length>0){const first=failures[0];el('status').textContent=`Layer "${layerLabel(first.layer)}" could not be generated: ${first.error.message}`+(failures.length>1?` (and ${failures.length-1} more)`:'')}
+  else if(/^(Layout generation failed|Layer ".*" could not be generated: )/.test(el('status').textContent))el('status').textContent='Ready';
   // RS-3010 Step 1: while drawing mode owns layoutCanvas, drawLayout() itself is a no-op (see its
   // own guard below) -- calling it here would do nothing useful, and every real trigger that lands
   // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
@@ -7177,7 +7185,9 @@ const LIBRARY_THUMB_WIDTH_PX=260,LIBRARY_THUMB_HEIGHT_PX=170;
 
 async function generateProjectThumbnail(tempProject){
   try{
-    const stoneLayout=await engine.generate(tempProject);
+    // RS-3039: per-layer failures are ignored here (generate() already logged them); the thumbnail
+    // shows the layers that did generate.
+    const {layout:stoneLayout}=await engine.generate(tempProject);
     const canvas=document.createElement('canvas');
     canvas.width=LIBRARY_THUMB_WIDTH_PX;canvas.height=LIBRARY_THUMB_HEIGHT_PX;
     renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12,units:tempProject.units||'mm'});

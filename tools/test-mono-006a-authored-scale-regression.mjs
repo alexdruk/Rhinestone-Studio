@@ -220,12 +220,12 @@ await test('14. Add Text\'s new-layer literal has no authoredScale field', () =>
   assert.doesNotMatch(match[0], /authoredScale/);
 });
 
-// ---------- Part D: updateAll() clears a stale "Text generation failed" status on success ----------
+// ---------- Part D: updateAll() clears a stale generation-failure status on success (RS-3039 wording) ----------
 
 await test('15. updateAll() resets the status line back to Ready once generation succeeds after a prior failure', () => {
   assert.match(
     appJs,
-    /if\(el\('status'\)\.textContent\.startsWith\('Text generation failed'\)\)el\('status'\)\.textContent='Ready';/,
+    /else if\(\/\^\(Layout generation failed\|Layer "\.\*" could not be generated: \)\/\.test\(el\('status'\)\.textContent\)\)el\('status'\)\.textContent='Ready';/,
     'expected updateAll()\'s success path to clear a stale generation-failure status message'
   );
 });

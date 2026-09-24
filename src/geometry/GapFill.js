@@ -172,7 +172,9 @@ export function generateGapFillStones({ baseStones, gapMm, fillerSizeMm = GAP_FI
     for (const point of roundAccepted) {
       stones.push({ xMm: point.xMm, yMm: point.yMm, sizeMm: point.sizeMm, idx: stones.length });
     }
-    acceptedPoints.push(...roundAccepted);
+    // Appended one-by-one, not spread: a round can accept more fillers than a call can take as
+    // arguments (RS-3039).
+    for (const point of roundAccepted) acceptedPoints.push(point);
   }
 
   return acceptedPoints.map((point, i) => new Stone({
