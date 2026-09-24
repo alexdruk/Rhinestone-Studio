@@ -1215,6 +1215,10 @@ style settings. See `docs/specifications/RS-3011-design-primary-view-scope.md` a
 `docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
 decision history — this section summarizes the shipped result, not the process.
 
+**Sheet framing.** Since RS-3040, Design fits the sheet in CSS px and draws the sheet outline and
+safe-area guide (a plate's design-target circles instead) from `app.js`'s `designSheetFraming()`, on
+a locked layer between the grid and the content (`docs/specifications/RS-3040-DesignFraming.md`).
+
 **Tool-mode convention.** Design's single Paper.js `Tool` routes every pointer gesture through one
 decision: hit an existing shape first (selection/move takes priority over starting a new draw), else
 draw per the current `mode`. Most tool-rail presets (Rect/Ellipse/Slot/Polygon/Pen/freehand, etc.)

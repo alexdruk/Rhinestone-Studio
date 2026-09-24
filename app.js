@@ -1647,6 +1647,12 @@ function isPointInActiveSelection(pointAbsoluteMm,selection){
 // IMG-020: one layerId's stones from the `layout` global, in DrawingCanvasTool.js's {x,y,d,color}
 // shape -- the single filter behind both the getTextLayerStones and getImageLayerStones hooks.
 function layoutStonesForLayer(layerId){return layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))}
+// RS-3040: the sheet Design fits and outlines, and its guides, from the same project.canvas,
+// getSafeAreaRectMm() and getPlateDesignTargetGuide() calls drawLayout() makes for the 2D canvas.
+function designSheetFraming(){const t=currentObjectTemplate(),W=project.canvas.width,H=project.canvas.height;const guides=[];if(t.preview.kind==='plate'){const g=getPlateDesignTargetGuide(project.plate.designTarget,project.plate,W,H);if(g.kind==='annulus'){guides.push({role:'plateOuter',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.outerRadiusMm,dashed:false,label:g.label},{role:'plateInner',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.innerRadiusMm,dashed:false,label:g.label})}else{guides.push({role:'plateTarget',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.radiusMm,dashed:false,label:g.label});if(g.transitionRadiusMm!=null)guides.push({role:'plateTransition',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.transitionRadiusMm,dashed:true,label:g.label})}}else{guides.push({role:'sheet',kind:'rect',xMm:0,yMm:0,widthMm:W,heightMm:H,dashed:false});if(showSafeArea){const r=getSafeAreaRectMm(t,W,H);guides.push({role:'safeArea',kind:'rect',xMm:r.xMm,yMm:r.yMm,widthMm:r.widthMm,heightMm:r.heightMm,dashed:true})}}return{canvasMm:{width:W,height:H},guides}}
+// RS-3040: #fitNotice while Design is open -- drawLayout() writes it only outside Design. Names the current
+// template and only the guides the framing gave Design.
+function designFitNotice(framing){const name=currentObjectTemplate().displayName,plate=framing.guides.find(g=>g.label);if(plate)return`${name}: keep stones inside the blue ${plate.label} guide.`;return framing.guides.some(g=>g.role==='safeArea')?`${name}: keep stones inside the dashed safe-area guide.`:`${name}: keep stones inside the sheet outline.`}
 const drawingTool=createDrawingTool(layoutCanvas,{
   // stoneSize/gap/color default from the currently-selected layer, the same convention
   // createShapeLayer()/the SVG-import handler elsewhere in this file already use for a brand-new
@@ -2430,7 +2436,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   getTextLayerStones:(layerId)=>layoutStonesForLayer(layerId),
   // IMG-020: the same layout filter for an 'image' layer, so Design draws its stones from the
   // layout rather than asking getLayerStoneParams() (which is 'path'-only) and drawing none.
-  getImageLayerStones:(layerId)=>layoutStonesForLayer(layerId)
+  getImageLayerStones:(layerId)=>layoutStonesForLayer(layerId),
+  // RS-3040: Design frames and outlines the current sheet from the same template data drawLayout() uses,
+  // and #fitNotice describes what Design draws (drawLayout() is a no-op while Design is open).
+  getSheetFraming:()=>{const framing=designSheetFraming();el('fitNotice').textContent=designFitNotice(framing);return framing}
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
 // automated verification of the Design canvas's background grid layering -- same "read-only,
@@ -2993,7 +3002,7 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
   // any other edit that happens to run updateAll() concurrently) still needs layoutCanvas's *size*
   // kept in sync, just through drawingTool's own resync path instead of the normal renderer.
-  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1));
+  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38);
   // Canvas-desync fix: reconciles Design's live Paper.js shapes against project.layers on every
   // updateAll() call while Design is active -- resize() above only keeps the viewport in sync, it
   // never did this. Covers undo/redo (applyHistorySnapshot() swaps `project` wholesale) and the
@@ -6760,7 +6769,7 @@ function setDrawMode(active,mode){
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
-    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38,mode);
     el('status').textContent='Drawing mode: drag on the canvas to draw a shape. It becomes a Path layer immediately.';
   }else{
     drawingTool.exit();
@@ -7384,6 +7393,8 @@ el('settingsApply').onclick=()=>{
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
   snapToleranceMm=Math.min(5,Math.max(0.5,readLengthField('settingsSnapDistance')||SNAP_TOLERANCE_MM));
   showSnapGuides=el('settingsShowGuides').checked;
+  // RS-3040: drawLayout() is a no-op in Design, so Design's safe-area guide is refreshed here.
+  if(drawingTool.isActive)drawingTool.resize(38);
   drawLayout();
 };
 
