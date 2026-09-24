@@ -23,6 +23,7 @@
  */
 
 import { computeSubjectMask } from '../image/SubjectMask.js';
+import { ALPHA_COVERAGE_THRESHOLD } from '../image/Alpha.js';
 import { rgbToLab } from '../image/ColorSpace.js';
 import { labelCatalogColors, MIN_CATALOG_COLOR_SHARE } from '../image/ColorQuantize.js';
 import { rawGridDistanceTransform, computeSingleDistanceRing, computeInwardRingPolygons } from './ContourRingSampler.js';
@@ -160,10 +161,20 @@ function inpaintHoleColors(imageBuffer, filledMask, isHole) {
   return { r, g, b };
 }
 
-function computeFilledMaskAndInpaint(imageBuffer) {
-  const { mask } = computeSubjectMask(imageBuffer, {});
-  const { widthPx, heightPx, data } = mask;
+// IMG-018 (D3): 'whole' reads alpha only (the same test computeSubjectMask()'s alpha route applies);
+// every other maskMode keeps computeSubjectMask().
+function computeFilledMaskAndInpaint(imageBuffer, maskMode) {
+  let data;
+  const { widthPx, heightPx } = imageBuffer;
   const pixelCount = widthPx * heightPx;
+  if (maskMode === 'whole') {
+    data = new Uint8ClampedArray(pixelCount);
+    for (let i = 0; i < pixelCount; i++) {
+      data[i] = imageBuffer.data[i * 4 + 3] >= ALPHA_COVERAGE_THRESHOLD ? 1 : 0;
+    }
+  } else {
+    data = computeSubjectMask(imageBuffer, {}).mask.data;
+  }
   const { isHole, holeCount } = findEnclosedHoles(data, widthPx, heightPx);
   const filledMask = new Uint8Array(pixelCount);
   for (let i = 0; i < pixelCount; i++) {
@@ -652,9 +663,11 @@ function densifyRingForWalk(loop, stepMm) {
  * @param {(stage:string, elapsedMs:number)=>void} [args.onStageTiming] Optional per-stage timing hook (D4).
  * @param {number} [args.chromaScale] IMG-017 vividness, default 1. Reaches only the colour labelling
  *   pass, never the ink reference pass, so Line Design geometry is identical at every factor.
+ * @param {string} [args.maskMode] IMG-018: 'whole' masks by alpha only; anything else calls
+ *   computeSubjectMask().
  * @returns {{xMm:number,yMm:number,sizeMm:number,color:string,kind:('outline'|'line'|'fill'|'pocket')}[]}
  */
-export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, palette, onStageTiming, chromaScale = 1 }) {
+export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, layerId, colorMap = {}, palette, onStageTiming, chromaScale = 1, maskMode }) {
   if (!Array.isArray(palette) || palette.length === 0) {
     throw new TypeError('generateLineDesignStonePoints requires a non-empty palette.');
   }
@@ -685,7 +698,7 @@ export function generateLineDesignStonePoints({ imageBuffer, placement, gapMm, l
   const yMmToPx = (yMm) => Math.min(heightPx - 1, Math.max(0, Math.floor((yMm - placement.yMm) / mmPerPx)));
   const pixelIndexAt = (xMm, yMm) => yMmToPx(yMm) * widthPx + xMmToPx(xMm);
 
-  const { filledMask, inpaintedR, inpaintedG, inpaintedB, holeCount } = time('mask', () => computeFilledMaskAndInpaint(imageBuffer));
+  const { filledMask, inpaintedR, inpaintedG, inpaintedB, holeCount } = time('mask', () => computeFilledMaskAndInpaint(imageBuffer, maskMode));
   time('inpaint', () => holeCount); // inpainting already ran inside computeFilledMaskAndInpaint(); measured jointly with mask above -- see report.
 
   const { finalLabel, survivingIds } = time('label', () => buildLabelField({ filledMask, inpaintedR, inpaintedG, inpaintedB, palette, catalogLabs, chromaScale }));

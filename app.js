@@ -714,7 +714,10 @@ function resolveImageTransparentMode(value){return IMAGE_TRANSPARENT_MODES.has(v
 // (computeSubjectMask()). Missing/invalid -> 'threshold', matching every other resolve*() fallback's
 // permissive-default convention -- see docs/specifications/IMG-009-SubjectMask.md decision 3. This is
 // the one function every one of the five sites in decision 6's table resolves maskMode through.
-function resolveImageMaskMode(value){return value==='subject'?'subject':'threshold'}
+// IMG-018: 'whole' (every pixel is subject) is the third value -- see
+// docs/specifications/IMG-018-WholeImageMask.md decision 6. Plain literals: this span is
+// new Function()-evaluated by several test harnesses.
+function resolveImageMaskMode(value){return value==='subject'?'subject':value==='whole'?'whole':'threshold'}
 // IMG-017: layer.vividness, the chroma factor applied before catalogue matching. Exactly one of the
 // four Studio steps, anything else (missing, a string, an off-step number) -> 1, which is the
 // shipped arithmetic -- see docs/specifications/IMG-017-Vividness.md decision 3. Plain literals: this
@@ -1140,7 +1143,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
   // freeze fallback below.
   if(mode==='line-design'){
-    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness)].join('|');
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness),resolveImageMaskMode(layer.maskMode)].join('|');
     let cached=lineDesignStoneCache.get(key);
     if(!cached&&lineDesignFrozen){
       for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
@@ -1150,7 +1153,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
       // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
       // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
       // default for either field.
-      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness)};
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness),maskMode:resolveImageMaskMode(layer.maskMode)};
       const result=this.permanentEngine.generateImageLayout(params);
       cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
       lineDesignStoneCache.set(key,cached);

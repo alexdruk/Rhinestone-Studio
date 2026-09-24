@@ -96,7 +96,8 @@ function normalizeParams(params) {
   // project (no stored maskMode) and every caller predating this milestone (four existing test files,
   // resolveLayerShapeSource()) resolve to 'threshold' and stay byte-identical -- see
   // docs/specifications/IMG-009-SubjectMask.md decision 3.
-  const maskMode = params.maskMode === 'subject' ? 'subject' : 'threshold';
+  // IMG-018: 'whole' is the third value, see docs/specifications/IMG-018-WholeImageMask.md.
+  const maskMode = params.maskMode === 'subject' ? 'subject' : params.maskMode === 'whole' ? 'whole' : 'threshold';
 
   // IMG-017: read-site permissive default, like maskMode above -- any finite number in [1, 2], 1
   // otherwise, so every saved project (no stored vividness) stays byte-identical. See
@@ -158,9 +159,10 @@ export function compositeChannelOntoWhite(imageBuffer, channelOffset) {
  * @param {'white'|'ignore'} [params.transparent] Default 'white' -- see IMG-001-ImageToStrass.md.
  * @param {number} [params.colorCount] Integer 1-8, default 1. >1 runs the IMG-002 quantizer.
  * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1.
- * @param {'threshold'|'subject'} [params.maskMode] Default 'threshold' -- which operator produces
+ * @param {'threshold'|'subject'|'whole'} [params.maskMode] Default 'threshold' -- which operator produces
  *   the on/off mask `data`/blur/resize/colorCount all run on. 'subject' calls SubjectMask.js's
  *   computeSubjectMask() instead of applyThreshold(); see docs/specifications/IMG-009-SubjectMask.md.
+ *   'whole' keeps every pixel (IMG-018); see docs/specifications/IMG-018-WholeImageMask.md.
  * @returns {{widthPx: number, heightPx: number, data: Uint8ClampedArray, luminance:
  *   Uint8ClampedArray, alpha: Uint8ClampedArray, edge: Uint8ClampedArray, labels:
  *   (Uint8ClampedArray|null), colorGroups?: {rgb: number[], pixelShare: number, nearestId: string}[]}}
@@ -175,10 +177,17 @@ export function prepareImageField(imageBuffer, params = {}) {
   const luminanceNative = toGrayscale(imageBuffer);
   const alphaNative = extractAlphaChannel(imageBuffer);
 
-  let mask = options.maskMode === 'subject'
-    ? computeSubjectMask(imageBuffer, {}).mask
-    : applyThreshold(luminanceNative, options.threshold);
-  if (options.invert) {
+  // IMG-018 (D2): 'whole' is an all-ones mask; threshold is not read and invert is not applied, so
+  // only the transparent policy below can remove pixels.
+  let mask;
+  if (options.maskMode === 'subject') {
+    mask = computeSubjectMask(imageBuffer, {}).mask;
+  } else if (options.maskMode === 'whole') {
+    mask = createField({ widthPx: imageBuffer.widthPx, heightPx: imageBuffer.heightPx, data: new Uint8ClampedArray(imageBuffer.widthPx * imageBuffer.heightPx).fill(1) });
+  } else {
+    mask = applyThreshold(luminanceNative, options.threshold);
+  }
+  if (options.invert && options.maskMode !== 'whole') {
     mask = invertMask(mask);
   }
   if (options.transparent === 'ignore') {

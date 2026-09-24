@@ -290,9 +290,10 @@ await test('9. App-path source-text guard: resolveImageMaskMode(), the five deci
   // layer fields) -- assert the exact needle count so a future edit can't silently satisfy this guard
   // from just one of the two. IMG-012 added a 4th occurrence of this exact substring
   // (resolveImageColorCount()'s own prepareAutoColorField() call, for the 'auto' sentinel) -- see
-  // tools/test-img-012-auto-colour-count.mjs item 4/5/6.
+  // tools/test-img-012-auto-colour-count.mjs item 4/5/6. IMG-018 added a 5th, the Line Design params
+  // in generateImageStonesLive().
   const maskModeParamOccurrences = (appJs.match(/maskMode:resolveImageMaskMode\(layer\.maskMode\)/g) || []).length;
-  assert.equal(maskModeParamOccurrences, 4, 'expected exactly 4 occurrences of maskMode:resolveImageMaskMode(layer.maskMode) in app.js (generateImageStonesLive, resolveLayerShapeSource, resolveImageExportRegions, and IMG-012\'s resolveImageColorCount())');
+  assert.equal(maskModeParamOccurrences, 5, 'expected exactly 5 occurrences of maskMode:resolveImageMaskMode(layer.maskMode) in app.js (generateImageStonesLive, resolveLayerShapeSource, resolveImageExportRegions, IMG-012\'s resolveImageColorCount(), and IMG-018\'s Line Design params in generateImageStonesLive())');
 
   assert.ok(indexHtml.includes('id="imgMaskMode"'), 'expected index.html to contain #imgMaskMode');
 

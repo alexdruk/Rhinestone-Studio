@@ -1,6 +1,6 @@
 # IMG-018 — Whole-image mask
 
-**Status: spec.** File:line citations are against `develop` @ `d5ffe69` (the IMG-017 follow-up
+**Status: built.** File:line citations are against `develop` @ `d5ffe69` (the IMG-017 follow-up
 merge). Every anchor below was re-grepped on that tip. The figures were measured by the lead
 architect in a prototype. This spec's own scratch probes re-derived every fixture figure (W1 to W5),
 every mutant result (M1 to M5) and every photo figure, on a scratch copy of the tree with decisions 1
