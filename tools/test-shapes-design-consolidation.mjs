@@ -109,7 +109,7 @@ await test('6. XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES/VECTOR_FILL_MODE_TYPES all inc
   const resolveSrc = extractBlock(appJs, /async function resolveLayerShapeSource\(layer\)\{[\s\S]*?\n\}/, 'function resolveLayerShapeSource()');
   assert.match(resolveSrc, /SHAPE_LAYER_TYPES\.has\(layer\.type\)/);
 
-  const generateSrc = extractBlock(appJs, / async generate\(project\)\{[\s\S]*?return new StoneLayout\(\{layerId:'project',stones\}\)\}/, 'GeometryEngine.generate()');
+  const generateSrc = extractBlock(appJs, / async generate\(project\)\{[\s\S]*?return\{layout:new StoneLayout\(\{layerId:'project',stones\}\),failures\}\}/, 'GeometryEngine.generate()');
   assert.match(generateSrc, /SHAPE_LAYER_TYPES\.has\(l\.type\)/);
 });
 

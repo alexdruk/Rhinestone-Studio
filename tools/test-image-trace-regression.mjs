@@ -49,7 +49,7 @@ await test('2. app.js\'s generateImageStonesLive() calls the permanent engine\'s
   const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
   assert.match(appJs, /async generateImageStonesLive\s*\(/, 'expected an async generateImageStonesLive method');
   assert.match(appJs, /this\.permanentEngine\.generateImageLayout\(params\)/, 'expected generateImageStonesLive to call this.permanentEngine.generateImageLayout(params)');
-  assert.match(appJs, /if\(l\.type==='image'\)raw\.push\(\.\.\.await this\.generateImageStonesLive\(l\)\)/, 'expected generate() to dispatch image layers through generateImageStonesLive');
+  assert.match(appJs, /if\(l\.type==='image'\)for\(const s of await this\.generateImageStonesLive\(l\)\)raw\.push\(s\)/, 'expected generate() to dispatch image layers through generateImageStonesLive');
 });
 
 await test('3. GeometryEngine.js defines generateImageLayout() and calls sampleFieldFillPoints()/prepareImageField(), not a reimplemented sampler', async () => {
