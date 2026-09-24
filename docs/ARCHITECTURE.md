@@ -171,7 +171,9 @@ handle at any threshold value). As of IMG-018, `'whole'` is a third value: every
 full-bleed image with no background; Line Design masks by alpha coverage alone in this mode. Every
 project saved before IMG-009 has no `maskMode` and resolves to `'threshold'`, as does any unknown
 value, generating byte-identical geometry; see `docs/specifications/IMG-009-SubjectMask.md` and
-`docs/specifications/IMG-018-WholeImageMask.md`.
+`docs/specifications/IMG-018-WholeImageMask.md`. As of IMG-019, above 1000 px on the longer side,
+`'subject'` computes its mask on an 800 px box-resized copy and maps it back to native size by
+nearest lookup; Line Design keeps the native mask (`docs/specifications/IMG-019-SubjectMaskResized.md`).
 `src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
 `Stone`/`StoneLayout` — mirroring `src/svg/**`'s existing "only produces neutral input, GeometryEngine
 is the only caller that turns it into stones" rule exactly. `generateImageLayout()` is synchronous
