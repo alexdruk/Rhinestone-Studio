@@ -258,6 +258,12 @@ const GRID_MAJOR_STROKE_WIDTH_PX = 1.5;
 // off the edge, while staying a one-time, bounded number of Path items (not rebuilt per pan/zoom
 // tick -- see this file's header comment on Paper.js project units and drawing-mode performance).
 const GRID_EXTENT_MARGIN_MM = 2000;
+// RS-3040: sheet outline, safe-area and plate guide styling, in screen px (strokeScaling:false). The
+// dash pattern matches the 2D canvas's drawSafeAreaGuide() in app.js.
+const SHEET_OUTLINE_COLOR = 'rgba(20,40,80,.55)';
+const SHEET_GUIDE_COLOR = 'rgba(20,120,255,.6)';
+const SHEET_GUIDE_STROKE_WIDTH_PX = 1.25;
+const SHEET_GUIDE_DASH_PX = [5, 4];
 // RS-3010 Step 2f: same increment and Shift-gated convention as app.js's own rotate-handle
 // (`ROTATION_SNAP_STEP_DEG`, `if(e.shiftKey)rotationDeg=Math.round(...)`) -- defined locally here
 // rather than imported, since app.js has no exports and already imports createDrawingTool from
@@ -1156,7 +1162,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     getTextLayerStones = () => null,
     // IMG-020: the 'image'-layer counterpart of getTextLayerStones -- the same layout filter, read by
     // rebuildImageStoneGroupForShape(). Design never calls the engine for an image layer.
-    getImageLayerStones = () => null
+    getImageLayerStones = () => null,
+    // RS-3040: the current sheet's canvas size and guide outlines, from the same template data the
+    // 2D canvas draws (app.js's designSheetFraming()). Read on enter() and on every resize(); null
+    // (the default) keeps the canvasMm enter() was given and draws no guides.
+    getSheetFraming = () => null
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -1166,6 +1176,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // gridLayer is the dedicated background-grid layer built once by buildGrid(); null until then.
   let contentLayer = null;
   let gridLayer = null;
+  // RS-3040: the sheet outline and safe-area guide (or a plate's circles), rebuilt only when their data changes
+  // (sheetGuidesKey). Locked, so paper.project.hitTest() never returns one.
+  let sheetGuideLayer = null;
+  let sheetGuidesKey = null;
   let tool = null;
   let canvasMm = { width: 100, height: 100 };
   let baseScale = 1;
@@ -1426,6 +1440,65 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // the real assignment right after it always actually applies.
     paper.view.viewSize = new paper.Size(1, 1);
     paper.view.viewSize = new paper.Size(rect.width, rect.height);
+  }
+
+  /**
+   * RS-3040: the fit scale in CSS px per mm, which is what paper.view.zoom measures. canvasEl.width/
+   * height are the devicePixelRatio-scaled backing size, so they are divided back down; they are only
+   * used when the canvas has no laid-out box (never in a browser while Design is open).
+   */
+  function fitBaseScale(paddingPx) {
+    const rect = canvasEl.getBoundingClientRect();
+    const dpr = Math.max(1, (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1);
+    const widthPx = rect.width > 0 ? rect.width : canvasEl.width / dpr;
+    const heightPx = rect.height > 0 ? rect.height : canvasEl.height / dpr;
+    return drawingBaseScale(canvasMm, widthPx, heightPx, paddingPx);
+  }
+
+  /**
+   * RS-3040: rebuilds the sheet guides into their own locked layer, directly above the grid and
+   * below every shape and stone. Strokes use strokeScaling:false so their width and dashes stay in
+   * screen px at any zoom without a rebuild.
+   */
+  function rebuildSheetGuides(guides) {
+    const key = JSON.stringify(guides || []);
+    if (sheetGuideLayer && key === sheetGuidesKey) return;
+    sheetGuidesKey = key;
+    if (!sheetGuideLayer) {
+      sheetGuideLayer = new paper.Layer();
+      sheetGuideLayer.locked = true;
+      sheetGuideLayer.insertBelow(contentLayer);
+      contentLayer.activate();
+    }
+    sheetGuideLayer.removeChildren();
+    for (const guide of guides || []) {
+      const item = guide.kind === 'circle'
+        ? new paper.Path.Circle({ center: [guide.cxMm, guide.cyMm], radius: guide.radiusMm, insert: false })
+        : new paper.Path.Rectangle({ point: [guide.xMm, guide.yMm], size: [guide.widthMm, guide.heightMm], insert: false });
+      item.strokeColor = guide.role === 'sheet' ? SHEET_OUTLINE_COLOR : SHEET_GUIDE_COLOR;
+      item.strokeWidth = SHEET_GUIDE_STROKE_WIDTH_PX;
+      item.strokeScaling = false;
+      if (guide.dashed) item.dashArray = SHEET_GUIDE_DASH_PX;
+      item.data.sheetGuideRole = guide.role;
+      sheetGuideLayer.addChild(item);
+    }
+  }
+
+  /**
+   * RS-3040: adopts the framing's canvas size as canvasMm. With refitOnCanvasChange (resize()), a
+   * real size change -- a template switch or a sheet/vessel size edit -- also drops the user's zoom
+   * and pan so the new sheet is fitted; the same size keeps them. enter() passes false: board.reset()
+   * has already reset the viewport there.
+   */
+  function applySheetFraming(framing, refitOnCanvasChange) {
+    if (!framing) return;
+    const changed = framing.canvasMm.width !== canvasMm.width || framing.canvasMm.height !== canvasMm.height;
+    canvasMm = { width: framing.canvasMm.width, height: framing.canvasMm.height };
+    if (changed && refitOnCanvasChange) {
+      board.zoom = 1;
+      board.panXmm = 0;
+      board.panYmm = 0;
+    }
   }
 
   /**
@@ -4199,7 +4272,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * @param {{width:number,height:number}} projectCanvasMm project.canvas at the moment drawing
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
-     * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
+     * @param {number} paddingPx fit margin in CSS px (RS-3040: app.js passes 38, never scaled by
+     *   devicePixelRatio, because paper.view.zoom is measured in CSS px).
      * @param {'select'|'lasso'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
@@ -4238,13 +4312,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // moments earlier (or the canvas may simply not have been laid out yet) -- one explicit
       // resync here means enter() never depends on setup()'s own guess being right.
       resyncViewSize();
-      baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
+      const framing = getSheetFraming();
+      applySheetFraming(framing, false);
+      baseScale = fitBaseScale(paddingPx);
       applyViewport();
       // RS-3010 Step 2d: built once, after applyViewport() has set the real initial zoom (see
       // buildGrid()'s own doc comment for why -- its stroke widths are baked in screen-px-to-mm
       // terms at build time). Guarded on gridLayer rather than isSetUp so it can only ever run on
       // the same first-setup pass, staying entirely absent from every re-entry.
       if (!gridLayer) buildGrid();
+      if (framing) rebuildSheetGuides(framing.guides);
       attachTool();
       updateCursor();
     },
@@ -4371,11 +4448,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * layoutCanvas: a window resize, or a workspace-tab switch. Preserves the user's current
      * pan/zoom (DrawingBoard.panXmm/panYmm/zoom untouched) rather than re-fitting from scratch,
      * so an in-progress drawing session isn't visually reset by an incidental resize.
+     * RS-3040: also re-reads getSheetFraming() -- a changed sheet size re-fits (see
+     * applySheetFraming()) and changed guide data rebuilds the guides.
      */
     resize(paddingPx) {
       if (!board.active) return;
       resyncViewSize();
-      baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
+      const framing = getSheetFraming();
+      applySheetFraming(framing, true);
+      baseScale = fitBaseScale(paddingPx);
+      if (framing) rebuildSheetGuides(framing.guides);
       applyViewport();
     },
 
@@ -5097,6 +5179,27 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         activeLayerIsContentLayer: paper.project.activeLayer === contentLayer,
         gridItemCount: gridLayer ? gridLayer.children.length : 0,
         shapeCount: board.listShapes().length
+      };
+    },
+
+    /**
+     * RS-3040: QA/verification-only, read-only -- same precedent as debugGrid above. The sheet guide
+     * layer's position in the layer stack (it must sit between the grid and the content), whether it
+     * is locked, and each guide's role, fill bounds (project-mm), dash and stroke scaling.
+     */
+    get debugSheetGuides() {
+      const layers = paper.project ? paper.project.layers : [];
+      return {
+        layerIndex: sheetGuideLayer ? layers.indexOf(sheetGuideLayer) : -1,
+        gridLayerIndex: gridLayer ? layers.indexOf(gridLayer) : -1,
+        contentLayerIndex: contentLayer ? layers.indexOf(contentLayer) : -1,
+        locked: sheetGuideLayer ? sheetGuideLayer.locked : null,
+        items: sheetGuideLayer ? sheetGuideLayer.children.map((c) => ({
+          role: c.data.sheetGuideRole,
+          bounds: [c.bounds.x, c.bounds.y, c.bounds.width, c.bounds.height],
+          dashed: Boolean(c.dashArray && c.dashArray.length),
+          strokeScaling: c.strokeScaling
+        })) : []
       };
     },
 
