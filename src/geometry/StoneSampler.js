@@ -517,7 +517,9 @@ export function dedupeStonesByRadius(stones) {
     return stones;
   }
 
-  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of stones) cellSizeMm = Math.max(cellSizeMm, s.d);
   const buckets = new Map();
   const kept = [];
 
@@ -585,7 +587,9 @@ export function dropOverlappingSizedStones(assigned) {
     return assigned;
   }
 
-  const cellSizeMm = Math.max(...assigned.map((s) => s.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of assigned) cellSizeMm = Math.max(cellSizeMm, s.sizeMm);
   const buckets = new Map();
   const kept = [];
 
@@ -648,7 +652,9 @@ export function findCrossGroupCollisions(stones) {
     return collisions;
   }
 
-  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of stones) cellSizeMm = Math.max(cellSizeMm, s.d);
   const buckets = new Map();
   const seenGroupPairs = new Set();
 

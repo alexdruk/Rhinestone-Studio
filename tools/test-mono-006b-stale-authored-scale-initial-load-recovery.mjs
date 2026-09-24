@@ -337,10 +337,10 @@ const generateSandboxFactory = () => {
     ${recoverMethodSrc}
     async function generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const base={...buildTextLayoutBaseParams(layer),authoredScale:resolveAuthoredScale(layer)};const result=await this.permanentEngine.generateTextLayout(base);const{offsetX,offsetY}=computeTextPlacementOffset();return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
     ${generateMethodSrc
-      .replace(/if\(SHAPE_LAYER_TYPES\.has\(l\.type\)\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\);/, '')
-      .replace(/if\(l\.type==='svg'\)raw\.push\(\.\.\.await this\.generateSvgStonesLive\(l\)\);/, '')
-      .replace(/if\(l\.type==='image'\)raw\.push\(\.\.\.await this\.generateImageStonesLive\(l\)\);/, '')
-      .replace(/if\(l\.type==='path'\)raw\.push\(\.\.\.await this\.generatePathStonesLive\(l\)\);/, '')}
+      .replace(/if\(SHAPE_LAYER_TYPES\.has\(l\.type\)\)for\(const s of await this\.generateShapeStonesLive\(l\)\)raw\.push\(s\);/, '')
+      .replace(/if\(l\.type==='svg'\)for\(const s of await this\.generateSvgStonesLive\(l\)\)raw\.push\(s\);/, '')
+      .replace(/if\(l\.type==='image'\)for\(const s of await this\.generateImageStonesLive\(l\)\)raw\.push\(s\);/, '')
+      .replace(/if\(l\.type==='path'\)for\(const s of await this\.generatePathStonesLive\(l\)\)raw\.push\(s\);/, '')}
     return { generate, recoverStaleAuthoredScales, generateTextStonesLive };
     `
   );
@@ -352,7 +352,7 @@ await test('15. the real generate() recovers a stale layer and returns non-empty
   const sandbox = generateSandboxFactory()(makeFontManagerStub(['rs-modern', 'rs-block']), dedupeStonesByRadius, Stone, StoneLayout, new Set());
   const engineLike = { permanentEngine, generate: sandbox.generate, recoverStaleAuthoredScales: sandbox.recoverStaleAuthoredScales, generateTextStonesLive: sandbox.generateTextStonesLive };
   const project = { layers: [staleTextLayer()] };
-  const layout = await engineLike.generate(project);
+  const { layout } = await engineLike.generate(project);
   assert.equal('authoredScale' in project.layers[0], false, 'generate() itself recovered the layer, not just a separate helper');
   assert.ok(layout.stones.length > 0, 'expected non-empty stones from the single call every entry path makes');
 });
@@ -362,8 +362,8 @@ await test('16. generate() does not re-derive the same fix on every call once re
   const sandbox = generateSandboxFactory()(makeFontManagerStub(['rs-modern', 'rs-block']), dedupeStonesByRadius, Stone, StoneLayout, new Set());
   const engineLike = { permanentEngine, generate: sandbox.generate, recoverStaleAuthoredScales: sandbox.recoverStaleAuthoredScales, generateTextStonesLive: sandbox.generateTextStonesLive };
   const project = { layers: [staleTextLayer()] };
-  const first = await engineLike.generate(project);
-  const second = await engineLike.generate(project);
+  const { layout: first } = await engineLike.generate(project);
+  const { layout: second } = await engineLike.generate(project);
   assert.equal('authoredScale' in project.layers[0], false);
   assert.equal(first.stones.length, second.stones.length, 'stable across repeated calls once recovered');
 });

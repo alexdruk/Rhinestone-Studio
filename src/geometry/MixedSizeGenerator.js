@@ -181,7 +181,11 @@ export function selectNonOverlappingSizedStones(candidatePoints, baseStones, eli
     return [];
   }
 
-  const maxDiameterMm = Math.max(eligibleSizesMm[0], ...baseStones.map((s) => s.sizeMm), 0);
+  // Folded one-by-one (not `Math.max(...bigArray)`): spreading a stone-sized array as call arguments
+  // overflows the JS call stack (RS-3039) -- the same hazard StoneSampler.js's
+  // sampleContourFillPoints() already documents and avoids.
+  let maxDiameterMm = Math.max(eligibleSizesMm[0], 0);
+  for (const s of baseStones) maxDiameterMm = Math.max(maxDiameterMm, s.sizeMm);
   // Generous bucket size: any pair whose separation threshold ((a+b)/2 + gap) could possibly be
   // breached is guaranteed to be found within the 3x3 neighborhood, since that threshold can never
   // exceed maxDiameterMm + gapMm.

@@ -121,7 +121,7 @@ await test('the Design-mode drawing board (DrawingCanvasTool.js) is untouched by
 
 await test('engine.generate() and dedupeStonesByRadius() themselves were not modified for this milestone', () => {
   // generate() still ends by deduping raw stones and wrapping them in a fresh StoneLayout.
-  assert.match(appJs, /const stones=dedupeStonesByRadius\(raw\)\.map\(s=>new Stone\(\{xMm:s\.x,yMm:s\.y,sizeMm:s\.d,color:s\.color,layerId:s\.layerId\}\)\);return new StoneLayout\(\{layerId:'project',stones\}\)/);
+  assert.match(appJs, /const stones=dedupeStonesByRadius\(raw\)\.map\(s=>new Stone\(\{xMm:s\.x,yMm:s\.y,sizeMm:s\.d,color:s\.color,layerId:s\.layerId\}\)\);return\{layout:new StoneLayout\(\{layerId:'project',stones\}\),failures\}\}/);
 });
 
 if (process.exitCode) console.error('\nmove-drag fast-path wiring tests FAILED');

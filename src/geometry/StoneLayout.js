@@ -172,7 +172,9 @@ export function findOverlappingStonePairs(stones) {
 export function hasAnyOverlappingStonePair(stones) {
   if (stones.length < 2) return false;
 
-  const cellSizeMm = Math.max(...stones.map((stone) => stone.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const stone of stones) cellSizeMm = Math.max(cellSizeMm, stone.sizeMm);
   const buckets = new Map();
   for (const stone of stones) {
     const gx = Math.floor(stone.xMm / cellSizeMm);
@@ -237,7 +239,9 @@ export function measureStoneCrowding(stones, { gapMm } = {}) {
     return { count, minRimGapMm: null, medianRimGapMm: null, fractionBelowHalfGap: 0 };
   }
 
-  const cellSizeMm = Math.max(...stones.map((stone) => stone.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const stone of stones) cellSizeMm = Math.max(cellSizeMm, stone.sizeMm);
   const buckets = new Map();
   for (const stone of stones) {
     const gx = Math.floor(stone.xMm / cellSizeMm);

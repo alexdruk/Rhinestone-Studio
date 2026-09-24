@@ -124,6 +124,7 @@ export const GROUPS = {
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
     'test-read-008-ratio-floor.mjs',
+    'test-rs-3039-large-layout.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
@@ -245,6 +246,7 @@ export const GROUPS = {
     // PERF-006 (MAINT-004 registration): pure spatial-geometry algorithm --
     // isPointInsidePolygons()'s cache in StoneSampler.js.
     'test-perf-006-point-in-polygon-cache.mjs',
+    'test-rs-3039-large-layout.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
