@@ -1644,6 +1644,9 @@ function isPointInActiveSelection(pointAbsoluteMm,selection){
 // instant it finalizes (freehand stroke end, a preset's drag-end, polygon close) without touching
 // project state itself -- app.js stays the only owner of `project`, matching this file's own
 // "never touches project state" doc comment on the old commit()/DrawingBoard.js.
+// IMG-020: one layerId's stones from the `layout` global, in DrawingCanvasTool.js's {x,y,d,color}
+// shape -- the single filter behind both the getTextLayerStones and getImageLayerStones hooks.
+function layoutStonesForLayer(layerId){return layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))}
 const drawingTool=createDrawingTool(layoutCanvas,{
   // stoneSize/gap/color default from the currently-selected layer, the same convention
   // createShapeLayer()/the SVG-import handler elsewhere in this file already use for a brand-new
@@ -2424,7 +2427,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // tick (Design-active or not, per that function's own unconditional per-layer loop), so Design's
   // own canvas never becomes a second place stones can be computed. Mirrors generatePathLayout()'s
   // own {x,y,d,color} return shape exactly, from the real Stone.xMm/yMm/sizeMm/color fields.
-  getTextLayerStones:(layerId)=>layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))
+  getTextLayerStones:(layerId)=>layoutStonesForLayer(layerId),
+  // IMG-020: the same layout filter for an 'image' layer, so Design draws its stones from the
+  // layout rather than asking getLayerStoneParams() (which is 'path'-only) and drawing none.
+  getImageLayerStones:(layerId)=>layoutStonesForLayer(layerId)
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
 // automated verification of the Design canvas's background grid layering -- same "read-only,

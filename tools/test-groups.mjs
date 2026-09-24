@@ -371,6 +371,7 @@ export const GROUPS = {
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
     'test-mono-021-mark-hooks.mjs',
+    'test-img-020-image-stones-in-design.mjs',
     // PERF-005 (MAINT-004 registration): app.js's live-editing UI responsiveness -- the
     // stone-size-picker overlap-capability re-sweep call-count fix.
     'test-perf-005-stone-size-lazy-sweep.mjs',

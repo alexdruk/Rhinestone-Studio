@@ -1283,7 +1283,9 @@ remaining layer types and to the two placement tools:
   faithful proxy, not a placeholder: the main canvas never draws the source bitmap on `layoutCanvas`
   either, only the selection box and the generated stone dots, so the rectangle reads exactly as an
   image layer already reads everywhere else in the app. The same rectangle fallback also covers an
-  `svg` whose outline can't be resolved (missing/unparseable `svgSource`).
+  `svg` whose outline can't be resolved (missing/unparseable `svgSource`). Since IMG-020, an `image`
+  layer's stones in Design are drawn from the layout through `getImageLayerStones()`, like text's,
+  and are rebuilt when their signature, box or rotation changes.
 - **Step 3 — `text` layers join Select (no resize handles).** Click / drag / rotate only — font
   size is an Inspector field (`#height`), not a drag concept, so the proxy sets
   `item.data.noResizeHandles` and only the rotate handle applies. `materializeTextItemFromLayer()`
