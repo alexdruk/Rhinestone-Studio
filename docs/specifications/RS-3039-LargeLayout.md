@@ -202,6 +202,18 @@ changed on the test side only:
   `Layout generation failed: boom`.
 - `tools/test-mono-006a-authored-scale-regression.mjs:228`: its source regex pins the
   `startsWith('Text generation failed')` clear. It is updated to the §4 regex form.
+- `tools/test-svg-integration.mjs:32`, `tools/test-image-trace-regression.mjs:52` and
+  `tools/test-path-boolean-integration.mjs:146`: each matches its own type's branch as
+  `if(l.type==='svg'|'image'|'path')raw.push(...await this.generate{Svg,Image,Path}StonesLive(l))`.
+  Each is updated to the D1 loop form
+  `for(const s of await this.generate{Svg,Image,Path}StonesLive(l))raw.push(s)`.
+- `tools/test-shapes-design-consolidation.mjs:111`: it finds `generate()` with a regex that ends at
+  the old last statement, `return new StoneLayout({layerId:'project',stones})}`. It now ends at the
+  D2 statement, `return{layout:new StoneLayout({layerId:'project',stones}),failures}}`.
+
+The first version of this list missed these four. The search for affected tests looked for
+`generate()`'s opening line and for `engine.generate`, not for the text of each line D1 and D2
+change.
 
 These use `updateAll()`/`generateProjectThumbnail()` source but **do not** need a change:
 `tools/test-text-position-workflow.mjs:180` (its regex starts at `layout=generated;[\s\S]*?`. That
