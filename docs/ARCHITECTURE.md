@@ -1285,7 +1285,9 @@ remaining layer types and to the two placement tools:
   image layer already reads everywhere else in the app. The same rectangle fallback also covers an
   `svg` whose outline can't be resolved (missing/unparseable `svgSource`). Since IMG-020, an `image`
   layer's stones in Design are drawn from the layout through `getImageLayerStones()`, like text's,
-  and are rebuilt when their signature, box or rotation changes.
+  and are rebuilt when their signature, box or rotation changes. Since IMG-021, an `image` layer's
+  stones, its SVG-export regions and its Boolean trace follow `rotationDeg`, about the unrotated
+  box's centre.
 - **Step 3 — `text` layers join Select (no resize handles).** Click / drag / rotate only — font
   size is an Inspector field (`#height`), not a drag concept, so the proxy sets
   `item.data.noResizeHandles` and only the rotate handle applies. `materializeTextItemFromLayer()`

@@ -213,6 +213,7 @@ export const GROUPS = {
     'test-img-017-vividness.mjs',
     'test-img-018-whole-image-mask.mjs',
     'test-img-019-subject-mask-resized.mjs',
+    'test-img-021-rotated-image-stones.mjs',
     'test-image-trace-regression.mjs',
     'test-fill-algorithms.mjs',
     'test-fill-algorithms-integration.mjs',
