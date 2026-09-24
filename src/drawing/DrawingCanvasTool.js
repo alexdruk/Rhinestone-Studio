@@ -801,7 +801,13 @@ function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
   // exact same x/y/w/h/rotationDeg proxy a first-class 'rectangle' layer needs -- built once, in
   // buildRectangleProxyItem() below, rather than a second copy here. It stamps rotationDeg/pivot
   // itself, so this returns early and leaves the real-outline branch's own tail untouched.
-  if (!item) return buildRectangleProxyItem(layer);
+  // IMG-020: an 'image' proxy (never an unresolvable 'svg') is flagged isImageProxy, which routes its
+  // stone group to rebuildImageStoneGroupForShape() -- stones read from the layout, not regenerated.
+  if (!item) {
+    const rect = buildRectangleProxyItem(layer);
+    if (layer.type === 'image') rect.data.isImageProxy = true;
+    return rect;
+  }
 
   const rotationDeg = layer.rotationDeg || 0;
   const pivot = new paper.Point(layer.x + layer.w / 2, layer.y + layer.h / 2);
@@ -810,6 +816,30 @@ function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
   item.data.pivotXMm = pivot.x;
   item.data.pivotYMm = pivot.y;
   return item;
+}
+
+/**
+ * IMG-020: a translation-invariant signature of an image layer's layout stones -- the count plus
+ * FNV-1a over x, y (relative to the first stone) and d at 0.001 mm and the colour key's characters.
+ * syncFromProjectLayers() compares it against the one stamped on the image's stone group to spot an
+ * Image dialog change (vividness, colours, mask, fill mode, stone size, seed) that leaves the box
+ * where it was. Relative x/y keep a Design move (the group is translated live) from rebuilding once
+ * the regenerated, equally shifted layout arrives; a translation from anywhere else moves the box.
+ * @param {{x:number,y:number,d:number,color:string}[]} stones
+ * @returns {string}
+ */
+function layoutStoneSignature(stones) {
+  if (!stones.length) return '0';
+  const x0 = stones[0].x, y0 = stones[0].y;
+  let h = 2166136261 >>> 0;
+  const mix = (v) => { h ^= v | 0; h = Math.imul(h, 16777619) >>> 0; };
+  for (const s of stones) {
+    mix(Math.round((s.x - x0) * 1000));
+    mix(Math.round((s.y - y0) * 1000));
+    mix(Math.round(s.d * 1000));
+    for (let i = 0; i < s.color.length; i++) mix(s.color.charCodeAt(i));
+  }
+  return stones.length + ':' + h;
 }
 
 /**
@@ -1123,7 +1153,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // not) filtered to this one layerId. Returns plain {x,y,d,color} stones (same shape
     // generatePathLayout()'s own return value already uses) or null/[] for a layer with none yet
     // (empty text, an unknown font, or the font manifest failed to load).
-    getTextLayerStones = () => null
+    getTextLayerStones = () => null,
+    // IMG-020: the 'image'-layer counterpart of getTextLayerStones -- the same layout filter, read by
+    // rebuildImageStoneGroupForShape(). Design never calls the engine for an image layer.
+    getImageLayerStones = () => null
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -2423,6 +2456,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       removeStoneGroupForShape(shapeId);
       return;
     }
+    // IMG-020: an image proxy's stones come from the layout, so every generic caller (zoom re-bake,
+    // new-shape build, duplicate, refreshStoneGroupForLayer, the resize throttle) takes that route.
+    if (shape.item.data.isImageProxy) {
+      rebuildImageStoneGroupForShape(shapeId);
+      return;
+    }
     const layerId = shape.item.data.layerId;
     const styleParams = layerId ? getLayerStoneParams(layerId) : null;
     if (!styleParams) {
@@ -2531,12 +2570,63 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       return;
     }
     shape.item.data.markStones = stones.map((s) => ({ x: s.x, y: s.y, d: s.d }));
-    const layerId = shape.item.data.layerId;
-    const group = buildStoneSpriteGroup(stones, layerId);
+    installStoneGroupForShape(shape, stones);
+  }
+
+  /**
+   * IMG-020: the shared tail of rebuildTextStoneGroupForShape() and rebuildImageStoneGroupForShape()
+   * -- builds the sprite Group, inserts it directly below the proxy, then removes the old one, so
+   * z-order never has a frame without a group present.
+   * @param {{id:string,item:paper.Item}} shape
+   * @param {{x:number,y:number,d:number,color:string}[]} stones
+   * @returns {paper.Group}
+   */
+  function installStoneGroupForShape(shape, stones) {
+    const group = buildStoneSpriteGroup(stones, shape.item.data.layerId);
     group.insertBelow(shape.item);
-    const old = stoneGroups.get(shapeId);
+    const old = stoneGroups.get(shape.id);
     if (old) old.remove();
-    stoneGroups.set(shapeId, group);
+    stoneGroups.set(shape.id, group);
+    return group;
+  }
+
+  /**
+   * IMG-020: settles an image's stone group at a resize or rotate drop, after the drag state is
+   * cleared. A real change keeps the group hidden and clears its signature, so the next
+   * syncFromProjectLayers() -- which reads the layout regenerated by onShapeResized/onShapeRotated's
+   * updateAll() -- finds a mismatch and rebuilds a visible group. A handle click with no change just
+   * shows the group again.
+   * @param {string} shapeId
+   * @param {boolean} changed
+   */
+  function finishImageStoneGroupDrop(shapeId, changed) {
+    const group = stoneGroups.get(shapeId);
+    if (!group) return;
+    if (changed) group.data.layoutSignature = null;
+    else group.visible = true;
+  }
+
+  /**
+   * IMG-020: the 'image'-layer counterpart of rebuildTextStoneGroupForShape() -- draws the layer's
+   * stones from the layout (`stones`, or the getImageLayerStones() hook when omitted) and stamps
+   * the group with layoutStoneSignature() for syncFromProjectLayers()'s refresh test. Never sets
+   * item.data.markStones: markProxyContainsPoint() would switch the image from a box test to bead
+   * proximity and change RS-3015's 'ineligible' reporting for the mark tools. While this shape's
+   * own resize is in progress it returns and leaves the hidden group as it is: the layout still
+   * holds the pre-drag stones, and the reconcile after the drop rebuilds from the regenerated one.
+   * @param {string} shapeId
+   * @param {{x:number,y:number,d:number,color:string}[]} [stones]
+   */
+  function rebuildImageStoneGroupForShape(shapeId, stones) {
+    const shape = board.getShape(shapeId);
+    if (!shape) {
+      removeStoneGroupForShape(shapeId);
+      return;
+    }
+    if (interactionKind === 'resize' && shapeId === resizeShapeId) return;
+    const list = stones || getImageLayerStones(shape.item.data.layerId) || [];
+    const group = installStoneGroupForShape(shape, list);
+    group.data.layoutSignature = layoutStoneSignature(list);
   }
 
   /**
@@ -2580,6 +2670,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const symbolItem = new paper.SymbolItem(symbolDef, new paper.Point(stone.x, stone.y));
       symbolItem.scale(1 / spritePxPerMm);
       symbolItem.data.isStoneDot = true;
+      // IMG-020: QA-only, read by debugStoneState()'s stones list.
+      symbolItem.data.color = stone.color;
       group.addChild(symbolItem);
     }
     return group;
@@ -3537,6 +3629,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // current state. Skipped if unchanged from resizeStartBounds (a handle click with no drag).
         const shape = board.getShape(resizeShapeId);
         const layerId = shape && shape.item.data.layerId;
+        let changed = false;
         if (layerId && shape) {
           // RS-3034: the LOCAL unrotated box (not shape.item.bounds directly, which for a rotated
           // shape is the enclosing AABB of the tilted outline, not the box onShapeResized's own
@@ -3546,7 +3639,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           // so this stays an apples-to-apples comparison, byte-identical to before for an unrotated
           // shape (unrotatedLocalBoundsFor()'s own fast path).
           const b = unrotatedLocalBoundsFor(shape.item);
-          const changed =
+          changed =
             !resizeStartBounds ||
             Math.abs(b.left - resizeStartBounds.left) > 1e-6 ||
             Math.abs(b.top - resizeStartBounds.top) > 1e-6 ||
@@ -3572,6 +3665,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // at this point (still correctly targeted at this shapeId either way, see that function's
         // own doc comment), but this guarantees the stone Group reflects the shape's exact final
         // bounds immediately, rather than waiting for that frame to fire.
+        // IMG-020: an image's layout is still the pre-drag one here (onShapeResized's updateAll() is
+        // not awaited), so its group is settled by finishImageStoneGroupDrop() instead.
+        if (shape && shape.item.data.isImageProxy) {
+          finishImageStoneGroupDrop(finishedShapeId, changed);
+          return;
+        }
         if (shape) rebuildStoneGroupForShape(finishedShapeId);
         // RS-3011 resize-perf fix: belt-and-suspenders restore in case `shape` was falsy above (the
         // shape vanished mid-drag) and no rebuild ran -- a stale hidden Group from drag-start must
@@ -3595,6 +3694,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // Same ordering rationale as the 'resize' branch above: clear interactionKind/rotateShapeId
         // BEFORE the final rebuild, so rebuildStoneGroupForShape() sees the drag as already over.
         const finishedShapeId = rotateShapeId;
+        const rotated = Math.abs(rotateAppliedDeg) > 1e-6;
         interactionKind = null;
         rotateShapeId = null;
         rotateCenter = null;
@@ -3610,6 +3710,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // would otherwise find getLayerStoneParams(layerId) null (not a 'path' layer) and tear the
         // Group down instead of rebuilding it, leaving the just-rotated text with no visible stones
         // until the next syncFromProjectLayers() tick's own reconciliation caught up.
+        // IMG-020: an image settles its group the same way as at a resize drop.
+        if (shape && shape.item.data.isImageProxy) {
+          finishImageStoneGroupDrop(finishedShapeId, rotated);
+          return;
+        }
         if (shape && shape.item.data.isTextProxy) rebuildTextStoneGroupForShape(finishedShapeId, (layerId && getTextLayerStones(layerId)) || []);
         else if (shape) rebuildStoneGroupForShape(finishedShapeId);
         // Belt-and-suspenders restore, same as the 'resize' branch above.
@@ -4824,6 +4929,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildTextStoneGroupForShape(shape.id, stones);
           continue;
         }
+        // IMG-020: an 'image' keeps its rectangle proxy, re-materialized on exactly the generic
+        // 'svg'/'image' condition below (AABB against layer.x/y/w/h, or a rotation change). Only the
+        // stone decision differs: its stones come from the layout, so the group is rebuilt when the
+        // UNROTATED box moves (a rotated rectangle's AABB never equals layer.x/y/w/h, and would
+        // rebuild on every tick), the rotation changes, the layout stones' signature differs from
+        // the group's (an Image dialog change with the box unchanged, or a resize/rotate drop's
+        // cleared signature), or forceStoneRebuild is set.
+        if (layer.type === 'image') {
+          const lb = unrotatedLocalBoundsFor(shape.item);
+          const boxChanged =
+            Math.abs(lb.left - layer.x) > 1e-6 ||
+            Math.abs(lb.top - layer.y) > 1e-6 ||
+            Math.abs(lb.width - Math.max(RESIZE_MIN_DIM_MM, layer.w)) > 1e-6 ||
+            Math.abs(lb.height - Math.max(RESIZE_MIN_DIM_MM, layer.h)) > 1e-6;
+          const boundsChanged =
+            Math.abs(b.left - layer.x) > 1e-6 ||
+            Math.abs(b.top - layer.y) > 1e-6 ||
+            Math.abs(b.width - layer.w) > 1e-6 ||
+            Math.abs(b.height - layer.h) > 1e-6;
+          if (boundsChanged || rotationChanged) {
+            const newItem = materializeSvgImageItemFromLayer(layer, resolveSvgPolygons);
+            board.replaceShapeItem(shape.id, newItem);
+            tagMarkTarget(newItem, layer); // RS-3015 -- always markEligible:false here ('image')
+          }
+          const stones = getImageLayerStones(layerId) || [];
+          const group = stoneGroups.get(shape.id);
+          const signatureChanged = !group || group.data.layoutSignature !== layoutStoneSignature(stones);
+          if (boxChanged || rotationChanged || signatureChanged || forceStoneRebuild) rebuildImageStoneGroupForShape(shape.id, stones);
+          continue;
+        }
         // RS-3012 Step 4: a 'circle' layer has no stored x/y/w/h box (cx/cy/r data model -- see
         // materializeCircleItemFromLayer()'s own doc comment), so the plain boundsChanged comparison
         // just below (against layer.x/w/h -- all undefined for a circle) doesn't apply. This re-derives
@@ -4929,8 +5064,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * mark-resolution bead cloud for a text (or any) proxy, so a test can prove a Stamp on a bead
      * INSIDE the letter's bounds (no bounds change -> syncFromProjectLayers()'s gate does not fire)
      * still renders and still refreshes item.data.markStones. Same precedent as debugGrid/debugShapes.
+     * IMG-020: also the group's Paper id (a rebuild is observed as a change of groupId), its
+     * visibility, and each drawn sprite's position and colour.
      * @param {string} layerId
-     * @returns {{stoneGroupCount:number, markStones:{x:number,y:number,d:number}[]}|null}
+     * @returns {{stoneGroupCount:number, groupId:number|null, groupVisible:boolean, stones:{x:number,y:number,color:string}[], markStones:{x:number,y:number,d:number}[]}|null}
      */
     debugStoneState(layerId) {
       const shape = findShapeByLayerId(layerId);
@@ -4938,6 +5075,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const group = stoneGroups.get(shape.id);
       return {
         stoneGroupCount: group ? group.children.length : 0,
+        groupId: group ? group.id : null,
+        groupVisible: group ? group.visible : false,
+        stones: group ? group.children.map((c) => ({ x: c.position.x, y: c.position.y, color: c.data.color })) : [],
         markStones: Array.isArray(shape.item.data.markStones) ? shape.item.data.markStones.map((s) => ({ ...s })) : null
       };
     },
