@@ -227,26 +227,35 @@ shared).
   | `dedupeStonesByRadius` | grid as `{x,y,d,layerId}`, `layerId` alternating `'a'`/`'b'` | 200,000 kept |
   | `dropOverlappingSizedStones` | grid | 200,000 kept |
   | `findCrossGroupCollisions` | same records as `dedupeStonesByRadius` | `[]` |
-  | `selectNonOverlappingSizedStones` | candidates at every grid-square centre (`+1.25, +1.25`, excluding the last column and last row), `baseStones` = grid, `[0.5]`, `gapMm: 0.3` | 199,101 accepted (499 × 399) |
-  | `generateGapFillStones` | `baseStones` = grid, `gapMm: 0.3`, `fillerSizeMm: 0.5`, `isInside` always true, placement = the grid's own bounds `{xMm: 0, yMm: 0, widthMm: 1247.5, heightMm: 997.5}` | 199,101 fillers (the same count as 499 × 399; the positions are not pinned) |
+  | `selectNonOverlappingSizedStones` | one candidate `{xMm: -10, yMm: -10}` (10 mm outside the grid's bounds on both axes), `baseStones` = grid, `[2]`, `gapMm: 0.3` | `[{xMm: -10, yMm: -10, sizeMm: 2}]` |
+
+  `generateGapFillStones()` is not run at 200,000 stones: a full pass on that grid took about 10 s.
+  Its two D1 exposures are covered separately. The spread it reaches through `GapFill.js:168` is
+  row 1, tested directly above with a 200,000-stone `baseStones`. Row 7 (`GapFill.js:175`) is
+  covered by a **source guard**. The test slices the `generateGapFillStones()` body out of
+  `src/geometry/GapFill.js` and asserts that it contains no `push(...` whose argument is
+  `roundAccepted`, matching `/push\(\s*\.\.\.\s*roundAccepted\b/`.
 
   These values come from a scratch prototype of the D1 loops, a copy of `src/geometry/` outside
   the repo, run on Node 22.15.0 while this spec was written. The implementation re-derives them by
   running its own loop version, as the brief asks. On the same 200,000-stone inputs the current
   spread code throws `RangeError: Maximum call stack size exceeded` at `StoneLayout.js:175`, and
-  `generateGapFillStones` throws at `MixedSizeGenerator.js:184` from `GapFill.js:168`. That is the
-  stack trace from the browser report. Timings on the loop prototype: about 0.3–0.5 s for each of
-  the first six calls, and about 10 s for `generateGapFillStones`.
+  at `MixedSizeGenerator.js:184` for the `selectNonOverlappingSizedStones` call. The browser
+  report shows the same stack trace, reached from `GapFill.js:168`. Each call takes about 0.2–0.5 s
+  on the loop prototype.
 
-  **The gap-fill fixture has to be bounded.** Two things are needed: a placement clipped to the
-  grid, and `gapMm: 0.3`. With a placement larger than the grid, fillers keep being placed outside
-  it round after round, and the pass did not finish in 10 minutes. With `gapMm: 0` inside the
-  bounds, it runs extra rounds (9,309 fillers on the 1,000-stone slice, against 931 at
-  `gapMm: 0.3`).
+  **The gap-fill fixture in the equivalence check below has to be bounded.** It needs a placement
+  clipped to the grid (`{xMm: 0, yMm: 0, widthMm: 122.5, heightMm: 47.5}` for the 50 × 20 slice)
+  and `gapMm: 0.3`, `fillerSizeMm: 0.5`. With a placement larger than the grid, fillers keep being
+  placed outside it round after round, and the pass did not finish in 10 minutes. With `gapMm: 0`
+  inside the bounds, it runs extra rounds (9,309 fillers against 931 at `gapMm: 0.3`).
 
   **Equivalence check.** On a 1,000-stone slice of the same pattern (50 × 20, so the
   square-centre candidates and the gap-fill rounds are two-dimensional), the loop version and the
-  original spread version return deep-equal results for all seven calls. Each function's
+  original spread version return deep-equal results for all seven functions of rows 1–7. Here
+  `selectNonOverlappingSizedStones` takes the square-centre candidates (`+1.25, +1.25` from every
+  stone not in the last column or row) with `[0.5]` and `gapMm: 0.3`, and `generateGapFillStones`
+  uses the bounded fixture above. Each function's
   empty-array result (and `selectNonOverlappingSizedStones` with empty `baseStones`) is deep-equal
   as well. The test keeps a spread reference copy inline, as a local function per site, for this
   comparison. If the two ever differ, the implementation stops and reports, and does not pin a
@@ -275,11 +284,21 @@ shared).
   harness also shows that a later success resets either message to `Ready`, and that
   `permanentEngineError` still overrides the layer message.
 
+  In the one-failure case, `engine.generate` is the real extracted `generate()` from T2, bound
+  to T2's three-layer stub with the middle layer throwing. After `updateAll()` resolves, T4 also
+  asserts two things. First, the `layout` variable `updateAll()` assigned (the test's copy of the
+  harness exposes it through a getter) holds the first and third layers' stones in that order.
+  Second, the draw step ran: `drawLayout` is the harness's `record('drawLayout')` call-recorder
+  stub, so `'drawLayout'` appears in the recorded calls. The rest of `SUCCESS_TAIL_ORDER` appears
+  too, so the render, stats, history and autosave calls run after a layer failure, not only after
+  a full success.
+
 **Mutants.** Each change below must make the named test fail:
 
 | Mutant | Must fail |
 |--------|-----------|
 | Put back the spread at `MixedSizeGenerator.js:184` | T1 (`RangeError`) |
+| Put back the spread at `GapFill.js:175` | T1 source guard |
 | Put back any one `raw.push(...await ...)` spread in `generate()` | T3 (`RangeError`) |
 | Remove the per-layer `try`/`catch` in `generate()` | T2 |
 | Put back `Text generation failed` in `updateAll()`'s catch | T4 |
