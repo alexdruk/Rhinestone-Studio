@@ -166,8 +166,12 @@ below a cutoff — correct for a logo or black text on white); `'subject'` is
 subject, via alpha coverage when the image already carries real transparency, otherwise via CIE76
 Lab distance from a border-sampled background color, reduced to its largest 4-connected component —
 correct for a photograph of a coloured object on a background, the case `applyThreshold()` cannot
-handle at any threshold value). Every project saved before IMG-009 has no `maskMode` and resolves to
-`'threshold'`, generating byte-identical geometry; see `docs/specifications/IMG-009-SubjectMask.md`.
+handle at any threshold value). As of IMG-018, `'whole'` is a third value: every pixel is subject
+(threshold and invert are not read), so only the `transparent` policy removes pixels — for a
+full-bleed image with no background; Line Design masks by alpha coverage alone in this mode. Every
+project saved before IMG-009 has no `maskMode` and resolves to `'threshold'`, as does any unknown
+value, generating byte-identical geometry; see `docs/specifications/IMG-009-SubjectMask.md` and
+`docs/specifications/IMG-018-WholeImageMask.md`.
 `src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
 `Stone`/`StoneLayout` — mirroring `src/svg/**`'s existing "only produces neutral input, GeometryEngine
 is the only caller that turns it into stones" rule exactly. `generateImageLayout()` is synchronous

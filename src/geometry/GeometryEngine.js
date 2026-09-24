@@ -1190,10 +1190,11 @@ export class GeometryEngine {
    *   catalog every pixel is labelled against.
    * @param {object} [params.colorMap] `nearestId -> overrideId`, default {}. See
    *   docs/specifications/IMG-002-ColorLayers.md decision 3.
-   * @param {'threshold'|'subject'} [params.maskMode] Default 'threshold' (IMG-009). 'subject' calls
+   * @param {'threshold'|'subject'|'whole'} [params.maskMode] Default 'threshold' (IMG-009). 'subject' calls
    *   src/image/SubjectMask.js's computeSubjectMask() instead of applyThreshold() for the mask this
    *   field's `data`/blur/resize/colorCount all run on. See
-   *   docs/specifications/IMG-009-SubjectMask.md.
+   *   docs/specifications/IMG-009-SubjectMask.md. 'whole' keeps every pixel, see
+   *   docs/specifications/IMG-018-WholeImageMask.md.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
@@ -1282,7 +1283,7 @@ export class GeometryEngine {
       // isBrightness branch below already uses; `kind` is carried in metadata only (introspection/
       // testing), never read by any renderer or exporter.
       const linePoints = generateLineDesignStonePoints({
-        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap, palette: options.palette, chromaScale: options.vividness
+        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap, palette: options.palette, chromaScale: options.vividness, maskMode: options.maskMode
       });
       stones = linePoints.map((point, index) => new Stone({
         xMm: point.xMm,
@@ -2517,7 +2518,8 @@ function normalizeImageParams(params) {
   // Forwarded into this method's own prepareImageField() calls below so the live stone-generation and
   // resolveImagePolygons() (Boolean/SVG-export tracing) paths actually honor a layer's maskMode, not
   // just the field-preparation module itself. See docs/specifications/IMG-009-SubjectMask.md decision 3.
-  const maskMode = params.maskMode === 'subject' ? 'subject' : 'threshold';
+  // IMG-018: 'whole' is the third value, see docs/specifications/IMG-018-WholeImageMask.md.
+  const maskMode = params.maskMode === 'subject' ? 'subject' : params.maskMode === 'whole' ? 'whole' : 'threshold';
 
   return {
     imageBuffer: params.imageBuffer,
