@@ -139,6 +139,9 @@ export const GROUPS = {
     // category as the module-boundary guards above.
     'test-source-hygiene.mjs',
     'test-browser-baseline.mjs',
+    // Dev tooling: the `npm run dev` server (tools/dev-server.mjs) sends Cache-Control: no-cache,
+    // no-store, so a browser never reuses a stale ES module during local testing.
+    'test-dev-server-no-cache.mjs',
   ],
   // Gallery is disabled in the public UI, but its catalog/wiring logic is still protected — both
   // files here already run as part of core/integration, so this group is a complete,

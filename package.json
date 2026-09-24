@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "python3 -m http.server 5173",
-    "start": "python3 -m http.server 5173",
+    "dev": "node tools/dev-server.mjs 5173",
+    "start": "node tools/dev-server.mjs 5173",
     "test": "node tools/run-tests.mjs --group fast",
     "test:fast": "node tools/run-tests.mjs --group fast",
     "test:core": "node tools/run-tests.mjs --group core",
