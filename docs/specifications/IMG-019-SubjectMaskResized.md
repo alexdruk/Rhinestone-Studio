@@ -1,6 +1,6 @@
 # IMG-019 — Subject mask on a resized copy
 
-**Status: spec.** File:line citations are against `develop` @ `47c6ba8` (the RS-3039 merge). Every
+**Status: built.** File:line citations are against `develop` @ `47c6ba8` (the RS-3039 merge). Every
 anchor below was re-grepped on that tip. The photo figures and timings were measured by the lead
 architect in a prototype. This spec's own scratch probes re-derived every fixture figure (T1, T2),
 the T3 identity, every digest (T4, T5) and every mutant result, on a scratch copy of the tree with

@@ -39,6 +39,91 @@ import { computeSubjectMask } from './SubjectMask.js';
 export const TRANSPARENT_MODES = new Set(['white', 'ignore']);
 export const DEFAULT_TRANSPARENT_MODE = 'white';
 
+// IMG-019 (D1): above SUBJECT_MASK_RESIZE_TRIGGER_PX on the longer side, the 'subject' mask is
+// computed on a box-resized RGBA copy whose longer side is at most SUBJECT_MASK_MAX_DIMENSION_PX, then
+// mapped back to native size by nearest lookup (D2). See docs/specifications/IMG-019-SubjectMaskResized.md.
+export const SUBJECT_MASK_RESIZE_TRIGGER_PX = 1000;
+export const SUBJECT_MASK_MAX_DIMENSION_PX = 800;
+
+/**
+ * IMG-019 (D5): resizes an RGBA buffer in one pass over a four-channel integral image. Byte-identical
+ * to resizeField() applied to each of the four channels separately and interleaved back into RGBA:
+ * same scale, output size, source spans and rounding.
+ *
+ * @param {{widthPx:number, heightPx:number, data:Uint8ClampedArray}} imageBuffer RGBA source.
+ * @param {number} maxWidthPx
+ * @param {number} maxHeightPx
+ * @returns {{widthPx:number, heightPx:number, data:Uint8ClampedArray}} RGBA result.
+ */
+export function resizeImageBuffer(imageBuffer, maxWidthPx, maxHeightPx) {
+  const { widthPx, heightPx, data } = imageBuffer;
+  const scale = Math.min(1, maxWidthPx / widthPx, maxHeightPx / heightPx);
+  if (scale >= 1) {
+    return { widthPx, heightPx, data: new Uint8ClampedArray(data) };
+  }
+
+  const newWidth = Math.max(1, Math.round(widthPx * scale));
+  const newHeight = Math.max(1, Math.round(heightPx * scale));
+
+  const stride = (widthPx + 1) * 4;
+  const integral = new Float64Array(stride * (heightPx + 1));
+  for (let y = 0; y < heightPx; y++) {
+    let r = 0, g = 0, b = 0, a = 0;
+    const row = (y + 1) * stride, prev = y * stride;
+    for (let x = 0; x < widthPx; x++) {
+      const o = (y * widthPx + x) * 4;
+      r += data[o]; g += data[o + 1]; b += data[o + 2]; a += data[o + 3];
+      const k = (x + 1) * 4;
+      integral[row + k] = integral[prev + k] + r;
+      integral[row + k + 1] = integral[prev + k + 1] + g;
+      integral[row + k + 2] = integral[prev + k + 2] + b;
+      integral[row + k + 3] = integral[prev + k + 3] + a;
+    }
+  }
+
+  const out = new Uint8ClampedArray(newWidth * newHeight * 4);
+  for (let oy = 0; oy < newHeight; oy++) {
+    const sy0 = Math.min(heightPx - 1, Math.floor(oy / scale));
+    const sy1 = Math.min(heightPx - 1, Math.max(sy0, Math.floor((oy + 1) / scale) - 1));
+    const top = sy0 * stride, bottom = (sy1 + 1) * stride;
+    for (let ox = 0; ox < newWidth; ox++) {
+      const sx0 = Math.min(widthPx - 1, Math.floor(ox / scale));
+      const sx1 = Math.min(widthPx - 1, Math.max(sx0, Math.floor((ox + 1) / scale) - 1));
+      const area = (sx1 - sx0 + 1) * (sy1 - sy0 + 1);
+      const left = sx0 * 4, right = (sx1 + 1) * 4;
+      const o = (oy * newWidth + ox) * 4;
+      for (let c = 0; c < 4; c++) {
+        const sum = integral[bottom + right + c] - integral[top + right + c] - integral[bottom + left + c] + integral[top + left + c];
+        out[o + c] = Math.round(sum / area);
+      }
+    }
+  }
+
+  return { widthPx: newWidth, heightPx: newHeight, data: out };
+}
+
+// IMG-019 (D1, D2): the native-size 0/1 subject mask. At or below the trigger this is the native
+// computeSubjectMask() call, unchanged; above it, the mask of the resized copy, mapped back by nearest
+// lookup so invert, the transparent policy, blur and the final resize all still run at native size.
+function computeNativeSizeSubjectMask(imageBuffer) {
+  const W = imageBuffer.widthPx, H = imageBuffer.heightPx;
+  if (Math.max(W, H) <= SUBJECT_MASK_RESIZE_TRIGGER_PX) {
+    return computeSubjectMask(imageBuffer, {}).mask;
+  }
+  const small = computeSubjectMask(resizeImageBuffer(imageBuffer, SUBJECT_MASK_MAX_DIMENSION_PX, SUBJECT_MASK_MAX_DIMENSION_PX), {}).mask;
+  const w = small.widthPx, h = small.heightPx;
+  const columns = new Int32Array(W);
+  for (let x = 0; x < W; x++) columns[x] = Math.min(w - 1, Math.floor(x * w / W));
+  const out = new Uint8ClampedArray(W * H);
+  for (let y = 0; y < H; y++) {
+    const rowOffset = Math.min(h - 1, Math.floor(y * h / H)) * w;
+    for (let x = 0; x < W; x++) {
+      out[y * W + x] = small.data[rowOffset + columns[x]];
+    }
+  }
+  return createField({ widthPx: W, heightPx: H, data: out });
+}
+
 function assertPositiveNumber(value, name) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${name} must be a positive number.`);
@@ -181,7 +266,7 @@ export function prepareImageField(imageBuffer, params = {}) {
   // only the transparent policy below can remove pixels.
   let mask;
   if (options.maskMode === 'subject') {
-    mask = computeSubjectMask(imageBuffer, {}).mask;
+    mask = computeNativeSizeSubjectMask(imageBuffer);
   } else if (options.maskMode === 'whole') {
     mask = createField({ widthPx: imageBuffer.widthPx, heightPx: imageBuffer.heightPx, data: new Uint8ClampedArray(imageBuffer.widthPx * imageBuffer.heightPx).fill(1) });
   } else {
