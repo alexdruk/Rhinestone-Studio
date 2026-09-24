@@ -160,6 +160,14 @@ function sourceBoundingBox(source) {
   }
   if (source.kind === 'field') {
     if (!(source.widthMm > 0) || !(source.heightMm > 0)) return null;
+    // IMG-021 (D3): a rotated field's box is the axis-aligned box of its rotated corners.
+    if (source.rotationDeg) {
+      const cxMm = source.xMm + source.widthMm / 2, cyMm = source.yMm + source.heightMm / 2;
+      const radians = source.rotationDeg * (Math.PI / 180);
+      const halfW = (Math.abs(Math.cos(radians)) * source.widthMm + Math.abs(Math.sin(radians)) * source.heightMm) / 2;
+      const halfH = (Math.abs(Math.sin(radians)) * source.widthMm + Math.abs(Math.cos(radians)) * source.heightMm) / 2;
+      return { minXmm: cxMm - halfW, minYmm: cyMm - halfH, maxXmm: cxMm + halfW, maxYmm: cyMm + halfH };
+    }
     return { minXmm: source.xMm, minYmm: source.yMm, maxXmm: source.xMm + source.widthMm, maxYmm: source.yMm + source.heightMm };
   }
   throw new TypeError(`Unsupported boolean shape source kind: ${source.kind}`);
@@ -171,6 +179,15 @@ function sampleSource(source, xMm, yMm) {
     return isPointInsidePolygons({ xMm, yMm }, source.polygons) ? 1 : 0;
   }
   const { field } = source;
+  // IMG-021 (D3): a rotated field is sampled by rotating the query point back into the field's
+  // unrotated box, around the box centre.
+  if (source.rotationDeg) {
+    const cxMm = source.xMm + source.widthMm / 2, cyMm = source.yMm + source.heightMm / 2;
+    const radians = -source.rotationDeg * (Math.PI / 180);
+    const dxMm = xMm - cxMm, dyMm = yMm - cyMm;
+    xMm = cxMm + dxMm * Math.cos(radians) - dyMm * Math.sin(radians);
+    yMm = cyMm + dxMm * Math.sin(radians) + dyMm * Math.cos(radians);
+  }
   const localXMm = xMm - source.xMm;
   const localYMm = yMm - source.yMm;
   if (localXMm < 0 || localYMm < 0 || localXMm > source.widthMm || localYMm > source.heightMm) return 0;

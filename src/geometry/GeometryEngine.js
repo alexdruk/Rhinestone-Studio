@@ -1381,6 +1381,12 @@ export class GeometryEngine {
       stones = stones.concat(gapFillStones);
     }
 
+    // IMG-021 (D1): rigid rotation of the finished stones, every mode, around the unrotated placement
+    // box's centre. Count, sizes and colours are unchanged; a 0 rotation leaves `stones` untouched.
+    if (options.rotationDeg !== 0) {
+      stones = rotatePointsAroundCenter(stones, options.rotationDeg, imagePlacementCenter(options)).map((point) => new Stone(point));
+    }
+
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats });
   }
 
@@ -1441,6 +1447,15 @@ export class GeometryEngine {
       const contours = traceMask(undefined);
       if (contours.length > 0) {
         regions.push({ colorId: options.color, contours });
+      }
+    }
+
+    // IMG-021 (D3): the traced regions sit under the stones in the SVG export, so they take D1's
+    // rotation too, around the same pivot.
+    if (options.rotationDeg !== 0) {
+      const pivot = imagePlacementCenter(options);
+      for (const region of regions) {
+        region.contours = region.contours.map((contour) => rotatePointsAroundCenter(contour, options.rotationDeg, pivot));
       }
     }
 
@@ -2573,10 +2588,18 @@ function normalizeImageParams(params) {
     // with no fillGaps field (every project saved before this milestone) coerces to false, which
     // skips the gap-fill pass entirely, so it regenerates byte-identically.
     fillGaps: Boolean(params.fillGaps),
+    // IMG-021: same normalizeRotationDeg()/assertFiniteNumber() convention normalizeShapeParams() uses.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     // IMG-006: allowBrightness -- only normalizeImageParams() (this method) passes it.
     ...normalizeMixedSizeParams(params, stoneSizeMm, { allowBrightness: true })
   };
+}
+
+// IMG-021: the rotation pivot for an image layer's stones and traced regions -- the centre of the
+// unrotated placement box, the same centre app.js's rotatedCornersAABB() rotates the box around.
+function imagePlacementCenter(options) {
+  return { cxMm: options.xMm + options.widthMm / 2, cyMm: options.yMm + options.heightMm / 2 };
 }
 
 // RS-1012: contours/xMm/yMm/widthMm/heightMm are this method's own geometry-side params;

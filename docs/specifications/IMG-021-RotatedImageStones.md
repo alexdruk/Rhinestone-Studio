@@ -1,6 +1,6 @@
 # IMG-021 — Rotated image stones
 
-**Status: spec.** File:line citations are against `develop` @ `b22053b` (the dev-server no-cache
+**Status: built.** File:line citations are against `develop` @ `b22053b` (the dev-server no-cache
 merge, after IMG-020). Every anchor below was re-grepped on that tip. The Step 0 figures come from a
 real browser (Chrome, headless, isolated context) on that tip. The prototype figures, T1 to T7 and
 every mutant result come from a scratch copy of the tree with D1 to D4 applied, served and tested the

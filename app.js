@@ -1148,7 +1148,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
   // freeze fallback below.
   if(mode==='line-design'){
-    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness),resolveImageMaskMode(layer.maskMode)].join('|');
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness),resolveImageMaskMode(layer.maskMode),layer.rotationDeg??0].join('|');
     let cached=lineDesignStoneCache.get(key);
     if(!cached&&lineDesignFrozen){
       for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
@@ -1158,7 +1158,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
       // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
       // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
       // default for either field.
-      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness),maskMode:resolveImageMaskMode(layer.maskMode)};
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness),maskMode:resolveImageMaskMode(layer.maskMode)};
       const result=this.permanentEngine.generateImageLayout(params);
       cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
       lineDesignStoneCache.set(key,cached);
@@ -1166,7 +1166,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     }
     return includeStats?cached:cached.stones;
   }
-  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -3405,7 +3405,7 @@ async function resolveLayerShapeSource(layer){
     let buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
     const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
-    return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h};
+    return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0};
   }
   return null;
 }
@@ -3426,7 +3426,7 @@ function resolveImageExportRegions(project){
     if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
-    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
     const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
     for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
   }
@@ -4585,6 +4585,7 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     // (`rawDx=mm.x-drag.start.x`) runs unconditionally before branching on drag.kind, exactly like
     // it already does for 'resize' (whose branch also ignores rawDx/rawDy in favor of raw mm).
     drag={kind:'rotate',layerId:hit.layer.id,start:mm,center:hit.center,startRotationDeg:hit.layer.rotationDeg||0,startPointerAngleDeg};
+    if(hit.layer.type==='image'&&resolveImageFillMode(hit.layer.fillMode)==='line-design')lineDesignFrozen=true;
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(e.shiftKey){
@@ -4757,7 +4758,7 @@ function endActiveDrag(){
   drag=null;
   if(activeGuides.length){activeGuides=[];drawLayout()}
   if(ended&&ended.kind==='move')updateAll(true);
-  else if(ended&&ended.kind==='resize'&&lineDesignFrozen){
+  else if(ended&&(ended.kind==='resize'||ended.kind==='rotate')&&lineDesignFrozen){
     lineDesignFrozen=false;
     invalidateLineDesignCache(ended.layerId);
     updateAll(true);
@@ -6529,7 +6530,9 @@ async function renderImageStudio(){
   el('imgBrightnessSteps').value=String(brightnessStepForSizes(l.brightnessSizesMm));
   el('imgBrightnessThinning').value=resolveImageBrightnessThinning(l.brightnessThinning);
   el('imgBrightnessThinningValue').textContent=String(resolveImageBrightnessThinning(l.brightnessThinning));
-  const bbox={minXmm:l.x,minYmm:l.y,widthMm:l.w,heightMm:l.h};
+  const studioRotationDeg=l.rotationDeg??0;
+  const studioBox=rotatedCornersAABB(l.x,l.y,l.w,l.h,studioRotationDeg);
+  const bbox={minXmm:studioBox.x,minYmm:studioBox.y,widthMm:studioBox.width,heightMm:studioBox.height};
   const dpr=Math.max(1,window.devicePixelRatio||1);
   canvas.width=Math.max(1,Math.round(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.round(canvas.clientHeight*dpr));
   const t=fitTransform(bbox,canvas.width,canvas.height,16*dpr);
@@ -6544,7 +6547,8 @@ async function renderImageStudio(){
     if(img.complete&&img.naturalWidth){resolve(img);return}
     img.onload=()=>resolve(img);img.onerror=()=>resolve(img);
   });
-  const paintSource=img=>ctx.drawImage(img,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);
+  const drawInBox=src=>{if(!studioRotationDeg){ctx.drawImage(src,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);return}ctx.save();ctx.translate(t.ox+(l.x+l.w/2)*t.s,t.oy+(l.y+l.h/2)*t.s);ctx.rotate(studioRotationDeg*Math.PI/180);ctx.drawImage(src,-l.w*t.s/2,-l.h*t.s/2,l.w*t.s,l.h*t.s);ctx.restore()};
+  const paintSource=img=>drawInBox(img);
   const drawMask=async()=>{
     let buffer=imageBufferCache.get(l.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(l.imageSrc);imageBufferCache.set(l.imageSrc,buffer)}
@@ -6552,7 +6556,7 @@ async function renderImageStudio(){
     const field=prepareImageField(buffer,{threshold:l.threshold,invert:l.invert,blurRadiusPx:l.blurRadiusPx,maxWidthPx:l.maxWidthPx,maxHeightPx:l.maxHeightPx,transparent:resolveImageTransparentMode(l.transparent)});
     const scratch=document.createElement('canvas');scratch.width=field.widthPx;scratch.height=field.heightPx;
     scratch.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
-    ctx.drawImage(scratch,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);
+    drawInBox(scratch);
   };
   const drawTemplate=()=>renderStoneLayout(ctx,templateLayout,t);
   // IMG-002: re-quantized fresh from l's own current (already-committed) params -- see
@@ -6589,7 +6593,7 @@ async function renderImageStudio(){
     });
     const scratch=document.createElement('canvas');scratch.width=colorField.widthPx;scratch.height=colorField.heightPx;
     scratch.getContext('2d').putImageData(new ImageData(labelsFieldToRgba(colorField,fillsByLabel),colorField.widthPx,colorField.heightPx),0,0);
-    ctx.drawImage(scratch,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);
+    drawInBox(scratch);
   };
   const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
   if(view==='source'){
