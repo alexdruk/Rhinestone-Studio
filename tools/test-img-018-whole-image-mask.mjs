@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { createImageBuffer, prepareImageField } from '../src/image/index.js';
 import { prepareAutoColorField, chooseAutoColorCount } from '../src/image/AutoColourCount.js';
 import { createGeometryEngine } from '../src/geometry/index.js';
@@ -76,17 +77,18 @@ const tally = (items, keyOf) => {
   return counts;
 };
 const onCount = (data) => data.reduce((sum, v) => sum + (v > 0 ? 1 : 0), 0);
+const assertSame = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message);
 
 await test('W1. prepareImageField(): whole is all-ones, ignores invert, equals threshold 0 inverted', () => {
   const whole = prepareImageField(blocks, { ...FIELD_PARAMS, maskMode: 'whole' });
   assert.equal(onCount(whole.data), 90000);
   const wholeInverted = prepareImageField(blocks, { ...FIELD_PARAMS, maskMode: 'whole', invert: true });
-  assert.deepEqual(wholeInverted, whole, 'whole with invert true is identical');
+  assertSame(wholeInverted, whole, 'whole with invert true is identical');
   const coloured = { ...FIELD_PARAMS, colorCount: 3, palette: PALETTE, colorMap: {} };
   const wholeColoured = prepareImageField(blocks, { ...coloured, maskMode: 'whole' });
   const thresholdZeroInverted = prepareImageField(blocks, { ...coloured, maskMode: 'threshold', threshold: 0, invert: true });
-  assert.deepEqual(wholeColoured.data, thresholdZeroInverted.data, 'data matches threshold 0 inverted');
-  assert.deepEqual(wholeColoured.labels, thresholdZeroInverted.labels, 'labels match threshold 0 inverted');
+  assertSame(wholeColoured.data, thresholdZeroInverted.data, 'data matches threshold 0 inverted');
+  assertSame(wholeColoured.labels, thresholdZeroInverted.labels, 'labels match threshold 0 inverted');
 });
 
 const engine = createGeometryEngine();
@@ -159,8 +161,8 @@ const codeLines = (source) => source.split('\n').filter((line) => !line.trimStar
 
 await test('W5. Read sites are permissive', () => {
   const threshold = prepareImageField(blocks, { ...FIELD_PARAMS, maskMode: 'threshold' });
-  assert.deepEqual(prepareImageField(blocks, { ...FIELD_PARAMS, maskMode: 'bogus' }), threshold, "'bogus' equals 'threshold'");
-  assert.deepEqual(prepareImageField(blocks, { ...FIELD_PARAMS }), threshold, "an omitted maskMode equals 'threshold'");
+  assertSame(prepareImageField(blocks, { ...FIELD_PARAMS, maskMode: 'bogus' }), threshold, "'bogus' equals 'threshold'");
+  assertSame(prepareImageField(blocks, { ...FIELD_PARAMS }), threshold, "an omitted maskMode equals 'threshold'");
 
   // eslint-disable-next-line no-new-func
   const resolveImageMaskMode = new Function(`${functionSource('function resolveImageMaskMode(')}\nreturn resolveImageMaskMode;`)();
