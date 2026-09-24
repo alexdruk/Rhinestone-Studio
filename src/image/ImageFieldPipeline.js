@@ -46,9 +46,17 @@ export const SUBJECT_MASK_RESIZE_TRIGGER_PX = 1000;
 export const SUBJECT_MASK_MAX_DIMENSION_PX = 800;
 
 /**
- * IMG-019 (D5): resizes an RGBA buffer in one pass over a four-channel integral image. Byte-identical
- * to resizeField() applied to each of the four channels separately and interleaved back into RGBA:
- * same scale, output size, source spans and rounding.
+ * IMG-019 (D5): resizes an RGBA buffer in one pass, one output row at a time. Byte-identical to
+ * resizeField() applied to each of the four channels separately and interleaved back into RGBA: same
+ * scale, output size, source spans and rounding. Every sum is a whole number held exactly in a
+ * Float64Array, so the order it is added in cannot change the result.
+ *
+ * Peak working memory is proportional to widthPx, not widthPx * heightPx: one reusable buffer of
+ * widthPx * 4 column sums, refilled for each output row from source rows sy0 to sy1 and then turned
+ * into a running prefix across columns, so each output pixel's box sum is one subtraction. This path
+ * exists for large images, and a full-image integral for a 4000x3000 buffer would be a 384 MB
+ * allocation. RS-3039 found that a working structure growing with the whole input fails on a large
+ * enough input, so this one grows with one row only.
  *
  * @param {{widthPx:number, heightPx:number, data:Uint8ClampedArray}} imageBuffer RGBA source.
  * @param {number} maxWidthPx
@@ -65,35 +73,31 @@ export function resizeImageBuffer(imageBuffer, maxWidthPx, maxHeightPx) {
   const newWidth = Math.max(1, Math.round(widthPx * scale));
   const newHeight = Math.max(1, Math.round(heightPx * scale));
 
-  const stride = (widthPx + 1) * 4;
-  const integral = new Float64Array(stride * (heightPx + 1));
-  for (let y = 0; y < heightPx; y++) {
-    let r = 0, g = 0, b = 0, a = 0;
-    const row = (y + 1) * stride, prev = y * stride;
-    for (let x = 0; x < widthPx; x++) {
-      const o = (y * widthPx + x) * 4;
-      r += data[o]; g += data[o + 1]; b += data[o + 2]; a += data[o + 3];
-      const k = (x + 1) * 4;
-      integral[row + k] = integral[prev + k] + r;
-      integral[row + k + 1] = integral[prev + k + 1] + g;
-      integral[row + k + 2] = integral[prev + k + 2] + b;
-      integral[row + k + 3] = integral[prev + k + 3] + a;
-    }
-  }
-
+  const columnSums = new Float64Array(widthPx * 4);
   const out = new Uint8ClampedArray(newWidth * newHeight * 4);
   for (let oy = 0; oy < newHeight; oy++) {
     const sy0 = Math.min(heightPx - 1, Math.floor(oy / scale));
     const sy1 = Math.min(heightPx - 1, Math.max(sy0, Math.floor((oy + 1) / scale) - 1));
-    const top = sy0 * stride, bottom = (sy1 + 1) * stride;
+
+    columnSums.fill(0);
+    for (let y = sy0; y <= sy1; y++) {
+      const rowStart = y * widthPx * 4;
+      for (let k = 0; k < widthPx * 4; k++) {
+        columnSums[k] += data[rowStart + k];
+      }
+    }
+    for (let k = 4; k < widthPx * 4; k++) {
+      columnSums[k] += columnSums[k - 4];
+    }
+
     for (let ox = 0; ox < newWidth; ox++) {
       const sx0 = Math.min(widthPx - 1, Math.floor(ox / scale));
       const sx1 = Math.min(widthPx - 1, Math.max(sx0, Math.floor((ox + 1) / scale) - 1));
       const area = (sx1 - sx0 + 1) * (sy1 - sy0 + 1);
-      const left = sx0 * 4, right = (sx1 + 1) * 4;
+      const right = sx1 * 4, left = (sx0 - 1) * 4;
       const o = (oy * newWidth + ox) * 4;
       for (let c = 0; c < 4; c++) {
-        const sum = integral[bottom + right + c] - integral[top + right + c] - integral[bottom + left + c] + integral[top + left + c];
+        const sum = columnSums[right + c] - (sx0 > 0 ? columnSums[left + c] : 0);
         out[o + c] = Math.round(sum / area);
       }
     }

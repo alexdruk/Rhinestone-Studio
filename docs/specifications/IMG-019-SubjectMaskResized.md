@@ -117,6 +117,11 @@ four `resizeField()` calls. The result must be byte-identical to D1's definition
 This spec's probe built both forms. On `rgbaFixture()` below, both give an 800×395 copy, and the
 two copies are byte-identical.
 
+The build's follow-up computes the resize one output row at a time. It uses one reusable buffer of
+`widthPx * 4` column sums, turned into a running prefix across columns, instead of a full-image
+integral, so peak working memory grows with `widthPx` only. On a 4000×3000 image, the resize takes
+120 ms, where the full-image integral took 362 ms, and the output is still byte-identical (T3).
+
 ### D6. Exports
 
 `SUBJECT_MASK_RESIZE_TRIGGER_PX` and `SUBJECT_MASK_MAX_DIMENSION_PX` are exported from
