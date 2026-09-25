@@ -135,6 +135,13 @@ await test('1. every §4 pinned figure: grid, orientation, tile size, total, own
   assert.equal(test12.pages[1].ghostStones.length, 0);
 });
 
+await test('1b. D8: the cover\'s Pages: line uses singular column/row where the value is 1', () => {
+  const pagesLine = (d) => d.pages[0].headerLines[d.pages[0].headerLines.length - 1].text;
+  assert.equal(pagesLine(computeProductionSheetDocument(makeEightColorThreeSizeLayout(), TEST_12_OPTIONS)), 'Pages: cover + 1 (1 column × 1 row), overlap 8 mm');
+  assert.equal(pagesLine(pinnedDocument(PINNED[0])), 'Pages: cover + 2 (2 columns × 1 row), overlap 8 mm');
+  assert.equal(pagesLine(pinnedDocument(PINNED[2])), 'Pages: cover + 4 (2 columns × 2 rows), overlap 8 mm');
+});
+
 // --- 2. owned counts sum to the total ------------------------------------------------------------
 
 await test('2. owned counts sum to the total for every multi-page case', () => {
@@ -250,7 +257,7 @@ function makeClassList() {
   };
 }
 
-function runProdSheetValidation({ stones, size }) {
+function runProdSheetValidation({ stones, size, options = fixtureOptions(size) }) {
   const validation = { textContent: '', classList: makeClassList() };
   const el = (id) => (id === 'prodSheetValidation' ? validation : { textContent: '', classList: makeClassList() });
   const project = { layers: [], units: 'mm', canvas: { width: size, height: size } };
@@ -263,7 +270,7 @@ function runProdSheetValidation({ stones, size }) {
   );
   const updateProdSheetReadabilityValidation = factory(
     el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix, computeProductionSheetDocument,
-    () => fixtureOptions(size)
+    () => options
   );
   updateProdSheetReadabilityValidation();
   return validation;
@@ -283,6 +290,9 @@ await test('10. D12: the multi-page note appears only when multi-page applies, a
   const withOutside = runProdSheetValidation({ stones: [...fixture(300, 300), { xMm: 305, yMm: 150, sizeMm: 2, color: 'jet' }], size: 300 });
   assert.match(withOutside.textContent, /^1 stone lies partly or fully outside the 300 × 300 mm production area/);
   assert.ok(withOutside.textContent.endsWith(` ${MULTI_PAGE_NOTE_300}`), 'the note follows the outside-area warning, never replacing it');
+
+  const onePage = runProdSheetValidation({ stones: makeEightColorThreeSizeLayout().stones, size: 158, options: TEST_12_OPTIONS });
+  assert.equal(onePage.textContent, 'Spans 1 page on Letter (1 × 1) plus a cover page; export as PDF.');
 });
 
 // --- 11. D8 map floor ----------------------------------------------------------------------------

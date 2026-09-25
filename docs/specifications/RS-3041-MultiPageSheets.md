@@ -118,6 +118,14 @@ Production sheet cover page has no room for the page map on <pageSize> at margin
 
 `<margin>` is formatted as in D3.
 
+The `Pages:` line uses "column" and "row" when the value is 1, like D11's "page", exactly:
+
+```
+Pages: cover + 1 (1 column × 1 row), overlap 8 mm
+Pages: cover + 2 (2 columns × 1 row), overlap 8 mm
+Pages: cover + 4 (2 columns × 2 rows), overlap 8 mm
+```
+
 **D9. Tile page.** Top line (`TILE_LABEL_HEIGHT_MM`):
 `<project> · Page B2 of N · <owned count> stones · grey stones belong to neighbouring pages`. The tile
 is placed at true size, centred in its cell, with its outline drawn dashed as the cut line.
@@ -147,7 +155,12 @@ RS-3038 catch blocks show it.
 Spans N pages on <pageSize> (C × R) plus a cover page; export as PDF.
 ```
 
-alongside the RS-3038 outside-area warning, never replacing it. Nothing is disabled.
+alongside the RS-3038 outside-area warning, never replacing it. Nothing is disabled. Like D11 it
+uses "page" when N is 1, exactly:
+
+```
+Spans 1 page on Letter (1 × 1) plus a cover page; export as PDF.
+```
 
 **D13. No stone moves, no project or schema change, and object templates are not special-cased.**
 This applies to plates on A4/Letter too.

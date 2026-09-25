@@ -5635,7 +5635,8 @@ function updateProdSheetReadabilityValidation(){
     try{
       const sheetDocument=computeProductionSheetDocument(layout,currentProductionSheetOptions());
       if(sheetDocument.multiPage){
-        const multiPageMessage=`Spans ${sheetDocument.cols*sheetDocument.rows} pages on ${sheetDocument.pageSize} (${sheetDocument.cols} × ${sheetDocument.rows}) plus a cover page; export as PDF.`;
+        const tileCount=sheetDocument.cols*sheetDocument.rows;
+        const multiPageMessage=`Spans ${tileCount} ${tileCount===1?'page':'pages'} on ${sheetDocument.pageSize} (${sheetDocument.cols} × ${sheetDocument.rows}) plus a cover page; export as PDF.`;
         message=message?`${message} ${multiPageMessage}`:multiPageMessage;
       }
     }catch(error){}

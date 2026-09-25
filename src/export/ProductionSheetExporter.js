@@ -618,7 +618,7 @@ export function computeProductionSheetDocument(stoneLayout, options = {}) {
   const plateHeaderLineTexts = computePlateHeaderLineTexts({ ...options, units });
   const sizeBreakdown = computeSizeBreakdown(sourceStones);
   const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown);
-  const pagesLineText = `Pages: cover + ${tileCount} (${cols} columns × ${rows} rows), overlap ${OVERLAP_MM} mm`;
+  const pagesLineText = `Pages: cover + ${tileCount} (${cols} ${cols === 1 ? 'column' : 'columns'} × ${rows} ${rows === 1 ? 'row' : 'rows'}), overlap ${OVERLAP_MM} mm`;
   const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.length + 1);
   const mapAreaHeightMm = printableHeightMm - headerHeightMm;
   if (mapAreaHeightMm < COVER_MAP_MIN_HEIGHT_MM) {
