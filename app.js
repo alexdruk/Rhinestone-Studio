@@ -5613,6 +5613,8 @@ el('redrawConsentContinue').onclick=confirmRedrawConsent;
 el('redrawAccessCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmRedrawConsent()}});
 function syncImageRedrawControlsForSelection(){const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)}
 async function startImageRedraw(){
+  // A second click while the consent dialog is open would open a second consent wait; ignore it.
+  if(redrawConsentResolve!==null)return;
   if(redrawRun||!redrawAvailability||!redrawAvailability.available)return;
   if(selectedLayer().type!=='image')return;
   if(redrawAvailability.consent&&!redrawConsentGiven&&!(await askRedrawConsent(redrawAvailability.consent))){setImageRedrawStatus('Redraw cancelled.');return}

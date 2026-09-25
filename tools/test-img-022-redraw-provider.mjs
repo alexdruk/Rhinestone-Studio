@@ -339,6 +339,31 @@ await test('T7b. fake mode with no key: config 200, the right code gets the fixt
   assert.equal(calls.length, 0);
 });
 
+await test('T4b. Cancel stops the upstream call: the client closing aborts the OpenAI fetch, with no retry and nothing written', async () => {
+  const signals = [];
+  const fetch = (url, init) => { signals.push(init.signal); return new Promise(() => {}); };
+  // This fake fetch ignores its signal (a real fetch rejects on abort), so the short timeout only
+  // lets handleRedraw() finish; the abort itself is checked before the timer can fire.
+  const handler = createRedrawHandler({ settings: KEY_SETTINGS, fetch, timeoutMs: 50 });
+  const res = makeRes();
+  const closeListeners = [];
+  res.on = (event, fn) => { if (event === 'close') closeListeners.push(fn); };
+  const writes = [];
+  res.writeHead = (...args) => { writes.push(['writeHead', ...args]); };
+  res.end = (...args) => { writes.push(['end', ...args]); };
+  const done = handler.handleRedraw(makeReq({ headers: { 'x-redraw-access-code': 'letmein' }, body: UPLOAD_BODY }), res);
+  while (signals.length === 0) await new Promise((r) => setTimeout(r, 1));
+  assert.equal(res.writableEnded, false);
+  assert.equal(closeListeners.length, 1);
+  for (const fn of closeListeners) fn();
+  assert.equal(signals[0].aborted, true, 'the upstream signal is aborted as soon as the client closes');
+  await done;
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(signals.length, 1, 'fetch was called once, and no second attempt followed');
+  assert.equal(signals[0].aborted, true, 'the upstream signal is aborted');
+  assert.deepEqual(writes, [], 'nothing was written to res');
+});
+
 // ---- T8-T9. Client module ----------------------------------------------------------------------
 
 await test('T8. provider selection: config 404 / network error / bad body -> unavailable; good body -> the proxy provider; an injected provider is used without fetch', async () => {
@@ -589,6 +614,8 @@ await test('T12. app.js imports ./src/redraw/index.js and never names OpenAI or 
     assert.ok(indexHtml.includes(`id="${id}"`), `index.html is missing #${id}`);
   }
   assert.ok(appJs.includes("const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';"));
+  // Double-click guard: a click while the consent dialog is open returns before anything else.
+  assert.ok(appJs.includes("async function startImageRedraw(){\n  // A second click while the consent dialog is open would open a second consent wait; ignore it.\n  if(redrawConsentResolve!==null)return;\n"), 'startImageRedraw() returns first thing while the consent dialog is open');
 });
 
 await test('Registered in tools/test-groups.mjs', () => {

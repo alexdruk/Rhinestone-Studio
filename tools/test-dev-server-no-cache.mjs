@@ -64,6 +64,14 @@ try {
     assert.equal(res.headers.get('cache-control'), 'no-cache, no-store');
   });
 
+  // IMG-022: the server never serves .env or .env.* (.env holds the OpenAI key). .env.example is
+  // tracked and matches the guard's pattern, so it proves the guard is active without creating a file.
+  await test('.env.example is refused: 404 with the no-cache header', async () => {
+    const res = await fetch(`http://localhost:${port}/.env.example`);
+    assert.equal(res.status, 404);
+    assert.equal(res.headers.get('cache-control'), 'no-cache, no-store');
+  });
+
   await test('package.json dev and start scripts run this server on port 5173', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
     assert.equal(pkg.scripts.dev, 'node tools/dev-server.mjs 5173');
