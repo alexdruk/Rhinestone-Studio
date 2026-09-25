@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadPaperForNode } from './lib/paper-node-env.mjs';
+
+await loadPaperForNode();
 
 // Regression test for the RS-1006 hotfix: a browser `SyntaxError: The requested module
 // './SvgExporter.js' does not provide an export named 'stoneCircleSvg'` was reported at startup
@@ -123,4 +126,4 @@ await test('3. src/preview3d/ObjectDimensions.js stays pure: no Three.js import,
   assert.ok(!/project\.layers|layer\.type|Project\.js|Layer\.js/.test(objectDimensionsSource));
 });
 
-console.log('Module graph export tests passed.');
+if (process.exitCode !== 1) console.log('Module graph export tests passed.');
