@@ -56,7 +56,7 @@ Failures reject with a `RedrawError` (an `Error` subclass exported from `src/red
 | `rate-limited` | Our hourly limit (429), or OpenAI's own rate limit. |
 | `network` | Our server could not be reached (`fetch` rejected, not by abort). |
 | `provider-failed` | The provider answered with a failure, including OpenAI 4xx/5xx after the retry, an OpenAI timeout after the retry, and a content-policy refusal. |
-| `invalid-output` | The returned image did not decode or failed the opacity check (D7), twice. |
+| `invalid-output` | The returned image did not decode or failed the subject-coverage check (D7), twice. |
 
 **(spec)** Cancelling is not an error code. An aborted `signal` rejects with the platform's
 `AbortError` `DOMException`, unchanged, and the UI reports it as a cancel (D11).
@@ -92,8 +92,9 @@ it, and a Worker provider that returns `consent: null` needs no `app.js` change.
   from the config response.
 * `src/redraw/FakeRedrawProvider.js` returns a fixed image for tests. **(spec)** It exports
   `FAKE_REDRAW_DATA_URL`: a 64 × 64 RGBA PNG (colour type 6) that is transparent except for a
-  filled disc of radius 24 px in Jet `#141414` centred at (32, 32). About 44% of its pixels are
-  opaque, so it passes D7. The build generates the bytes once with a scratch script and pastes the
+  filled disc of radius 24 px in Jet `#141414` centred at (32, 32). `computeSubjectMask()` takes
+  its alpha route and reports 44% subject coverage (checked on `aade23f` with an equivalent buffer),
+  so it passes D7. The build generates the bytes once with a scratch script and pastes the
   base64 in; no image file is added. Its `providerId` is `'fake'`, its `model` is `'fake'` and its
   `consent` is `null`.
 
@@ -133,9 +134,14 @@ New folder `server/redraw/` with three files:
 No new npm dependencies. The server uses Node 18+ globals `fetch`, `FormData` and `Blob`.
 
 `tools/dev-server.mjs` mounts `GET /api/redraw/config` and `POST /api/redraw` only when redraw is
-configured. **(spec)** "Configured" means both `OPENAI_API_KEY` and `REDRAW_ACCESS_CODE` are
-non-empty, because D4 marks both as required. Otherwise both routes answer 404 and the server
-logs one line at start-up saying redraw is off and which variable is missing (never a value).
+configured. "Configured" means `REDRAW_ACCESS_CODE` is non-empty **and** either `OPENAI_API_KEY` is
+non-empty or `REDRAW_FAKE=1`. Fake mode therefore needs no key, and the access code is required in
+both modes. Otherwise both routes answer 404 and the server logs one line at start-up saying
+redraw is off and which variable is missing (never a value). With `REDRAW_FAKE=1` and a key both
+set, fake mode wins and no OpenAI call is made. In fake mode the config route still answers
+`{ providerId: 'openai-proxy', costLabel }`, so the browser runs the real proxy provider, consent
+dialog and access-code path against the fixture. The consent dialog still names OpenAI even though
+nothing is sent there. That is acceptable for a local check mode.
 Everything else the server does stays as it is: every other `POST` is still 405, every response
 keeps `Cache-Control: no-cache, no-store`, and static files are served as before.
 
@@ -164,13 +170,13 @@ documented in a new tracked `.env.example`, with no real values.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OPENAI_API_KEY` | none, required | Server-side only. Never sent to the browser or logged. |
+| `OPENAI_API_KEY` | none; required unless `REDRAW_FAKE=1` | Server-side only. Never sent to the browser or logged. |
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | Sent as `model`. |
 | `OPENAI_IMAGE_QUALITY` | `medium` | Sent as `quality`. |
-| `REDRAW_ACCESS_CODE` | none, required | Requests without a matching `X-Redraw-Access-Code` header get 401. |
+| `REDRAW_ACCESS_CODE` | none, always required | Requests without a matching `X-Redraw-Access-Code` header get 401. Unset, both routes are 404, fake mode included. |
 | `REDRAW_RATE_LIMIT_PER_HOUR` | `20` | In memory, per client IP. |
 | `REDRAW_COST_LABEL` | empty | Free text for the consent dialog, e.g. "about $0.05 per image". Returned by the config route. |
-| `REDRAW_FAKE` | unset | `1` returns the fixture image with no OpenAI call, for local and browser checks. |
+| `REDRAW_FAKE` | unset | `1` returns the fixture image with no OpenAI call, for local and browser checks. Mounts the routes without `OPENAI_API_KEY`. |
 
 **(spec) Rate limit.** A sliding window: the handler keeps each IP's request times
 (`req.socket.remoteAddress`, never a forwarded header) and drops those older than 3,600,000 ms by
@@ -206,9 +212,10 @@ Each attempt times out after 120 s (`timeoutMs`). A 5xx or a timeout is retried 
 | 5xx or timeout twice | 502 `provider-failed` |
 | `fetch` itself rejects twice (DNS, reset) | 502 `provider-failed` |
 
-Transparent backgrounds on `gpt-image-2` are a preview feature of the Images API as of August 2026.
-If a model ignores `background`, the result is fully opaque and D7's check turns it into
-`invalid-output`, not a bad layer.
+`background` stays `transparent`. Transparent backgrounds on `gpt-image-2` are a preview feature
+of the Images API as of August 2026. D7 no longer depends on it: if a model ignores `background`
+and returns the subject on a plain opaque background, the Subject mask removes that background, so
+the output is still valid.
 
 ### D6. Prompt
 
@@ -251,10 +258,27 @@ Both run in `src/redraw/index.js`, so every provider gets them.
   `resizeImageBuffer(buffer, 1536, 1536)` (`src/image/ImageFieldPipeline.js:66`, which keeps the
   aspect ratio and never enlarges) and encoded to a PNG data URL. The encoder is a canvas
   (`putImageData` then `toDataURL('image/png')`), injected through `configureRedraw({ encodePng })`.
-* **After the provider returns**, the image must decode. The fraction of pixels whose alpha is at
-  least `ALPHA_COVERAGE_THRESHOLD` (128, `src/image/Alpha.js:15`, the cut-off the pipeline's
-  `transparent: 'ignore'` already uses) must be at least 0.01 and at most 0.99. Anything else is
-  invalid. Invalid output triggers one more full provider call. A second invalid output rejects with
+* **After the provider returns**, the image is valid when it decodes and its **subject coverage**
+  is at least 0.01 and at most 0.99. Subject coverage is the fraction of 1s in the `mask` that
+  `computeSubjectMask(imageBuffer, options = {})` returns (`src/image/SubjectMask.js:208`, exported
+  through `src/image/index.js:55`). It returns
+  `{ mask: { widthPx, heightPx, data }, route: 'alpha'|'background', backgroundRgb }`, where `mask.data`
+  holds 0/1 per pixel. It is called with no options, so the tolerance is
+  `DEFAULT_SUBJECT_TOLERANCE_DE` (12), as the image pipeline calls it. To match the pipeline's size
+  rule (`computeNativeSizeSubjectMask()`, `src/image/ImageFieldPipeline.js:112-117`), an image whose
+  longer side is over 1000 px (`SUBJECT_MASK_RESIZE_TRIGGER_PX`, `:45`) is first shrunk with
+  `resizeImageBuffer(buffer, 800, 800)` (`SUBJECT_MASK_MAX_DIMENSION_PX`, `:46`). Those two
+  constants are not exported through the `src/image/index.js` barrel, so `src/redraw/index.js`
+  restates 1000 and 800 with a comment naming them. A 1024 × 1024 OpenAI result is shrunk; the
+  64 × 64 fake is not.
+
+  This check replaces an alpha-only opacity check. The Subject mask's alpha route handles a
+  transparent background. Its background route (the modal border colour, flood-filled from the
+  border) removes a plain opaque background, so a fully opaque image on white is still valid. A
+  blank image (fully transparent, or one flat colour) gives 0 coverage, and an image with no
+  removable background gives about 1, so both are invalid.
+
+  Invalid output triggers one more full provider call. A second invalid output rejects with
   `invalid-output`.
 
 Each attempt is a separate paid image and counts against D4's hourly limit, so one click costs at
@@ -285,8 +309,9 @@ The transform is pure data, in **(spec)** `src/redraw/RedrawLayerTransform.js`, 
 `index.js`, so tests import it instead of scraping `app.js`:
 
 * `applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now })` returns a new layer.
-  `naturalWidthPx`/`naturalHeightPx` are the redrawn image's decoded size (1024 × 1024 from D5) and
-  set only the new box's aspect ratio. `now` is an injected clock.
+  `naturalWidthPx`/`naturalHeightPx` are the redrawn image's decoded size (1024 × 1024 from D5,
+  already decoded by D7's check). They set the new box's aspect ratio and are written to the layer.
+  `now` is an injected clock.
 * `restoreOriginal(layer)` returns a new layer.
 
 `app.js` applies either one as a single history step: `commitHistory()` first (it snapshots the
@@ -298,27 +323,47 @@ at `:5548`), and calls `updateAll(true)`. Undo reverts either one.
 
 * `imageSrc`: the redrawn data URL. `imageName`: the original name plus ` (AI redraw)`.
 * `vividness`: `1.0` (see "Measured figures").
+* `naturalWidthPx`/`naturalHeightPx`: the redrawn image's decoded size. The Studio's stat line
+  (`app.js:6636`) then shows the image actually in use.
 * `w`/`h`: the redrawn image's aspect ratio, longer side 160 mm, then clamped to
   `canvas.width - 20` × `canvas.height - 20` by the same uniform shrink `computeDefaultImagePlacement()`
-  uses (`app.js:5531-5540`). `x`/`y`: set so the box stays centred on the old box's centre
-  (`x + w/2`, `y + h/2`). The position is not clamped, which D9 does not ask for.
-* `redraw`: `{ originalImageSrc, originalImageName, previousVividness, previousW, previousH, providerId, model, promptVersion, createdAt }`,
+  uses (`app.js:5531-5540`; the clamp line is `:5538`).
+* `x`/`y`: first set so the box is centred on the old box's centre (`x + w/2`, `y + h/2`). Then the
+  box is shifted, never scaled again, so it lies fully inside the canvas:
+  `x = min(max(x, 0), canvas.width - w)`, and likewise `y` with `canvas.height - h`. The size clamp
+  above leaves a 20 mm margin, so the box always fits and the shift always succeeds. The shift is
+  0 when the centred box already fits. "Inside" refers to the unrotated box. A rotated layer's
+  corners can still cross the edge, as they can for any rotated layer today.
+* `redraw`: `{ originalImageSrc, originalImageName, previousVividness, previousW, previousH, previousNaturalWidthPx, previousNaturalHeightPx, providerId, model, promptVersion, createdAt }`,
   with `createdAt` as `new Date(now()).toISOString()`.
-* Every other field is unchanged, including `rotationDeg` (the box rotates about its centre, which
-  did not move) and `naturalWidthPx`/`naturalHeightPx` (see Findings F1).
+* Every other field is unchanged, including `rotationDeg`.
+
+**The restated clamp.** The uniform-shrink line in `RedrawLayerTransform.js` restates
+`computeDefaultImagePlacement()`'s clamp (`app.js:5538`) instead of sharing it. It carries a
+comment naming `computeDefaultImagePlacement()` in `app.js`. The build adds a matching one-line
+comment in the comment block directly above `computeDefaultImagePlacement()` (`app.js:5526-5530`,
+outside the function) pointing back to `src/redraw/RedrawLayerTransform.js`. Reason:
+`test-img-011-import-defaults.mjs:36` cuts `computeDefaultImagePlacement()` out of `app.js` with a
+regex and runs it through `new Function('project', …)` with only `project` injected. A shared
+helper would be a free identifier in that extract and break the test. No test matches the comment
+block above the function (grepped on `aade23f`), and the regex starts at `function`, so the
+comment is safe there.
 
 **Redrawing again.** A layer that has `redraw` can be redrawn again. The request always sends
 `redraw.originalImageSrc`, not the current `imageSrc`. **(spec)** The second `applyRedraw` keeps
-`originalImageSrc`, `originalImageName`, `previousVividness`, `previousW` and `previousH` from the
-first record, so **Use original** always returns to the layer as it was before any redraw. It
+`originalImageSrc`, `originalImageName`, `previousVividness`, `previousW`, `previousH`,
+`previousNaturalWidthPx` and `previousNaturalHeightPx` from the first record, so **Use original** always returns to the layer as it was before any redraw. It
 replaces `providerId`, `model`, `promptVersion` and `createdAt`. The new `imageName` is
-`originalImageName + ' (AI redraw)'`, never a double suffix. `x`/`y` stay centred on the current box.
+`originalImageName + ' (AI redraw)'`, never a double suffix. `x`/`y` are centred on the current
+box, then shifted inside the canvas as above.
 
-**Use original** (`restoreOriginal`) sets `imageSrc`, `imageName`, `vividness`, `w` and `h` exactly
-from `layer.redraw`, recentres `x`/`y` on the current box's centre, and deletes `layer.redraw` (the
-key is gone, not `undefined`). **(spec)** Recentring matters because the operator may move the
-layer between the redraw and Use original. When they have not, the restored `x`/`y` equal the
-originals up to floating-point rounding (the test allows 1e-9 mm).
+**Use original** (`restoreOriginal`) sets `imageSrc`, `imageName`, `vividness`, `w`, `h`,
+`naturalWidthPx` and `naturalHeightPx` exactly from `layer.redraw`. It recentres `x`/`y` on the
+current box's centre and deletes `layer.redraw` (the key is gone, not `undefined`). **(spec)**
+Recentring matters because the operator may move the layer between the redraw and Use original.
+When they have not moved it and the redraw needed no shift, the restored `x`/`y` equal the
+originals up to floating-point rounding (the test allows 1e-9 mm). When the redraw was shifted, the
+restored box is centred on the shifted centre, not at its first position (see Findings F6).
 
 `duplicateLayer()` (`app.js:4441`) deep-copies a layer, so a copy carries its own `redraw` record and
 its own Use original. No change is needed there.
@@ -421,7 +466,9 @@ Re-grepped on `aade23f`.
 | `.env` ignored | `.gitignore:13` |
 | `decodeDataUrlToBuffer()` | `src/image/ImageDecoder.js:112` |
 | `resizeImageBuffer()` | `src/image/ImageFieldPipeline.js:66` |
-| `ALPHA_COVERAGE_THRESHOLD` | `src/image/Alpha.js:15` |
+| `computeSubjectMask(imageBuffer, options = {})` | `src/image/SubjectMask.js:208`; exported at `src/image/index.js:55` |
+| `SUBJECT_MASK_RESIZE_TRIGGER_PX = 1000` / `SUBJECT_MASK_MAX_DIMENSION_PX = 800` | `src/image/ImageFieldPipeline.js:45` / `:46`; used at `:112-117` |
+| Comment block above `computeDefaultImagePlacement()` | `app.js:5526-5530` |
 
 ## Tests the build must add
 
@@ -457,8 +504,15 @@ with `timeoutMs: 10`: two attempts, then 502 `provider-failed`.
 `invalid-output`.
 
 **T7. Env.** `loadRedrawEnv()` applies every D4 default; `process.env` wins over the file text;
-quotes and comments are handled; the config route answers 404 when either required variable is
-empty and 200 `{ providerId: 'openai-proxy', costLabel }` when both are set.
+quotes and comments are handled. The config route answers 404 with no `REDRAW_ACCESS_CODE`
+(with or without a key, fake or not), 404 with an access code but neither a key nor
+`REDRAW_FAKE=1`, and 200 `{ providerId: 'openai-proxy', costLabel }` with an access code and a key.
+
+**T7b. Fake mode with no key.** Settings with `REDRAW_FAKE=1`, `REDRAW_ACCESS_CODE` set and no
+`OPENAI_API_KEY`: the config route answers 200 `{ providerId: 'openai-proxy', costLabel }`;
+`handleRedraw` with the right code answers 200 with `FAKE_REDRAW_DATA_URL` and `model: 'fake'`; a
+wrong code still gets 401; and the injected `fetch` is never called. With a key also set, fake mode
+still wins (no `fetch` call).
 
 **T8. Provider selection.** With `configureRedraw({ fetch })`: config 404 → `available: false`;
 config network error → `available: false`; config 200 with a bad body → `available: false`; config
@@ -466,19 +520,44 @@ config network error → `available: false`; config 200 with a bad body → `ava
 `configureRedraw({ provider: fakeProvider })` → `redrawImage()` resolves with
 `providerId: 'fake'` and makes no `fetch` call.
 
-**T9. Client limits.** With injected `decodeImage`/`encodePng`: a 3000 × 2000 source reaches the
-provider at 1536 × 1024. An output with 0% opaque pixels, then a valid one: resolves, two provider
-calls. Two outputs at 100% opaque: rejects `invalid-output` after two calls. An output that fails to
-decode counts as invalid. An abort before the provider resolves rejects with `AbortError`, not a
+**T9. Client limits.** With injected `decodeImage`/`encodePng`, and the real `computeSubjectMask()`,
+a 3000 × 2000 source reaches the provider at 1536 × 1024. The output fixtures are 64 × 64 RGBA
+buffers built in the test. For each fixture, the test first asserts its `route` and coverage from
+`computeSubjectMask()` directly, so a change in the mask shows up as a fixture failure, not as a
+confusing validity failure. The figures below were checked on `aade23f`.
+
+* **Opaque on white (valid).** Every pixel opaque: a Jet `(20, 20, 20)` disc of radius 20 centred at
+  (31.5, 31.5) on white `(255, 255, 255)`. Route `background`, coverage 0.3086. `redrawImage()`
+  resolves after one provider call.
+* **Blank (invalid).** Two cases: fully transparent (route `alpha`, coverage 0) and flat opaque
+  white (route `background`, coverage 0).
+* **Fully covered (invalid).** Every pixel opaque: a checkerboard of 3 px cells in red
+  `(255, 0, 0)` and blue `(0, 0, 255)`. Route `background`, coverage 1. No border run of
+  background-coloured pixels reaches IMG-014's 5%-of-side seed length (3.2 px here), so nothing is
+  flood-filled as background.
+
+An invalid fixture, then the valid one: resolves, two provider calls. Two invalid outputs (each of
+the three invalid fixtures in turn): rejects `invalid-output` after two calls. An output that fails
+to decode counts as invalid. An abort before the provider resolves rejects with `AbortError`, not a
 `RedrawError`.
 
-**T10. Layer transform.** On a fixture image layer (x 20, y 30, w 200, h 150, `vividness` 1.4,
-`rotationDeg` 15, canvas 300 × 250) with a 1024 × 1024 result and a fixed `now`: `imageSrc`,
-`imageName` (with ` (AI redraw)`), `vividness` 1, `w` = `h` = 160, centre unchanged (120, 105), and
-the `redraw` record hold the exact values; every other key is deep-equal to the input. On a
-100 × 100 canvas, `w` = `h` = 80. A second `applyRedraw` keeps the first record's `original*` and
-`previous*` fields. `restoreOriginal()` then gives back `imageSrc`, `imageName`, `vividness`, `w`
-and `h` exactly, `x`/`y` within 1e-9 mm, and no `redraw` key.
+**T10. Layer transform.** On a fixture image layer (x 20, y 30, w 200, h 150, `naturalWidthPx`
+4000, `naturalHeightPx` 3000, `vividness` 1.4, `rotationDeg` 15, canvas 300 × 250) with a
+1024 × 1024 result and a fixed `now`: `imageSrc`, `imageName` (with ` (AI redraw)`), `vividness` 1,
+`naturalWidthPx` = `naturalHeightPx` = 1024, `w` = `h` = 160, centre unchanged (120, 105) with no
+shift (x 40, y 25), and the `redraw` record hold the exact values, including
+`previousNaturalWidthPx` 4000 and `previousNaturalHeightPx` 3000. Every other key is deep-equal to the
+input. On a 100 × 100 canvas, `w` = `h` = 80, shifted to x 20, y 20. A second `applyRedraw` keeps the
+first record's `original*` and `previous*` fields, including both `previousNatural*`.
+`restoreOriginal()` then gives back `imageSrc`, `imageName`, `vividness`, `w`, `h`, `naturalWidthPx`
+(4000) and `naturalHeightPx` (3000) exactly, `x`/`y` within 1e-9 mm, and no `redraw` key.
+
+**T10b. A small image touching the canvas edge.** Canvas 300 × 250. A layer at x 0, y 0, w 40, h 30
+(touching the top and left edges): the 160 mm box centred on (20, 15) would sit at (-60, -65), and it
+is shifted to x 0, y 0 with `w` = `h` = 160 (not rescaled). A layer at x 260, y 220, w 40, h 30
+(touching the right and bottom edges): the centred box at (200, 155) is shifted to x 140, y 90. In
+both cases `0 ≤ x`, `x + w ≤ 300`, `0 ≤ y` and `y + h ≤ 250`. `restoreOriginal()` on the first
+gives `w` 40, `h` 30, centred on the shifted box's centre (80, 80): x 60, y 65 (F6).
 
 **T11. Round trip and validation.** For a project with an image layer and no `redraw`, passed once
 through `validateProject()` (extracted the way `test-project-validation-security.mjs` does),
@@ -527,7 +606,9 @@ calls `el()` with no id but `imageStudioRemove`. New handlers must not be writte
 statement.
 
 **Not changed, but close.** The import handler (`:5542-5559`) and `computeDefaultImagePlacement()`
-(`:5531-5540`) stay byte-identical. `test-img-011-import-defaults.mjs:36` extracts the latter with
+(`:5531-5540`) stay byte-identical. The only nearby change is one comment line added to the block
+above the function (`:5526-5530`). No test matches that block, and every extract of the function
+starts at `function computeDefaultImagePlacement(`. `test-img-011-import-defaults.mjs:36` extracts the latter with
 `/function computeDefaultImagePlacement\(naturalWidthPx,naturalHeightPx\)\{[\s\S]*?\n\}/` and runs it
 with only `project` injected. That is why D9's clamp is re-stated in `RedrawLayerTransform.js`
 instead of shared: a shared helper would add a free identifier to that extract. `:47` extracts the
@@ -554,32 +635,20 @@ scan `src/redraw/**`.
   `tools/test-img-022-redraw-provider.mjs`.
 * Changed: `app.js`, `index.html`, `tools/dev-server.mjs`, `tools/test-groups.mjs`.
 * No new npm dependencies and no image files.
-* Browser check: run `REDRAW_FAKE=1` with any non-empty `OPENAI_API_KEY` and a
-  `REDRAW_ACCESS_CODE`. Check consent, redraw, Undo, Use original, Cancel, and that the button stays
+* A one-line comment above `computeDefaultImagePlacement()` in `app.js` pointing to
+  `src/redraw/RedrawLayerTransform.js` (D9, "The restated clamp").
+* Browser check: run `REDRAW_FAKE=1` and a `REDRAW_ACCESS_CODE`, with no `OPENAI_API_KEY`. Check consent, redraw, Undo, Use original, Cancel, and that the button stays
   hidden with no env set. Then do one live OpenAI call only with the operator's go-ahead, since it
   is billed.
 
 ## Findings for decision
 
-These are points where a settled decision has a consequence the brief may not have meant. The spec
-follows the decisions as given.
+F1 to F5 from the first version of this spec are resolved in D9 (F1, F3, F4), D3/D4 (F2) and
+D5/D7 (F5).
 
-* **F1. `naturalWidthPx`/`naturalHeightPx` go stale.** D9 leaves every other field unchanged, so
-  after a redraw these still hold the original upload's size. The Studio's stat line
-  (`app.js:6636`) then shows e.g. "photo.jpg (AI redraw) — 4000×3000px" for a 1024 × 1024 image.
-  Nothing else reads them (`computeDefaultImagePlacement()` takes its own arguments), so no stone
-  moves. Suggested fix: set them to the redrawn size and record `previousNaturalWidthPx`/
-  `previousNaturalHeightPx` in `layer.redraw` so Use original restores them.
-* **F2. Fake mode needs a dummy key.** D3 mounts the routes only when `OPENAI_API_KEY` is set, so a
-  `REDRAW_FAKE=1` check needs a placeholder key. That is harmless but odd. The alternative is to
-  mount when the key is set or `REDRAW_FAKE=1`.
-* **F3. The box can leave the canvas.** D9 keeps the 160 mm box centred on the old centre and clamps
-  only its size. A small image placed near an edge can end up partly off the canvas.
-* **F4. Clamp logic is stated twice.** `RedrawLayerTransform.js` restates
-  `computeDefaultImagePlacement()`'s one-line uniform shrink rather than sharing it, for the test
-  extraction reason in "Existing tests". CLAUDE.md discourages duplicated logic. Sharing it means
-  moving `computeDefaultImagePlacement()` into `src/` and updating `test-img-011`, which is outside
-  this milestone.
-* **F5. The transparency parameter is in preview.** If OpenAI stops honouring
-  `background: transparent` for `gpt-image-2`, every redraw fails as `invalid-output` after two
-  billed images. D7 keeps bad output out of the project, but it does not avoid the cost.
+* **F6. Use original after a shifted redraw.** `restoreOriginal()` recentres the original box on
+  the current centre (D9). When the redraw was shifted to stay inside the canvas, that centre is
+  not the original one, so the restored image does not return to its first position (T10b: x 60,
+  y 65 instead of 0, 0). Undo does restore it exactly. Recording `previousX`/`previousY` would make
+  Use original exact, but a layer moved after the redraw would then jump back. This spec keeps
+  recentring and leaves the choice open.
