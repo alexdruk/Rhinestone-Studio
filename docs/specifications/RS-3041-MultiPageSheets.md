@@ -82,7 +82,14 @@ cellH = pageH - 2*margin - TILE_LABEL_HEIGHT_MM - FOOTER_HEIGHT_MM - 2*OVERLAP_M
 Skip an orientation where either is `<= 0`. `cols = ceil(W / cellW)`, `rows = ceil(H / cellH)`. Pick
 the fewest `cols * rows`, strict less-than, so ties stay portrait. Tiles split the production area
 evenly: `tileW = W / cols`, `tileH = H / rows`. Every page of the document, cover included, uses that
-one orientation. If neither orientation works, throw a `RangeError`.
+one orientation. If neither orientation works, throw a `RangeError` whose message is exactly:
+
+```
+Production sheet does not fit <pageSize> at margin <margin>mm, even split across pages. Reduce the margin or choose a larger page size.
+```
+
+`<margin>` is formatted the way `resolvePageOrientation()` formats it today
+(`ProductionSheetExporter.js:205`, the raw `marginMm` value interpolated as `${marginMm}mm`).
 
 **D4. Mirror first, then tiling.** Mirror is applied first (`x` becomes `W - x`, as today at
 `ProductionSheetExporter.js:358`), then tiling, in that order.
@@ -104,7 +111,13 @@ left to right as printed, after mirroring. Pages are ordered row by row: A1, A2,
 `Pages: cover + N (C columns × R rows), overlap 8 mm`. Below that, a page map: the production area
 split into its tile grid, each tile labelled with its name and owned stone count, scaled to fit the
 remaining printable area, and captioned `Page map, not to scale`. The map needs at least 40 mm of
-height, otherwise throw a `RangeError`.
+height, otherwise throw a `RangeError` whose message is exactly:
+
+```
+Production sheet cover page has no room for the page map on <pageSize> at margin <margin>mm. Reduce the margin or choose a larger page size.
+```
+
+`<margin>` is formatted as in D3.
 
 **D9. Tile page.** Top line (`TILE_LABEL_HEIGHT_MM`):
 `<project> · Page B2 of N · <owned count> stones · grey stones belong to neighbouring pages`. The tile
@@ -118,9 +131,11 @@ writes N pages). Single-page PDF bytes must stay byte-identical to today's.
 `productionSheetToPdf()` renders `computeProductionSheetDocument()`.
 
 **D11. SVG and PNG.** `productionSheetToSvg()` still produces one page. When the design needs more
-than one page it throws a `RangeError` whose message is exactly:
+than one page it throws a `RangeError` whose message uses "page" when N is 1 and "pages" otherwise,
+exactly:
 
 ```
+This Production Sheet needs 1 page on <pageSize> plus a cover page. Export it as PDF.
 This Production Sheet needs N pages on <pageSize> plus a cover page. Export it as PDF.
 ```
 
@@ -229,9 +244,18 @@ Owned / ghost per page, in page order:
 | 500×500 A4 | landscape, 2 cols × 4 rows | 250×125 | 38152 | A1 6836, A2 2740, B1 6835, B2 2741, C1 6727, C2 2697, D1 6836, D2 2740 | A1 668, A2 409, B1 1117, B2 596, C1 1225, C2 640, D1 668, D2 409 |
 | 150×150 A4 | single page, `{ multiPage: false }` | — | — | — | — |
 | `tools/test-rs-3037-flat-sheet.mjs` test 12's 8-colour layout, 158×158 Letter | `computeProductionSheetLayout()` still throws; cover + 1 page, 1 × 1, portrait | 158×158 | 24 | A1 24 | A1 0 |
+| 300×300 A4, margin 54 | landscape, 2 cols × 5 rows; cover map 38.5 mm → D8 `RangeError` | — | — | — | — |
+| 300×300 A4, margin 53 | portrait, 4 cols × 2 rows, 8 pages; succeeds | — | — | — | — |
 
 150×150 A4: the PDF bytes are identical to `productionSheetToPdf()` at `c546685` (911 434 bytes,
 SHA-256 `723020417f9cb8befdddf28ac73dce5218d50d9cc653ce9537f4f98e8e7e4928` with the options above).
+The SVG is identical to `productionSheetToSvg()` at `c546685` (397 684 characters, SHA-256
+`3414abee87a8bd597dc916a43e78a760cace4d71f9575db1eb1b556747853bd2`, same options).
+
+Margin 54/53 (map floor, D8): the cover header is 63.5 mm (two colour lines plus the `Pages:` line).
+At margin 54 landscape (2 × 5 = 10) beats portrait (4 × 3 = 12), leaving 210 − 108 − 63.5 = 38.5 mm
+for the map. At margin 53 portrait (4 × 2 = 8) beats landscape (2 × 5 = 10), leaving
+297 − 106 − 63.5 = 127.5 mm.
 
 220×220 A4 is the tie case: portrait gives 2 × 1 and landscape gives 1 × 2, so portrait wins (D3).
 
@@ -239,7 +263,8 @@ SHA-256 `723020417f9cb8befdddf28ac73dce5218d50d9cc653ce9537f4f98e8e7e4928` with 
 over `computeProductionSheetLayout()` and `PAGE_SIZES` reproduced every figure above exactly,
 including the owned sums (7370, 13650, 38152, 24). It also confirmed both mutants fail: tiling before
 mirroring gives 220×220 mirror-on owned A1 5225 / A2 2145 (pinned 2145 / 5225), and ghosts off gives
-0 on every 500×500 page.
+0 on every 500×500 page. A second scratch script reproduced the margin 54/53 rows and the SVG
+character count and SHA-256.
 
 ---
 
@@ -247,26 +272,36 @@ mirroring gives 220×220 mirror-on owned A1 5225 / A2 2145 (pinned 2145 / 5225),
 
 New `tools/test-rs-3041-multi-page.mjs` (the build step writes it):
 
+Items 4, 5 and 9 are audit checks, run by hand when reviewing the build, not test code: tests never
+mutate source or run git. Items 1 and 3 are what kill the mirror and ghost mutants in the test file.
+
 1. Every pinned figure in §4: grid, orientation, tile size, total, owned and ghost per page, in page
    order.
 2. Owned counts sum to the total for every multi-page case.
 3. No stone is owned twice: each input stone index appears in exactly one tile's owned set.
-4. Mirror mutant: tiling before mirroring fails the 220×220 mirror-on row.
-5. Ghost mutant: a document with ghosts off fails the ghost counts.
-6. D11: `productionSheetToSvg()` on 300×300 A4 throws a `RangeError` whose message equals exactly
-   `This Production Sheet needs 4 pages on A4 plus a cover page. Export it as PDF.`
-7. Single page is byte-identical: 150×150 A4 SVG string and PDF bytes equal today's (the PDF against
-   the §4 SHA-256; the SVG against `computeProductionSheetLayout()`'s rendering captured the same way).
+4. *(Audit check.)* Mirror mutant: tiling before mirroring fails the 220×220 mirror-on row.
+5. *(Audit check.)* Ghost mutant: a document with ghosts off fails the ghost counts.
+6. D11: `productionSheetToSvg()` throws a `RangeError` whose message equals exactly
+   `This Production Sheet needs 4 pages on A4 plus a cover page. Export it as PDF.` for 300×300 A4,
+   and exactly
+   `This Production Sheet needs 1 page on Letter plus a cover page. Export it as PDF.` for
+   `tools/test-rs-3037-flat-sheet.mjs` test 12's layout at 158×158 Letter.
+7. Single page is byte-identical: 150×150 A4 SVG string and PDF bytes equal today's, both against
+   the §4 figures (SVG 397 684 characters, SHA-256 `3414abee…53bd2`; PDF 911 434 bytes, SHA-256
+   `72302041…e4928`).
 8. The multi-page PDF has N + 1 pages (`/Count N+1`, N+1 `/Type /Page` objects), each with the right
    `/MediaBox` (A4 portrait 595.276 × 841.89 pt for 220 and 300; A4 landscape 841.89 × 595.276 pt for
    500), and every xref offset points at its own `N 0 obj`.
-9. The three pinned `RangeError` tests are untouched: `git diff c546685 --` on
+9. *(Audit check.)* The three pinned `RangeError` tests are untouched: `git diff c546685 --` on
    `tools/test-production-sheet-exporter.mjs` shows no change to tests 2 or 16, and on
    `tools/test-rs-3037-flat-sheet.mjs` none to test 12; all three still pass.
 10. D12: the note appears in `#prodSheetValidation` only when multi-page applies (present for
     300×300 A4, absent for 150×150 A4), and appears alongside, not instead of, the RS-3038
     outside-area warning.
-11. D8's 40 mm floor: a cover whose header leaves less than 40 mm throws a `RangeError`.
+11. D8's 40 mm floor, on the §4 fixture at 300×300 A4: margin 54 throws a `RangeError` whose message
+    equals exactly
+    `Production sheet cover page has no room for the page map on A4 at margin 54mm. Reduce the margin or choose a larger page size.`
+    (landscape 2 × 5, map 38.5 mm); margin 53 succeeds, portrait 4 × 2, 8 tile pages.
 
 ---
 
