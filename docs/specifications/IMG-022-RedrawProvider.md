@@ -91,8 +91,9 @@ it, and a Worker provider that returns `consent: null` needs no `app.js` change.
   `consent` is `{ recipientName: 'OpenAI', costLabel, needsAccessCode: true }`, with `costLabel` taken
   from the config response.
 * `src/redraw/FakeRedrawProvider.js` returns a fixed image for tests. **(spec)** It exports
-  `FAKE_REDRAW_DATA_URL`: a 64 × 64 RGBA PNG (colour type 6) that is transparent except for a
-  filled disc of radius 24 px in Jet `#141414` centred at (32, 32). `computeSubjectMask()` takes
+  `FAKE_REDRAW_DATA_URL`: a 64 × 64 RGBA PNG (colour type 6). Pixel (x, y), with integer x and y
+  from 0 to 63, is opaque Jet `#141414` when `Math.hypot(x + 0.5 - 32, y + 0.5 - 32) <= 24`, and
+  fully transparent `(0, 0, 0, 0)` otherwise. `computeSubjectMask()` takes
   its alpha route and reports 44% subject coverage (checked on `aade23f` with an equivalent buffer),
   so it passes D7. The build generates the bytes once with a scratch script and pastes the
   base64 in; no image file is added. Its `providerId` is `'fake'`, its `model` is `'fake'` and its
@@ -334,8 +335,10 @@ at `:5548`), and calls `updateAll(true)`. Undo reverts either one.
   above leaves a 20 mm margin, so the box always fits and the shift always succeeds. The shift is
   0 when the centred box already fits. "Inside" refers to the unrotated box. A rotated layer's
   corners can still cross the edge, as they can for any rotated layer today.
-* `redraw`: `{ originalImageSrc, originalImageName, previousVividness, previousW, previousH, previousNaturalWidthPx, previousNaturalHeightPx, providerId, model, promptVersion, createdAt }`,
-  with `createdAt` as `new Date(now()).toISOString()`.
+* `redraw`: `{ originalImageSrc, originalImageName, previousVividness, previousW, previousH, previousNaturalWidthPx, previousNaturalHeightPx, previousX, previousY, appliedX, appliedY, providerId, model, promptVersion, createdAt }`,
+  with `createdAt` as `new Date(now()).toISOString()`. `previousX`/`previousY` are the layer's
+  `x`/`y` before the redraw. `appliedX`/`appliedY` are the `x`/`y` this `applyRedraw` produced, after
+  the shift.
 * Every other field is unchanged, including `rotationDeg`.
 
 **The restated clamp.** The uniform-shrink line in `RedrawLayerTransform.js` restates
@@ -352,18 +355,24 @@ comment is safe there.
 **Redrawing again.** A layer that has `redraw` can be redrawn again. The request always sends
 `redraw.originalImageSrc`, not the current `imageSrc`. **(spec)** The second `applyRedraw` keeps
 `originalImageSrc`, `originalImageName`, `previousVividness`, `previousW`, `previousH`,
-`previousNaturalWidthPx` and `previousNaturalHeightPx` from the first record, so **Use original** always returns to the layer as it was before any redraw. It
-replaces `providerId`, `model`, `promptVersion` and `createdAt`. The new `imageName` is
+`previousNaturalWidthPx`, `previousNaturalHeightPx`, `previousX` and `previousY` from the first
+record, so **Use original** always returns to the layer as it was before any redraw. It replaces
+`appliedX`, `appliedY`, `providerId`, `model`, `promptVersion` and `createdAt`. The new `imageName` is
 `originalImageName + ' (AI redraw)'`, never a double suffix. `x`/`y` are centred on the current
 box, then shifted inside the canvas as above.
 
 **Use original** (`restoreOriginal`) sets `imageSrc`, `imageName`, `vividness`, `w`, `h`,
-`naturalWidthPx` and `naturalHeightPx` exactly from `layer.redraw`. It recentres `x`/`y` on the
-current box's centre and deletes `layer.redraw` (the key is gone, not `undefined`). **(spec)**
-Recentring matters because the operator may move the layer between the redraw and Use original.
-When they have not moved it and the redraw needed no shift, the restored `x`/`y` equal the
-originals up to floating-point rounding (the test allows 1e-9 mm). When the redraw was shifted, the
-restored box is centred on the shifted centre, not at its first position (see Findings F6).
+`naturalWidthPx` and `naturalHeightPx` exactly from `layer.redraw`, and deletes `layer.redraw` (the
+key is gone, not `undefined`). For `x`/`y`:
+
+* If the layer's current `x` and `y` each equal `appliedX` and `appliedY` within 1e-9 mm, the layer
+  has not moved since the redraw, and `x`/`y` are restored to `previousX`/`previousY` exactly. This
+  is exact whether or not the redraw shifted the box.
+* Otherwise the operator moved the layer after the redraw. The original box is recentred on the
+  current box's centre, so it stays where the operator put it.
+
+A record without numeric `appliedX`/`appliedY` (not produced by this build, but possible in a
+hand-edited file) takes the recentre branch.
 
 `duplicateLayer()` (`app.js:4441`) deep-copies a layer, so a copy carries its own `redraw` record and
 its own Use original. No change is needed there.
@@ -526,9 +535,12 @@ buffers built in the test. For each fixture, the test first asserts its `route` 
 `computeSubjectMask()` directly, so a change in the mask shows up as a fixture failure, not as a
 confusing validity failure. The figures below were checked on `aade23f`.
 
-* **Opaque on white (valid).** Every pixel opaque: a Jet `(20, 20, 20)` disc of radius 20 centred at
-  (31.5, 31.5) on white `(255, 255, 255)`. Route `background`, coverage 0.3086. `redrawImage()`
+* **Opaque on white (valid).** Every pixel opaque. Pixel (x, y), with integer x and y from 0 to 63,
+  is Jet-dark `(20, 20, 20)` when `Math.hypot(x - 31.5, y - 31.5) <= 20`, and white
+  `(255, 255, 255)` otherwise. Route `background`, coverage 0.3086. `redrawImage()`
   resolves after one provider call.
+* **The fake image (valid).** `FAKE_REDRAW_DATA_URL`'s own pixels (D2 formula,
+  `Math.hypot(x + 0.5 - 32, y + 0.5 - 32) <= 24`): route `alpha`, coverage 0.4404.
 * **Blank (invalid).** Two cases: fully transparent (route `alpha`, coverage 0) and flat opaque
   white (route `background`, coverage 0).
 * **Fully covered (invalid).** Every pixel opaque: a checkerboard of 3 px cells in red
@@ -549,15 +561,23 @@ shift (x 40, y 25), and the `redraw` record hold the exact values, including
 `previousNaturalWidthPx` 4000 and `previousNaturalHeightPx` 3000. Every other key is deep-equal to the
 input. On a 100 × 100 canvas, `w` = `h` = 80, shifted to x 20, y 20. A second `applyRedraw` keeps the
 first record's `original*` and `previous*` fields, including both `previousNatural*`.
+The record holds `previousX` 20, `previousY` 30, `appliedX` 40, `appliedY` 25; the second
+`applyRedraw` keeps `previousX`/`previousY` and replaces `appliedX`/`appliedY`.
 `restoreOriginal()` then gives back `imageSrc`, `imageName`, `vividness`, `w`, `h`, `naturalWidthPx`
-(4000) and `naturalHeightPx` (3000) exactly, `x`/`y` within 1e-9 mm, and no `redraw` key.
+(4000), `naturalHeightPx` (3000), `x` 20 and `y` 30 exactly, and no `redraw` key.
 
 **T10b. A small image touching the canvas edge.** Canvas 300 × 250. A layer at x 0, y 0, w 40, h 30
 (touching the top and left edges): the 160 mm box centred on (20, 15) would sit at (-60, -65), and it
 is shifted to x 0, y 0 with `w` = `h` = 160 (not rescaled). A layer at x 260, y 220, w 40, h 30
 (touching the right and bottom edges): the centred box at (200, 155) is shifted to x 140, y 90. In
-both cases `0 ≤ x`, `x + w ≤ 300`, `0 ≤ y` and `y + h ≤ 250`. `restoreOriginal()` on the first
-gives `w` 40, `h` 30, centred on the shifted box's centre (80, 80): x 60, y 65 (F6).
+both cases `0 ≤ x`, `x + w ≤ 300`, `0 ≤ y` and `y + h ≤ 250`, and `appliedX`/`appliedY` equal the
+shifted position. `restoreOriginal()` on the unmoved first layer gives `w` 40, `h` 30, x 0, y 0
+exactly, and on the unmoved second layer x 260, y 220 exactly. Moving the first layer by 1e-10 mm
+still counts as unmoved and restores x 0, y 0.
+
+**T10c. Moved after the redraw.** The first T10b layer, redrawn (x 0, y 0, 160 × 160), then moved to
+x 50, y 40 (centre (130, 120)): `restoreOriginal()` gives `w` 40, `h` 30, recentred on (130, 120):
+x 110, y 105. Moving only `x` (x 50, y 0) also counts as moved: x 110, y 65.
 
 **T11. Round trip and validation.** For a project with an image layer and no `redraw`, passed once
 through `validateProject()` (extracted the way `test-project-validation-security.mjs` does),
@@ -643,12 +663,7 @@ scan `src/redraw/**`.
 
 ## Findings for decision
 
-F1 to F5 from the first version of this spec are resolved in D9 (F1, F3, F4), D3/D4 (F2) and
-D5/D7 (F5).
-
-* **F6. Use original after a shifted redraw.** `restoreOriginal()` recentres the original box on
-  the current centre (D9). When the redraw was shifted to stay inside the canvas, that centre is
-  not the original one, so the restored image does not return to its first position (T10b: x 60,
-  y 65 instead of 0, 0). Undo does restore it exactly. Recording `previousX`/`previousY` would make
-  Use original exact, but a layer moved after the redraw would then jump back. This spec keeps
-  recentring and leaves the choice open.
+None open. F1 to F5 from the first version of this spec are resolved in D9 (F1, F3, F4), D3/D4 (F2)
+and D5/D7 (F5). F6 (Use original after a shifted redraw) is resolved in D9: the record keeps
+`previousX`/`previousY` and `appliedX`/`appliedY`, and Use original restores the position exactly
+unless the layer was moved after the redraw.
