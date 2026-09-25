@@ -95,7 +95,7 @@ import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
-import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
+import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm } from './src/products/index.js';
@@ -5629,6 +5629,17 @@ function updateProdSheetReadabilityValidation(){
       const outsideMessage=`${outsideCount} stone${outsideCount===1?' lies':'s lie'} partly or fully outside the ${w} × ${h} ${u} production area and will not be on the template. Move or resize the design, or enlarge the sheet.`;
       message=message?`${message} ${outsideMessage}`:outsideMessage;
     }
+    // RS-3041 D12: a sheet too big for one page exports as a multi-page PDF. Warn-only, appended
+    // after the outside-area warning; a sheet that cannot be tiled at all throws here, and that
+    // error is left to the export handlers' own catch blocks to report.
+    try{
+      const sheetDocument=computeProductionSheetDocument(layout,currentProductionSheetOptions());
+      if(sheetDocument.multiPage){
+        const tileCount=sheetDocument.cols*sheetDocument.rows;
+        const multiPageMessage=`Spans ${tileCount} ${tileCount===1?'page':'pages'} on ${sheetDocument.pageSize} (${sheetDocument.cols} × ${sheetDocument.rows}) plus a cover page; export as PDF.`;
+        message=message?`${message} ${multiPageMessage}`:multiPageMessage;
+      }
+    }catch(error){}
   }
   validation.textContent=message;
   validation.classList.toggle('visible',Boolean(message));
