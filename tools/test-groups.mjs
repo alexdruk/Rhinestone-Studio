@@ -336,6 +336,8 @@ export const GROUPS = {
     'test-rs3036-dxf-exporter.mjs',
     'test-production-sheet-exporter.mjs',
     'test-rs-3038-prod-sheet-messages.mjs',
+    // RS-3041: multi-page Production Sheets (cover + true-size tile pages, PDF only).
+    'test-rs-3041-multi-page.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
     // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)

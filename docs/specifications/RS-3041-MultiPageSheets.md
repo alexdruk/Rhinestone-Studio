@@ -1,7 +1,6 @@
 # RS-3041 — Multi-page Production Sheets
 
-**Status:** spec. Branch `feature/rs-3041-multi-page` off `develop` @ `c546685`. No source or test
-file changes in this step.
+**Status:** built. Branch `feature/rs-3041-multi-page` off `develop` @ `c546685`.
 
 **Authorises:** a Production Sheet that does not fit one page is exported as a PDF of a cover page
 plus N tiled pages at true size, instead of failing. The single-page sheet, and every byte of its

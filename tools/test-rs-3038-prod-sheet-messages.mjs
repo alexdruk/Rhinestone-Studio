@@ -32,7 +32,7 @@ import { formatLengthDisplay, unitSuffix } from '../src/units/index.js';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 
-const { countStonesOutsideProductionArea } = await import('../src/export/ProductionSheetExporter.js');
+const { countStonesOutsideProductionArea, computeProductionSheetDocument } = await import('../src/export/ProductionSheetExporter.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
 
@@ -96,6 +96,14 @@ await test('1. countStonesOutsideProductionArea() counts stones not wholly insid
 
 // --- 2. updateProdSheetReadabilityValidation() outside-area message -----------------------------
 
+// RS-3041: updateProdSheetReadabilityValidation() also asks computeProductionSheetDocument() whether
+// the sheet spans several pages, with the real app's currentProductionSheetOptions(). The stub
+// describes the same canvas on A4, which a 150x150 sheet fits on one page, so no multi-page note is
+// added here; that note is covered by tools/test-rs-3041-multi-page.mjs.
+function productionSheetOptionsStub(canvas) {
+  return () => ({ productionWidthMm: canvas.width, productionHeightMm: canvas.height, pageSize: 'A4', marginMm: 10, mirror: false, registrationMarks: true, units: 'mm' });
+}
+
 // project.layers is deliberately empty: textLayersBelowReadableMinimum() (unmodified by RS-3038)
 // then returns [] without ever calling textHeightBelowReadableMinimum(), so this harness needs no
 // font/stone-size machinery to isolate the outside-area addition this milestone actually changed.
@@ -106,10 +114,10 @@ function runProdSheetValidation({ layout, canvas }) {
   const projectPredicateSrc = sliceBalanced(appJs, 'function textLayersBelowReadableMinimum(){', 'textLayersBelowReadableMinimum()');
   const prodSheetValidationSrc = sliceBalanced(appJs, 'function updateProdSheetReadabilityValidation(){', 'updateProdSheetReadabilityValidation()');
   const factory = new Function(
-    'el', 'project', 'layout', 'countStonesOutsideProductionArea', 'formatLengthDisplay', 'unitSuffix',
+    'el', 'project', 'layout', 'countStonesOutsideProductionArea', 'formatLengthDisplay', 'unitSuffix', 'computeProductionSheetDocument', 'currentProductionSheetOptions',
     `${projectPredicateSrc}\n${prodSheetValidationSrc}\nreturn updateProdSheetReadabilityValidation;`
   );
-  const updateProdSheetReadabilityValidation = factory(el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix);
+  const updateProdSheetReadabilityValidation = factory(el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix, computeProductionSheetDocument, productionSheetOptionsStub(canvas));
   updateProdSheetReadabilityValidation();
   return validation;
 }
@@ -163,10 +171,10 @@ function runExportHandlerCatch(buttonId, overrides) {
   const projectPredicateSrc = sliceBalanced(appJs, 'function textLayersBelowReadableMinimum(){', 'textLayersBelowReadableMinimum()');
   const prodSheetValidationSrc = sliceBalanced(appJs, 'function updateProdSheetReadabilityValidation(){', 'updateProdSheetReadabilityValidation()');
   const validationFactory = new Function(
-    'el', 'project', 'layout', 'countStonesOutsideProductionArea', 'formatLengthDisplay', 'unitSuffix',
+    'el', 'project', 'layout', 'countStonesOutsideProductionArea', 'formatLengthDisplay', 'unitSuffix', 'computeProductionSheetDocument', 'currentProductionSheetOptions',
     `${projectPredicateSrc}\n${prodSheetValidationSrc}\nreturn updateProdSheetReadabilityValidation;`
   );
-  const updateProdSheetReadabilityValidation = validationFactory(el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix);
+  const updateProdSheetReadabilityValidation = validationFactory(el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix, computeProductionSheetDocument, productionSheetOptionsStub(project.canvas));
 
   const marker = `el('${buttonId}').onclick=`;
   const extracted = sliceBalanced(appJs, marker, `${buttonId} handler`);

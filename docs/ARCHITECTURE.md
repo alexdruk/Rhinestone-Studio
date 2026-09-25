@@ -361,6 +361,14 @@ no new `src/export/**` module: `app.js` rasterizes the generated SVG via an offs
 `#exportCup` already use. Neither new module depends on `GeometryEngine`, `Project`, `Layer`, or a
 layer `type` — see `docs/specifications/RS-1005-ProductionSheetGenerator.md`.
 
+**Multi-page sheets.** Since RS-3041, a sheet too big for one page is no longer an export error for
+PDF. `computeProductionSheetDocument()` (`src/export/ProductionSheetExporter.js`) returns the
+single-page layout unchanged when it fits, and otherwise tiles the production area into a cover page
+(header plus a page map) and true-size tile pages with 8 mm overlap ghosts, cut lines and per-tile
+registration marks; `PdfDocument` gained `addPage()`, and single-page output is byte-identical. SVG
+and PNG stay one page and ask for a PDF export instead
+(`docs/specifications/RS-3041-MultiPageSheets.md`).
+
 As of RS-0003.5D1, `stoneLayoutToSvg()` validates its inputs (throws a clear `TypeError` for a
 malformed `stoneLayout` or a non-positive/non-finite `widthMm`/`heightMm`) and each `<circle>`
 carries the stone's original color id as a `data-color` attribute, alongside the existing display

@@ -384,7 +384,7 @@ await test('19. index.html exposes #projectName and the Production Sheet control
 });
 
 await test('20. app.js imports the new exporter functions and defaultProject()/validateProject() carry project.name', () => {
-  assert.match(appJs, /import\s*\{\s*computeProductionSheetLayout\s*,\s*productionSheetToSvg\s*,\s*productionSheetToPdf\s*,\s*countStonesOutsideProductionArea\s*\}\s*from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/);
+  assert.match(appJs, /import\s*\{\s*computeProductionSheetLayout\s*,\s*computeProductionSheetDocument\s*,\s*productionSheetToSvg\s*,\s*productionSheetToPdf\s*,\s*countStonesOutsideProductionArea\s*\}\s*from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/);
   assert.match(appJs, /name:DEFAULT_PROJECT_NAME/, 'expected defaultProject() to set project.name');
   assert.match(appJs, /name:typeof obj\.name==='string'&&obj\.name\.length>0\?obj\.name:DEFAULT_PROJECT_NAME/, 'expected validateProject() to permissively default project.name');
 });
