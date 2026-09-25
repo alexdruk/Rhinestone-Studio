@@ -283,6 +283,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .lightbox.studio .lightbox-body>*{min-height:0;overflow-y:auto}
 .lightbox-overlay.dock-left{justify-content:flex-start}
 #imageStudioControls details[inert]{opacity:.5}
+/* IMG-022: Redraw with AI row. button.btn sets display, so [hidden] needs its own override. */
+.image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.image-redraw-row button.btn[hidden]{display:none}
 #imageStudioCanvasColumn{display:flex;flex-direction:column;gap:var(--space-3);height:100%}
 #imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
 .view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
@@ -1155,6 +1158,15 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
           <p class="hint" id="imageStudioFileName"></p>
           <button id="imageStudioRemove" class="btn sm">Remove image</button>
+          <!-- IMG-022: Redraw with AI. #imageRedraw is shown only when a redraw provider is available
+               (src/redraw/index.js); Use original only when the image layer has a redraw record.
+               Visibility is set by syncImageRedrawControls() in app.js. -->
+          <div class="image-redraw-row">
+            <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn as a flat, stone-scale illustration">Redraw with AI</button>
+            <button id="imageRedrawCancel" class="btn sm" hidden>Cancel</button>
+            <button id="imageRedrawUseOriginal" class="btn sm" hidden title="Go back to the image as it was before the redraw">Use original</button>
+          </div>
+          <p class="hint" id="imageRedrawStatus" aria-live="polite"></p>
           <!-- RS-3037: shown only while Object type is not Flat Sheet (toggled by
                renderImageStudio()/updateObjectTemplateDetail() in app.js). Reuses the #objectType
                change handler itself (dispatches a real change event) rather than duplicating its
@@ -1450,6 +1462,24 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <footer class="lightbox-footer">
       <span class="footer-note" id="galleryPreviewStatus"></span>
       <button class="btn primary" id="galleryPreviewOpenCopy" title="Open an editable copy of this design">Open Copy</button>
+    </footer>
+  </div>
+</div>
+
+<!-- IMG-022: consent before the first redraw upload of a page session. Non-primary, so it stacks
+     over Image -> Strass instead of closing it. Filled in by askRedrawConsent() in app.js. -->
+<div class="lightbox-overlay" id="lightboxRedrawConsent">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxRedrawConsentTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxRedrawConsentTitle">Redraw with AI</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p>This image will be sent to <strong id="redrawConsentRecipient"></strong> for processing.</p>
+      <p class="hint" id="redrawConsentCost"></p>
+      <div class="field" id="redrawAccessCodeField"><label for="redrawAccessCode">Access code</label><input id="redrawAccessCode" type="password" autocomplete="off"></div>
+      <p class="hint" id="redrawConsentError"></p>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Cancel</button>
+      <button class="btn primary" id="redrawConsentContinue">Continue</button>
     </footer>
   </div>
 </div>

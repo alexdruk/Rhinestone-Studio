@@ -126,6 +126,9 @@ export const GROUPS = {
     'test-auto-fit-default-toggle-warning.mjs',
     'test-read-008-ratio-floor.mjs',
     'test-rs-3039-large-layout.mjs',
+    // IMG-022: redraw provider -- server handler with an injected fetch, src/redraw with injected
+    // decode/encode, the layer transform, and validateProject() extracted from app.js.
+    'test-img-022-redraw-provider.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

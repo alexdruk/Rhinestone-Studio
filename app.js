@@ -137,6 +137,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -1279,6 +1280,7 @@ function validateProject(obj){
     // plain boolean UI toggle, not strictly validated here, matching this function's existing
     // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
+    if(l.type==='image'&&l.redraw!==undefined&&!(l.redraw&&typeof l.redraw==='object'&&!Array.isArray(l.redraw)&&typeof l.redraw.originalImageSrc==='string'&&l.redraw.originalImageSrc.startsWith('data:image/')))throw new Error(`Image layer "${l.id}" has an invalid 'redraw' record: originalImageSrc must be a data:image/ URL.`);
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
     if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
     if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
@@ -5528,6 +5530,7 @@ el('importSvgFile').addEventListener('change',async e=>{const file=e.target.file
 // defaults (see computeDefaultImagePlacement() for placement) -- see docs/specifications/
 // IMG-007-StudioShell.md. The Studio's own Trace group lets the operator adjust the six params
 // afterward, live against the real layer (no separate pre-commit preview state to keep in sync).
+// IMG-022: src/redraw/RedrawLayerTransform.js restates this function's canvas clamp for the redraw box.
 function computeDefaultImagePlacement(naturalWidthPx,naturalHeightPx){
   // IMG-011: default an imported image to 200mm on its longer side, preserving aspect ratio, then
   // clamp to the canvas (minus a 20mm margin) the same way a too-large image always has.
@@ -5558,6 +5561,103 @@ el('importImageFile').addEventListener('change',async e=>{
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
 el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;deleteLayer(selectedLayer().id);if(!lightboxes.imagetrace.isOpen)lightboxes.imagetrace.open()};
+// IMG-022: Redraw with AI (docs/specifications/IMG-022-RedrawProvider.md D8, D9, D11). All provider
+// work goes through src/redraw/index.js; this code owns only the consent dialog, the remembered
+// access code, the history step and the Studio's buttons. syncImageRedrawControls() is called from
+// renderImageStudio(), and its first call asks src/redraw/index.js whether a provider is available.
+const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';
+function loadRedrawAccessCode(){try{return localStorage.getItem(REDRAW_ACCESS_CODE_STORAGE_KEY)||''}catch{return''}}
+function saveRedrawAccessCode(code){try{if(code)localStorage.setItem(REDRAW_ACCESS_CODE_STORAGE_KEY,code);else localStorage.removeItem(REDRAW_ACCESS_CODE_STORAGE_KEY)}catch{}}
+let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
+const REDRAW_ERROR_MESSAGES={
+  'not-configured':'AI redraw is not set up on this server.',
+  'unauthorized':'The access code was not accepted. Enter it again to continue.',
+  'rate-limited':'The redraw limit has been reached. Try again later.',
+  'network':'Could not reach the redraw service. Check your connection and try again.',
+  'provider-failed':'The redraw service could not process this image.',
+  'invalid-output':'The redrawn image came back unusable, so nothing was changed. Try again.'
+};
+function setImageRedrawStatus(text){el('imageRedrawStatus').textContent=text;el('status').textContent=text}
+function redrawErrorMessage(error){
+  if(error&&error.name==='AbortError')return 'Redraw cancelled.';
+  const code=error instanceof RedrawError&&REDRAW_ERROR_MESSAGES[error.code]?error.code:'provider-failed';
+  return code==='provider-failed'&&error&&error.detail?`${REDRAW_ERROR_MESSAGES[code]} ${error.detail}`:REDRAW_ERROR_MESSAGES[code];
+}
+function syncImageRedrawControls(l){
+  if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
+  const busy=redrawRun!==null;
+  el('imageRedraw').hidden=!(redrawAvailability&&redrawAvailability.available&&l);
+  el('imageRedraw').disabled=busy;
+  el('imageRedrawCancel').hidden=!busy;
+  el('imageRedrawUseOriginal').hidden=!(l&&l.redraw);
+  el('imageRedrawUseOriginal').disabled=busy;
+}
+const redrawConsentLightbox=new Lightbox('lightboxRedrawConsent',{onClose(){if(redrawConsentResolve){const resolve=redrawConsentResolve;redrawConsentResolve=null;resolve(false)}}});
+function askRedrawConsent(consent){
+  el('redrawConsentRecipient').textContent=consent.recipientName||'';
+  el('redrawConsentCost').textContent=consent.costLabel?`Cost: ${consent.costLabel}.`:'';
+  el('redrawConsentCost').style.display=consent.costLabel?'':'none';
+  el('redrawAccessCodeField').style.display=consent.needsAccessCode?'':'none';
+  el('redrawAccessCode').value=loadRedrawAccessCode();
+  el('redrawConsentError').textContent='';
+  return new Promise(resolve=>{redrawConsentResolve=resolve;redrawConsentLightbox.open()});
+}
+function confirmRedrawConsent(){
+  const consent=redrawAvailability&&redrawAvailability.consent,code=el('redrawAccessCode').value.trim();
+  if(consent&&consent.needsAccessCode&&!code){el('redrawConsentError').textContent='Enter the access code to continue.';el('redrawAccessCode').focus();return}
+  if(consent&&consent.needsAccessCode){saveRedrawAccessCode(code);setRedrawAccessCode(code)}
+  redrawConsentGiven=true;
+  const resolve=redrawConsentResolve;redrawConsentResolve=null;redrawConsentLightbox.close();if(resolve)resolve(true);
+}
+el('redrawConsentContinue').onclick=confirmRedrawConsent;
+el('redrawAccessCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmRedrawConsent()}});
+function syncImageRedrawControlsForSelection(){const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)}
+async function startImageRedraw(){
+  if(redrawRun||!redrawAvailability||!redrawAvailability.available)return;
+  if(selectedLayer().type!=='image')return;
+  if(redrawAvailability.consent&&!redrawConsentGiven&&!(await askRedrawConsent(redrawAvailability.consent))){setImageRedrawStatus('Redraw cancelled.');return}
+  const layer=selectedLayer();
+  if(!layer||layer.type!=='image'||redrawRun)return;
+  // The request is bound to this layer and the source it started from (a re-redraw always starts
+  // from the original image); a result that no longer matches is dropped, not applied.
+  const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
+  redrawRun=new AbortController();
+  setImageRedrawStatus('Redrawing… this can take up to two minutes.');
+  syncImageRedrawControls(layer);
+  try{
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal});
+    const buffer=await decodeDataUrlToBuffer(result.dataUrl);
+    const current=project.layers.find(x=>x.id===layerId);
+    if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
+    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now});
+    commitHistory();
+    imageBufferCache.set(next.imageSrc,buffer);
+    project.layers[project.layers.indexOf(current)]=next;
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    setImageRedrawStatus('Redrawn with AI. Use original to undo this.');
+  }catch(error){
+    if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
+    if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
+    setImageRedrawStatus(redrawErrorMessage(error));
+  }finally{
+    redrawRun=null;
+    syncImageRedrawControlsForSelection();
+  }
+}
+el('imageRedraw').onclick=()=>{startImageRedraw()};
+el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
+el('imageRedrawUseOriginal').onclick=async()=>{
+  const layer=selectedLayer();
+  if(!layer||layer.type!=='image'||!layer.redraw||redrawRun)return;
+  const next=restoreOriginal(layer);
+  commitHistory();
+  project.layers[project.layers.indexOf(layer)]=next;
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  setImageRedrawStatus('Restored the original image.');
+  syncImageRedrawControlsForSelection();
+};
 // RS-3037: reuses the #objectType change handler's own reset logic (dispatching a real change
 // event) rather than duplicating it -- matches this codebase's stated preference for reuse over
 // duplication.
@@ -6520,11 +6620,13 @@ async function renderImageStudio(){
     for(const id of['imageStudioStatImage','imageStudioStatCount','imageStudioStatSizes','imageStudioStatColors','imageStudioStatBox'])el(id).textContent='—';
     for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=true;
     el('imageStudioRemove').disabled=true;
+    syncImageRedrawControls(null);
     return;
   }
   el('imageStudioEmpty').hidden=true;
   for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=false;
   el('imageStudioRemove').disabled=false;
+  syncImageRedrawControls(l);
   el('imageStudioFileName').textContent=l.imageName||'';
   // IMG-003/IMG-004: Organic's and Edge's shared Poisson-disk controls (seed/shuffle/spread) only
   // matter once one of those two modes is selected -- disabled with an explanatory title otherwise,
