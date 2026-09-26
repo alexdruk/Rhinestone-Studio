@@ -1225,7 +1225,8 @@ export class GeometryEngine {
       colorCount: options.colorCount,
       palette: options.palette,
       maskMode: options.maskMode,
-      vividness: options.vividness
+      vividness: options.vividness,
+      paletteRule: options.paletteRule
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
@@ -1446,7 +1447,8 @@ export class GeometryEngine {
       colorCount: options.colorCount,
       palette: options.palette,
       maskMode: options.maskMode,
-      vividness: options.vividness
+      vividness: options.vividness,
+      paletteRule: options.paletteRule
     });
 
     const targetSpacingMm = options.stoneSizeMm + options.gapMm;
@@ -2595,6 +2597,10 @@ function normalizeImageParams(params) {
     // validateProject() change, no project version bump. See
     // docs/specifications/IMG-017-Vividness.md decision 3.
     vividness: typeof params.vividness === 'number' && Number.isFinite(params.vividness) && params.vividness >= 1 && params.vividness <= 2 ? params.vividness : 1,
+    // IMG-024: read-site permissive, like vividness -- exactly 'error' selects the error palette rule
+    // (src/image/ColorQuantize.js labelErrorPaletteColors()), anything else today's rule. See
+    // docs/specifications/IMG-024-FlatArtworkStyle.md D4.
+    paletteRule: params.paletteRule === 'error' ? 'error' : null,
     // IMG-003: read-site permissive defaults, the same precedent colorCount/palette/colorMap
     // (IMG-002) and transparent (IMG-001) already established -- no validateProject() change, no
     // project version bump. Invalid values (non-integer seed, spread < 1) fall back to 1 rather than

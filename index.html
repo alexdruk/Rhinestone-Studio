@@ -286,6 +286,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 /* IMG-022: Redraw with AI row. button.btn sets display, so [hidden] needs its own override. */
 .image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .image-redraw-row button.btn[hidden]{display:none}
+.image-redraw-row label[hidden]{display:none}
 #imageStudioCanvasColumn{display:flex;flex-direction:column;gap:var(--space-3);height:100%}
 #imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
 .view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
@@ -1164,6 +1165,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                (src/redraw/index.js); Use original only when the image layer has a redraw record.
                Visibility is set by syncImageRedrawControls() in app.js. -->
           <div class="image-redraw-row">
+            <label id="imageRedrawStyleField" class="image-redraw-style" hidden>Redraw style <select id="imageRedrawStyle"><option value="stones" selected>Stone picture</option><option value="flat">Flat artwork</option></select></label>
             <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn as a flat, stone-scale illustration">Redraw with AI</button>
             <button id="imageRedrawCancel" class="btn sm" hidden>Cancel</button>
             <button id="imageRedrawUseOriginal" class="btn sm" hidden title="Go back to the image as it was before the redraw">Use original</button>

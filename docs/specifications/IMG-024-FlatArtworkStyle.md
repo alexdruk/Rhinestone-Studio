@@ -136,7 +136,7 @@ subject mask, working resolution and grid phase may differ. A count within rough
 
 ### Server: `server/redraw/handler.mjs`
 
-- **Body validation.** Today it is `:177`–`:180`, where the JSON is parsed and the image is checked.
+- **Body validation.** Today it is `:181`–`:184`, where the JSON is parsed and the image is checked.
   After the existing PNG check, add a style check:
 
   ```js
@@ -149,12 +149,12 @@ subject mask, working resolution and grid phase may differ. A count within rough
   - An explicit `null`, a number, `'Flat'` or `''` is "any other value", so each gets 400.
   - The check comes after the access-code and rate-limit checks, as the PNG check does. A rejected
     style still uses one rate-limit slot, which is today's behaviour for a rejected PNG.
-- **Fake mode (`:181`).** It returns `promptVersion: PROMPT_VERSIONS[style]`.
+- **Fake mode (`:185`).** It returns `promptVersion: PROMPT_VERSIONS[style]`.
 - **Passing the style on.**
   - `callOpenAi(res, pngBuffer)` (`:117`) becomes `callOpenAi(res, pngBuffer, style)`.
   - `attemptOpenAi(pngBuffer, clientGone)` (`:87`) becomes `attemptOpenAi(pngBuffer, clientGone, style)`.
   - `:95` appends `buildRedrawPrompt(undefined, style)`.
-- **Success response (`:157`).** It returns `promptVersion: PROMPT_VERSIONS[style]`. The response
+- **Success response (`:161`).** It returns `promptVersion: PROMPT_VERSIONS[style]`. The response
   gains no other key, and `style` is not echoed.
 - **Unchanged.** Model, quality, size, background, retries, the safety-system handling and every
   error code.
@@ -375,6 +375,10 @@ apply.
 
 ## Anchors (re-grepped at `f59bdaf`)
 
+Re-grepped again at `f3cb18b` (the redraw-timeout merge) for the build: the four
+`server/redraw/handler.mjs` anchors below moved by four lines and were updated; every other anchor
+was unchanged.
+
 | Anchor | Location |
 |---|---|
 | `PROMPT_VERSION` | `server/redraw/prompt.mjs:9` |
@@ -382,9 +386,9 @@ apply.
 | `buildPaletteLine()` | `server/redraw/prompt.mjs:25` |
 | `buildRedrawPrompt()` | `server/redraw/prompt.mjs:29` |
 | `attemptOpenAi()` / prompt append | `server/redraw/handler.mjs:87` / `:95` |
-| `callOpenAi()` / success response | `server/redraw/handler.mjs:117` / `:157` |
-| request body validation (parse, PNG check) | `server/redraw/handler.mjs:177`–`:180` |
-| fake-mode response / `callOpenAi` call | `server/redraw/handler.mjs:181` / `:182` |
+| `callOpenAi()` / success response | `server/redraw/handler.mjs:117` / `:161` |
+| request body validation (parse, PNG check) | `server/redraw/handler.mjs:181`–`:184` |
+| fake-mode response / `callOpenAi` call | `server/redraw/handler.mjs:185` / `:186` |
 | `redraw()` / wire body | `src/redraw/OpenAiProxyProvider.js:27` / `:33` |
 | `redrawImage()` / `provider.redraw` call | `src/redraw/index.js:140` / `:157` |
 | `applyRedraw()` | `src/redraw/RedrawLayerTransform.js:65` |

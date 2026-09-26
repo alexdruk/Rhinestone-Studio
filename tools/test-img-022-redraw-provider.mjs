@@ -449,7 +449,7 @@ await test('T8b. the proxy provider posts the upload with the access code and ma
   assert.equal(posts[0].url, '/api/redraw');
   assert.equal(posts[0].init.headers['X-Redraw-Access-Code'], 'letmein');
   assert.equal(posts[0].init.headers['Content-Type'], 'application/json');
-  assert.deepEqual(JSON.parse(posts[0].init.body), { image: `${PNG_PREFIX}UPLOAD` });
+  assert.deepEqual(JSON.parse(posts[0].init.body), { image: `${PNG_PREFIX}UPLOAD`, style: 'stones' });
   for (const [code, detail] of [['unauthorized', 'The access code was not accepted.'], ['provider-failed', 'safety system'], ['not-configured', ''], ['provider-failed', '']]) {
     await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === code && e.detail === detail);
   }
@@ -569,7 +569,7 @@ await test('T10. applyRedraw sets exactly the D9 fields; a second redraw keeps o
   assert.deepEqual(out.redraw, {
     originalImageSrc: `${PNG_PREFIX}ORIG`, originalImageName: 'photo.jpg', previousVividness: 1.4, previousW: 200, previousH: 150,
     previousNaturalWidthPx: 4000, previousNaturalHeightPx: 3000, previousX: 20, previousY: 30, appliedX: 40, appliedY: 25,
-    providerId: 'openai-proxy', model: 'gpt-image-2', promptVersion: 1, createdAt: '2026-09-25T12:00:00.000Z'
+    providerId: 'openai-proxy', model: 'gpt-image-2', promptVersion: 1, style: 'stones', createdAt: '2026-09-25T12:00:00.000Z'
   });
   const changed = new Set(['imageSrc', 'imageName', 'vividness', 'naturalWidthPx', 'naturalHeightPx', 'x', 'y', 'w', 'h', 'redraw']);
   for (const key of Object.keys(layer)) if (!changed.has(key)) assert.deepEqual(out[key], layer[key], key);
@@ -584,7 +584,7 @@ await test('T10. applyRedraw sets exactly the D9 fields; a second redraw keeps o
   assert.deepEqual(second.redraw, {
     originalImageSrc: `${PNG_PREFIX}ORIG`, originalImageName: 'photo.jpg', previousVividness: 1.4, previousW: 200, previousH: 150,
     previousNaturalWidthPx: 4000, previousNaturalHeightPx: 3000, previousX: 20, previousY: 30, appliedX: 60, appliedY: 45,
-    providerId: 'fake', model: 'fake', promptVersion: null, createdAt: '2026-09-25T12:00:01.000Z'
+    providerId: 'fake', model: 'fake', promptVersion: null, style: 'stones', createdAt: '2026-09-25T12:00:01.000Z'
   });
 
   for (const redrawn of [out, second]) {

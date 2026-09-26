@@ -782,7 +782,7 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 function autoColorCountKeyParts(layer){
   const maskMode=resolveImageMaskMode(layer.maskMode);
   const transparent=resolveImageTransparentMode(layer.transparent);
-  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,resolveImageVividness(layer.vividness)];
+  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,resolveImageVividness(layer.vividness),layer.paletteRule==='error'?'error':''];
   if(maskMode==='threshold')parts.push(layer.threshold);
   return parts.join('|');
 }
@@ -803,7 +803,7 @@ function resolveImageColorCount(layer){
   const cached=autoColorCountCache.get(key);
   if(cached!=null){autoColorCountLastResolved.set(layer.id,cached);return cached}
   const field=prepareAutoColorField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
-  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette(),{chromaScale:resolveImageVividness(layer.vividness)});
+  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette(),{chromaScale:resolveImageVividness(layer.vividness),paletteRule:layer.paletteRule});
   autoColorCountCache.set(key,resolvedCount);
   if(autoColorCountCache.size>2)autoColorCountCache.delete(autoColorCountCache.keys().next().value);
   autoColorCountLastResolved.set(layer.id,resolvedCount);
@@ -844,10 +844,10 @@ function computeImageColorField(layer){
   // function's own prior version had -- see docs/specifications/IMG-012-AutoColourCount.md section A).
   const maskMode=resolveImageMaskMode(layer.maskMode);
   const vividness=resolveImageVividness(layer.vividness);
-  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode,vividness].join('|');
+  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode,vividness,layer.paletteRule==='error'?'error':''].join('|');
   const cached=imageColorFieldCache.get(key);
   if(cached)return cached;
-  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,vividness,palette:imageColorPalette()});
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,vividness,paletteRule:layer.paletteRule,palette:imageColorPalette()});
   imageColorFieldCache.set(key,field);
   if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
   return field;
@@ -1181,7 +1181,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     }
     return includeStats?cached:cached.stones;
   }
-  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -3482,7 +3482,7 @@ function resolveImageExportRegions(project){
     if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
-    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
     const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
     for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
   }
@@ -5613,6 +5613,9 @@ el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;de
 const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';
 function loadRedrawAccessCode(){try{return localStorage.getItem(REDRAW_ACCESS_CODE_STORAGE_KEY)||''}catch{return''}}
 function saveRedrawAccessCode(code){try{if(code)localStorage.setItem(REDRAW_ACCESS_CODE_STORAGE_KEY,code);else localStorage.removeItem(REDRAW_ACCESS_CODE_STORAGE_KEY)}catch{}}
+const REDRAW_STYLE_STORAGE_KEY='rhinestoneStudio.redrawStyle';
+function loadRedrawStyle(){try{return localStorage.getItem(REDRAW_STYLE_STORAGE_KEY)==='flat'?'flat':'stones'}catch{return'stones'}}
+function saveRedrawStyle(style){try{localStorage.setItem(REDRAW_STYLE_STORAGE_KEY,style)}catch{}}
 let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
 const REDRAW_ERROR_MESSAGES={
   'not-configured':'AI redraw is not set up on this server.',
@@ -5640,6 +5643,7 @@ function syncImageRedrawControls(l){
   if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
   const busy=redrawRun!==null;
   el('imageRedraw').hidden=!(redrawAvailability&&redrawAvailability.available&&l);
+  el('imageRedrawStyleField').hidden=el('imageRedraw').hidden;el('imageRedrawStyle').disabled=busy;
   el('imageRedraw').disabled=busy;
   el('imageRedrawCancel').hidden=!busy;
   el('imageRedrawUseOriginal').hidden=!(l&&l.redraw);
@@ -5676,22 +5680,23 @@ async function startImageRedraw(){
   // The request is bound to this layer and the source it started from (a re-redraw always starts
   // from the original image); a result that no longer matches is dropped, not applied.
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
+  const style=el('imageRedrawStyle').value==='flat'?'flat':'stones';
   redrawRun=new AbortController();
   setImageRedrawStatus('Redrawing… this can take up to five minutes.');
   syncImageRedrawControls(layer);
   try{
-    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal});
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style});
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
     const current=project.layers.find(x=>x.id===layerId);
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
     // IMG-023 (D2(a)): the redrawn image becomes an AI stones layer sized from its own stone pitch; on
     // a Flat Sheet the sheet grows first (the size then fits without shrinking).
-    const detection=aiStoneDetectionFor(result.dataUrl,buffer);
-    const aiPitchPx=detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
+    const detection=style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
+    const aiPitchPx=detection&&detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
     const grownCanvas=aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
     commitHistory();
     if(grownCanvas)project.canvas=grownCanvas;
-    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink});
+    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
     syncSelectedControlsFromLayer();
@@ -5707,6 +5712,7 @@ async function startImageRedraw(){
   }
 }
 el('imageRedraw').onclick=()=>{startImageRedraw()};
+el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');
 el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
 el('imageRedrawUseOriginal').onclick=async()=>{
   const layer=selectedLayer();

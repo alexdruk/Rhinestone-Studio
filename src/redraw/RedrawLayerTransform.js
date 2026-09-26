@@ -58,11 +58,14 @@ export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, sto
 /**
  * @param {object} layer an 'image' layer, with or without a previous `redraw` record
  * @param {{dataUrl:string, providerId:string, model:string, promptVersion:(number|null)}} result
- * @param {{canvas:{width:number,height:number}, naturalWidthPx:number, naturalHeightPx:number, now:()=>number, aiPitchPx?:(number|null), shrink?:number}} options
+ * @param {{canvas:{width:number,height:number}, naturalWidthPx:number, naturalHeightPx:number, now:()=>number, aiPitchPx?:(number|null), shrink?:number, style?:('stones'|'flat')}} options
  *   IMG-023: with a positive `aiPitchPx` the layer becomes an AI stones layer sized per D2; without
  *   one, the IMG-022 behaviour (160 mm long side, fillMode unchanged) is kept exactly.
+ *   IMG-024: style 'flat' ignores aiPitchPx/shrink, takes the IMG-022 sizing and sets fillMode
+ *   'staggered' and paletteRule 'error'; any other style is 'stones'.
  */
-export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1 }) {
+export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1, style = 'stones' }) {
+  const isFlat = style === 'flat';
   const prev = layer.redraw && typeof layer.redraw === 'object' ? layer.redraw : null;
   const base = prev
     ? {
@@ -89,10 +92,13 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
       };
 
   // IMG-023: a record that already carries previousFillMode keeps it (the fillMode before the
-  // first AI stones redraw); `null` means the layer had no fillMode.
+  // first AI stones redraw); `null` means the layer had no fillMode. IMG-024: previousPaletteRule
+  // likewise (the paletteRule before the first flat redraw).
   if (prev && 'previousFillMode' in prev) base.previousFillMode = prev.previousFillMode;
-  const isAiStones = finite(aiPitchPx) && aiPitchPx > 0;
-  if (isAiStones && !('previousFillMode' in base)) base.previousFillMode = layer.fillMode ?? null;
+  if (prev && 'previousPaletteRule' in prev) base.previousPaletteRule = prev.previousPaletteRule;
+  const isAiStones = !isFlat && finite(aiPitchPx) && aiPitchPx > 0;
+  if ((isAiStones || isFlat) && !('previousFillMode' in base)) base.previousFillMode = layer.fillMode ?? null;
+  if (isFlat && !('previousPaletteRule' in base)) base.previousPaletteRule = layer.paletteRule ?? null;
 
   const cx = layer.x + layer.w / 2, cy = layer.y + layer.h / 2;
   let x, y, w, h;
@@ -110,9 +116,10 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
     y = Math.min(Math.max(cy - h / 2, 0), canvas.height - h);
   }
 
-  return {
+  const out = {
     ...layer,
     ...(isAiStones ? { fillMode: 'ai-stones' } : {}),
+    ...(isFlat ? { fillMode: 'staggered', paletteRule: 'error' } : {}),
     imageSrc: result.dataUrl,
     imageName: `${base.originalImageName ?? ''}${REDRAW_NAME_SUFFIX}`,
     vividness: REDRAW_VIVIDNESS,
@@ -126,9 +133,14 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
       providerId: result.providerId,
       model: result.model,
       promptVersion: result.promptVersion,
+      style: isFlat ? 'flat' : 'stones',
       createdAt: new Date(now()).toISOString()
     }
   };
+  // IMG-024 (F3): a stones redraw puts back the paletteRule from before the first flat redraw, so
+  // its result is the same whichever style came before. It never records previousPaletteRule itself.
+  if (!isFlat && 'previousPaletteRule' in base) setOrDelete(out, 'paletteRule', base.previousPaletteRule === null ? undefined : base.previousPaletteRule);
+  return out;
 }
 
 /** "Use original": undoes applyRedraw() from the layer's own `redraw` record. */
@@ -146,6 +158,8 @@ export function restoreOriginal(layer) {
   setOrDelete(out, 'naturalHeightPx', r.previousNaturalHeightPx);
   // IMG-023: only a record written by an AI stones redraw changed fillMode.
   if ('previousFillMode' in r) setOrDelete(out, 'fillMode', r.previousFillMode === null ? undefined : r.previousFillMode);
+  // IMG-024: only a record written by a flat redraw (or carried from one) changed paletteRule.
+  if ('previousPaletteRule' in r) setOrDelete(out, 'paletteRule', r.previousPaletteRule === null ? undefined : r.previousPaletteRule);
 
   const unmoved = finite(r.appliedX) && finite(r.appliedY) && finite(r.previousX) && finite(r.previousY)
     && Math.abs(layer.x - r.appliedX) <= POSITION_EPSILON_MM && Math.abs(layer.y - r.appliedY) <= POSITION_EPSILON_MM;

@@ -129,6 +129,9 @@ export const GROUPS = {
     // IMG-022: redraw provider -- server handler with an injected fetch, src/redraw with injected
     // decode/encode, the layer transform, and validateProject() extracted from app.js.
     'test-img-022-redraw-provider.mjs',
+    // IMG-024: flat artwork redraw style -- server style check, client wire/record, the 'error'
+    // palette rule, the WeightedLabPalette.js move and the app.js/index.html wiring.
+    'test-img-024-flat-artwork-style.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

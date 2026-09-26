@@ -5,8 +5,10 @@
  *
  * Swapping in another provider (the planned in-browser Web Worker model) is an edit to
  * selectProvider() below plus that provider's own file. A provider is a plain object:
- *   { id, consent, redraw({ pngDataUrl, accessCode, signal }) -> Promise<{ dataUrl, model, promptVersion }> }
+ *   { id, consent, redraw({ pngDataUrl, accessCode, signal, style }) -> Promise<{ dataUrl, model, promptVersion }> }
  * where consent is null (nothing leaves the browser) or { recipientName, costLabel, needsAccessCode }.
+ * IMG-024: `style` is one of REDRAW_STYLES; a provider that sends no prompt (the fake, a future
+ * Worker) ignores it.
  * A provider signals failure by throwing an Error whose `code` is one of REDRAW_ERROR_CODES, and
  * rethrows an AbortError unchanged.
  */
@@ -21,6 +23,9 @@ export { applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, ai
 
 // IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
 export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined']);
+// IMG-024 (D1): the same value as server/redraw/prompt.mjs's REDRAW_STYLES, restated because src/**
+// never imports server/**; a test keeps the two deepEqual.
+export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
 const REDRAW_CONFIG_ENDPOINT = '/api/redraw/config';
 const REDRAW_MAX_UPLOAD_PX = 1536;
 const REDRAW_MIN_SUBJECT_COVERAGE = 0.01;
@@ -134,11 +139,12 @@ function untilAborted(promise, signal) {
 }
 
 /**
- * @param {{dataUrl:string, signal?:AbortSignal}} request
+ * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat')}} request
  * @returns {Promise<{dataUrl:string, providerId:string, model:string, promptVersion:(number|null)}>}
  */
-export async function redrawImage({ dataUrl, signal } = {}) {
+export async function redrawImage({ dataUrl, signal, style = 'stones' } = {}) {
   if (signal && signal.aborted) throw abortError();
+  if (!REDRAW_STYLES.includes(style)) throw new RedrawError('provider-failed', 'Unknown redraw style.');
   const provider = await untilAborted(activeProvider(), signal);
   if (!provider) throw new RedrawError('not-configured');
 
@@ -154,7 +160,7 @@ export async function redrawImage({ dataUrl, signal } = {}) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     let result;
     try {
-      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal })), signal);
+      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal, style })), signal);
     } catch (error) {
       if (error && error.name === 'AbortError') throw error;
       const code = error && REDRAW_ERROR_CODES.includes(error.code) ? error.code : 'provider-failed';
