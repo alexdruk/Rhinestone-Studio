@@ -36,6 +36,13 @@ export const AI_STONE_COLOR_RADIUS_RATIO = 0.33;
 export const AI_STONE_COLOR_PERCENTILES = Object.freeze([15, 60]);
 export const AI_STONE_JET_MAX_L = 30;
 export const AI_STONE_JET_MAX_CHROMA = 15;
+// IMG-023 D9 (photo gate): a picture of rhinestones has many highlight-dot stones packed at the
+// pitch they imply. A photo or flat artwork has specular dots too, but far fewer per unit of subject
+// area. Coverage = dot stones x pitch^2 x 0.866 (one honeycomb cell) / subject pixels (alpha > 128).
+// Not part of the reference prototype; see docs/specifications/IMG-023-AiStoneTransfer.md D9.
+export const AI_STONE_MIN_DOT_STONES = 300;
+export const AI_STONE_MIN_COVERAGE = 0.35;
+const HONEYCOMB_CELL_RATIO = 0.866;
 
 // ---- small numeric helpers ----------------------------------------------------------------------
 
@@ -469,9 +476,10 @@ function stoneLab(imageBuffer, x, y, radius) {
 
 /**
  * @param {{widthPx:number, heightPx:number, data:Uint8ClampedArray|Uint8Array}} imageBuffer RGBA
- * @returns {{ok:true, pitchPx:number, widthPx:number, heightPx:number, dotCount:number,
+ * @returns {{ok:true, pitchPx:number, widthPx:number, heightPx:number, dotCount:number, coverage:number,
  *   stones:{xPx:number, yPx:number, lab:number[], jetLike:boolean, fromDot:boolean}[]}
- *   | {ok:false, reason:'too-few-highlights', dotCount:number, widthPx:number, heightPx:number}}
+ *   | {ok:false, reason:'too-few-highlights', dotCount:number, widthPx:number, heightPx:number}
+ *   | {ok:false, reason:'not-ai-stones', dotCount:number, coverage:number, widthPx:number, heightPx:number}}
  */
 export function detectAiStones(imageBuffer) {
   if (!imageBuffer || typeof imageBuffer.widthPx !== 'number' || typeof imageBuffer.heightPx !== 'number' || !imageBuffer.data) {
@@ -484,6 +492,12 @@ export function detectAiStones(imageBuffer) {
   const pitchPx = estimatePitch(blobs);
   const [ox, oy] = AI_STONE_DOT_OFFSET_RATIO;
   const dotCentres = mergeDots(blobs, pitchPx).map((d) => ({ x: d.x + ox * pitchPx / 2, y: d.y + oy * pitchPx / 2 }));
+  let subjectPx = 0;
+  for (let i = 0; i < widthPx * heightPx; i++) if (imageBuffer.data[i * 4 + 3] > AI_STONE_ALPHA_THRESHOLD) subjectPx++;
+  const coverage = subjectPx > 0 ? dotCentres.length * pitchPx * pitchPx * HONEYCOMB_CELL_RATIO / subjectPx : 0;
+  if (dotCentres.length < AI_STONE_MIN_DOT_STONES || coverage < AI_STONE_MIN_COVERAGE) {
+    return { ok: false, reason: 'not-ai-stones', dotCount: blobs.length, coverage, widthPx, heightPx };
+  }
   const dotless = findDotlessStones(imageBuffer, L8, pitchPx, dotCentres);
   const radius = pitchPx * AI_STONE_COLOR_RADIUS_RATIO;
   const stones = [...dotCentres.map((c) => ({ ...c, fromDot: true })), ...dotless.map((c) => ({ ...c, fromDot: false }))]
@@ -491,5 +505,5 @@ export function detectAiStones(imageBuffer) {
       const lab = stoneLab(imageBuffer, x, y, radius);
       return { xPx: x, yPx: y, lab, jetLike: isJetLikeLab(lab), fromDot };
     });
-  return { ok: true, pitchPx, widthPx, heightPx, dotCount: blobs.length, stones };
+  return { ok: true, pitchPx, widthPx, heightPx, dotCount: blobs.length, coverage, stones };
 }

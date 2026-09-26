@@ -144,6 +144,8 @@ export function detectAiStones(imageBuffer)
 //  -> { ok: true, pitchPx, widthPx, heightPx, dotCount,
 //       stones: [{ xPx, yPx, lab: [L, a, b], jetLike: boolean, fromDot: boolean }] }
 //  -> { ok: false, reason: 'too-few-highlights', dotCount, widthPx, heightPx }
+//  -> { ok: false, reason: 'not-ai-stones', dotCount, coverage, widthPx, heightPx }   (D9)
+//  (ok: true results also carry `coverage`, D9)
 export const AI_STONE_* // one named constant per reference constant (list below)
 
 // src/geometry/AiStoneSampler.js
@@ -189,8 +191,10 @@ aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):n
 on a miss. The ternary keeps the identifier unevaluated for every other mode, so the harnesses that
 run this method through `new Function()` with a fixed dependency list (test-img-010, -013, -021) are
 unaffected. With detection cached, a regenerate only runs placement. The build measures both costs
-on the tiger image in Node and reports them. The budgets are 1.5 s for detection and 100 ms for
-placement; they are reported, not asserted, because timing tests are flaky here.
+on the tiger image in Node and reports them. The budgets are 2.5 s for detection per image and
+100 ms for placement; they are reported, not asserted, because timing tests are flaky here.
+Detection runs once per `imageSrc` (the cache above), so its cost is paid when AI stones is first
+chosen or a redraw is applied, not on every regenerate.
 
 Parameters that AI stones ignores (spec): threshold, invert, blurRadiusPx,
 maxWidthPx/maxHeightPx, transparent, maskMode, colorCount, vividness, colorMap, seed, spread,
@@ -342,8 +346,8 @@ AI stones does not build.
 
 **Measured effect** (Setup B, reference with the engine grid substituted): on the four images,
 real-stone totals change by −0.69 % to +0.18 %, and palettes are identical. On the small synthetic
-fixture below, the total changes from 246 to 224 (−9 %), because edge effects dominate a
-34 mm design. No engine-grid position coincides with a reference position, so the reference figures
+fixture as first pinned (14 columns, since replaced by D9's 24-column one), the total changes from
+246 to 224 (−9 %), because edge effects dominate a 34 mm design. No engine-grid position coincides with a reference position, so the reference figures
 are expected to match closely, not exactly (decision 4). The acceptance protocol accounts for this.
 
 Per grid point, `placeAiStones()` does the following (reference `transfer()`):
@@ -464,6 +468,36 @@ a letterboxed canvas and names its 2D context anything but `ctx`.
 - The `#imgColorCountAuto` marker and the `imageStudioSwitchToSheet` line stay verbatim.
 - `generateImageStonesLive(l,{includeStats:true})` and `el('imageStudioStatCheckFix')` stay.
 
+### D9. Photo gate (follow-up)
+
+**Resolution of the photo case (replaces F6's first resolution).** The reference's detection does
+not fail on photos: specular highlights pass the dot test, and the Einstein photo gave 1705
+highlight blobs and a "pitch" of 9.1 px. Without a gate, choosing AI stones on a photo re-sized its
+box and grew the sheet (seen in the build's browser check). So `detectAiStones()` adds a gate that
+the reference does not have. It is not part of the port contract.
+
+- **Rule.** After the dots are merged and offset to stone centres, and **before** the dot-less step
+  (only `fromDot` stones count):
+  - `coverage = dotStones × pitchPx² × 0.866 / (pixels with alpha > 128)` (0.866 = one honeycomb
+    cell per pitch²);
+  - the result is `{ ok: false, reason: 'not-ai-stones', dotCount, coverage, widthPx, heightPx }`
+    when `dotStones < AI_STONE_MIN_DOT_STONES` (300) or `coverage < AI_STONE_MIN_COVERAGE` (0.35).
+  - Both thresholds are exported from `src/image/AiStoneDetect.js`. An `ok: true` result also
+    carries `coverage`.
+- **Same handling as every `ok: false`.** Nothing reads the reason: the D2 hint ("No AI stones were
+  found …"), the box left alone, the sheet not grown, no stones generated, and a redraw falling back
+  to IMG-022's 160 mm size.
+- **Measured** on the build's own `detectAiStones()` (coverage, merged dot stones):
+  - AI stone pictures 0.43-0.92: tiger 0.75, einstein 0.76, portrait 0.85, butterfly 0.65, a logo
+    0.43, the tiger flattened onto opaque white 0.66; the D9 synthetic fixture 0.92.
+  - Photos and flat artwork with at least 300 dots 0.13-0.26: the Einstein photo 0.13 (1228 dot
+    stones), a tiger photo 0.21 (9965), a flat-map tiger 0.26 (1308). Claude re-measured the
+    Einstein photo (0.126, 1228) and the four AI images here; the butterfly photo gives 0.046 (466
+    dot stones) and a cartoon has 3 dot stones.
+- **Effect on the fixture.** The first synthetic honeycomb had 212 dot stones and would fail the
+  count rule, so it is now 24 columns (384 stones, 362 with a dot) and its literals are re-pinned
+  ("Synthetic detection fixture").
+
 ## Port contract (JS in place of OpenCV, scipy and scikit-image)
 
 The reference's docstring writes "L\* > 150" and "top-hat > 40". Both are on OpenCV's **8-bit L
@@ -575,9 +609,9 @@ stone nearby, and none anywhere else. It works like this:
 
 The measurable requirement is on the synthetic fixture (T1):
 
-- every one of the 12 dot-less discs gets exactly one stone within 1.0 px of its drawn centre. The
+- every one of the 22 dot-less discs gets exactly one stone within 1.0 px of its drawn centre. The
   reference is within 0.005 px.
-- no other extra stones appear: 224 in total.
+- no other extra stones appear: 384 in total.
 
 ## Acceptance bands for the JS build, against the reference on the four images
 
@@ -591,7 +625,8 @@ gap 0.3.
   - **AI pitch** within **1 %** of the pinned value.
   - **Width and height** within **1 %**. These are measured as the reference measures them: the
     alpha > 128 bounding box in pixels, times `mmPerPx`.
-  - **Real-stone count** within **1 %**.
+  - **Real-stone count** within **1.5 %** (widened by the D9 follow-up: portrat 0.8 measured
+    −1.00 % against the first 1 % band, from the D4 grid offset plus the 8-bit L\* rounding).
   - **Palette identical.**
   - **AI-stone count** within **3 %**.
 - **Colour.** Call `placeAiStones()` with `points` set to the reference's own stone positions (from
@@ -650,17 +685,21 @@ repo's plain-Node pattern. Tests never touch the network or `tools/scratch/`.
 
 ### Synthetic detection fixture (drawn in the test)
 
-The image is 256 × 248 RGBA, fully transparent `(0,0,0,0)` to start.
+Re-pinned by D9: 24 columns instead of 14, so the fixture clears `AI_STONE_MIN_DOT_STONES`. Pixel
+rule, pitch, disc and dot are unchanged.
+
+The image is 416 × 248 RGBA, fully transparent `(0,0,0,0)` to start
+(`W = ceil(2M + (cols − 1)·P + P/2)`, `H = ceil(2M + (rows − 1)·ROWH)`).
 
 - **Constants.** `P = 16` and `ROWH = P*Math.sqrt(3)/2`. The margin `M = 20`.
-- **Stones.** 16 rows (`r = 0..15`) × 14 columns (`c = 0..13`) of stones, 224 in total, in
+- **Stones.** 16 rows (`r = 0..15`) × 24 columns (`c = 0..23`) of stones, 384 in total, in
   row-major order.
   - Centre: `cx = M + c*P + (r % 2 === 1 ? P/2 : 0)`, `cy = M + r*ROWH`.
-  - Colour: stones on the border (`r` 0 or 15, `c` 0 or 13) are Jet `#141414`. Inside, `c < 7` is
-    Sapphire `#2269d3` and the rest Gold `#f3bd32`.
+  - Colour: stones on the border (`r` 0 or 15, `c` 0 or 23) are Jet `#141414`. Inside, `c < 12`
+    (`cols / 2`) is Sapphire `#2269d3` and the rest Gold `#f3bd32`.
   - Highlight dot centre: `(cx - 0.30*P/2, cy - 0.35*P/2)`, written exactly in that operation
     order.
-  - Row 7's interior stones (`c` 1-12) have **no dot**.
+  - Row 7's interior stones (`c` 1-22) have **no dot**: 22 dot-less, 362 with a dot.
 - **Pixels.** For each pixel with integer `(x, y)`:
   1. Find the stone with the smallest `(x-cx)*(x-cx)+(y-cy)*(y-cy)`, taking the first one on ties.
   2. If that distance² is > 92, the pixel stays transparent.
@@ -669,73 +708,77 @@ The image is 256 × 248 RGBA, fully transparent `(0,0,0,0)` to start.
   4. If the stone has a dot and `(x-hx)*(x-hx)+(y-hy)*(y-hy) ≤ 2.25`, the pixel is white.
   5. Alpha is 255.
 - **Pinned.**
-  - SHA-256 of the RGBA bytes: `06827c645e6d454c29843a35607f07500435986111e216879fd38bfa65b18253`.
-  - 51014 opaque pixels, 1442 white.
-  - Reference (Setup B): 212 highlight blobs, 224 stones, pitch 16.000 (15.999999999999993), every
+  - SHA-256 of the RGBA bytes: `751403d63cd40cd5b68ead63950584a9a5bccca4fc72ba5b59aac6a3f7bd0b33`.
+  - 86954 opaque pixels, 2462 white.
+  - Reference (Setup B): 362 highlight blobs, 384 stones, pitch 16.000 (15.999999999999993), every
     centre within 0.401 px of its drawn centre, and the dot-less ones within 0.005 px.
+  - JS: coverage = 362 × pitch² × 0.866 / 86954 ≈ 0.92.
 
 ### Reference output on the fixture (pinned literals)
 
-SS6, gap 0.3 mm, from the reference script (Setup B). Shrink 1.0: `ai_stones` 224, `ai_pitch_px`
-16.0, `mm_per_px` 0.14375, width × height 33.6 × 32.5 mm, total 246, palette `jet, sapphire, gold`,
-Jet 92 / Sapphire 77 / Gold 77. Shrink 0.8: `mm_per_px` 0.115, 26.9 × 26.0 mm, total 148, Gold 52 /
-Sapphire 50 / Jet 46.
+SS6, gap 0.3 mm, from the reference script (Setup B). Shrink 1.0: `ai_stones` 384, `ai_pitch_px`
+16.0, `mm_per_px` 0.14375, width × height 56.6 × 32.5 mm, total 416, palette
+`jet, sapphire, gold, hematite`, Gold 147 / Sapphire 141 / Jet 115 / Hematite 13. Shrink 0.8:
+`mm_per_px` 0.115, 45.3 × 26.0 mm, total 252, Gold 96 / Sapphire 91 / Jet 59 / Hematite 6.
 
 **Reference grid.** This is the reference `hexgrid()`, pinned so the test does not depend on
 floating-point edge rounding. With `s = 2.3 / (16 / shrink)`:
 
-- Point `(j, k)` is at `x = k·2.3 + (j odd ? 1.15 : 0)` and `y = j·2.3·√3/2` (mm).
-- Shrink 1.0: `j = 0..17`, `k = 0..15`.
-- Shrink 0.8: `j = 0..14`, `k = 0..12`.
+- Point `(j, k)` is at `x = k·2.3 + (j odd ? 1.15 : 0)` and `y = j·2.3·√3/2` (mm), for
+  `k = 0 … (length of row j's string − 1)`.
+- Shrink 1.0: `j = 0..17`; rows alternate 27 and 26 points (at `x = 59.8` the reference's
+  accumulated `x += 2.3` lands just below `W·s = 59.8`, so even rows keep a 27th point).
+- Shrink 0.8: `j = 0..14`, 21 points per row.
 
-One character per point, in row order: `.` means not kept, `J` Jet, `S` Sapphire, `G` Gold.
-Rerunning the reference with the pitch forced to exactly 16 gives the same strings.
+One character per point, in row order: `.` means not kept, `J` Jet, `S` Sapphire, `G` Gold, `H`
+Hematite. Rerunning the reference with the pitch forced to exactly 16 gives the same strings.
 
 Shrink 1.0 (rows `j = 0..17`):
 
 ```
-................
-.JJJJJJJJJJJJJJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJSSSSSJGGGGGJJ
-.JSSSSSSGGGGGGJ.
-.JJJJJJJJJJJJJJJ
-.JJJJJJJJJJJJJJ.
+...........................
+.JJJJJJJJJJJJJJJJJJJJJJJJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSSGGGGGGGGGGGJ.
+.JJSSSSSSSSSSHGGGGGGGGGGJJ.
+.JSSSSSSSSSSHGGGGGGGGGGGJ.
+.JJJJJJJJJJJJJJJJJJJJJJJJJ.
+.JJJJJJJJJJJJJJJJJJJJJJJJ.
 ```
 
 Shrink 0.8 (rows `j = 0..14`):
 
 ```
-.............
-.JJJJJJJJJJJ.
-.JSSSSSGGGGGJ
-.JSSSSGGGGGJ.
-.JSSSSSGGGGGJ
-.JSSSSJGGGGJ.
-.JSSSSSGGGGG.
-.JSSSSJGGGGJ.
-.JSSSSSGGGGGJ
-.JSSSSJGGGGJ.
-.JSSSSSGGGGGJ
-.JSSSSGGGGGJ.
-.JSSSSSGGGGGJ
-.JJJJJJJJJJJ.
-.............
+.....................
+.JJJJJJJJJJJJJJJJJJJ.
+.JSSSSSSSSSGGGGGGGGGJ
+.JSSSSSSSSGGGGGGGGGJ.
+.JSSSSSSSSHGGGGGGGGGJ
+.JSSSSSSSSHGGGGGGGGJ.
+.JSSSSSSSSHGGGGGGGGG.
+.JSSSSSSSSHGGGGGGGGJ.
+.JSSSSSSSSSGGGGGGGGGJ
+.JSSSSSSSSHGGGGGGGGJ.
+.JSSSSSSSSSGGGGGGGGGJ
+.JSSSSSSSSGGGGGGGGGJ.
+.JSSSSSSSSHGGGGGGGGGJ
+.JJJJJJJJJJJJJJJJJJJ.
+.....................
 ```
 
-The `J` where Sapphire meets Gold inside the design is the reference's own behaviour. Blue and
-yellow blend to a grey whose nearest palette entry is Jet.
+The `H` where Sapphire meets Gold inside the design is the reference's own behaviour: blue and
+yellow blend to a grey, and with this fixture's stone counts the greedy palette picks Hematite for
+it (the 14-column fixture's palette had no Hematite and gave Jet there).
 
 ### Palette fixture (no image)
 
@@ -752,13 +795,21 @@ crystal, silver, gold, citrine, sapphire, light-sapphire and jet, plus **12 siam
 ### Tests
 
 - **T1. Detection.** `detectAiStones(fixture)`:
-  - `ok`, exactly **224** stones;
+  - `ok`, exactly **384** stones;
   - `pitchPx` within **2 %** of 16;
   - a one-to-one match of every drawn centre within 1.0 px;
-  - each of the 12 dot-less discs matched by a stone with `fromDot: false`;
-  - `dotCount` 212.
+  - each of the 22 dot-less discs matched by a stone with `fromDot: false`;
+  - `dotCount` 362, 362 dot stones, and `coverage` equal to `362 × pitch² × 0.866 / 86954`
+    (≈ 0.92).
 
   A 6-blob image returns `ok: false, reason: 'too-few-highlights'`.
+- **T1c. Photo gate (D9).**
+  - A synthetic "photo": an opaque grey 600 × 600 image with 40 clusters of 3 × 3 white 2 × 2 px
+    dots, 12 px apart, clusters far apart. That is 360 dots of the right size (so the count rule
+    passes) at low density: `ok: false, reason: 'not-ai-stones'`, coverage below 0.35.
+  - The same honeycomb rule at 15 rows × 20 columns with every stone dotted (300 dot stones) passes;
+    with one interior stone dot-less (299 dot stones) it fails with `'not-ai-stones'` while its
+    coverage is above 0.35, so only the count rule rejects it.
 - **T2. Palette.** `chooseAiStonePalette()` on the palette fixture gives exactly the list above, and
   the frequency pick does not contain siam.
 - **T3. Jet rule.** Use hand-built detections with 3 equidistant AI stones around one point:
@@ -795,9 +846,9 @@ crystal, silver, gold, citrine, sapphire, light-sapphire and jet, plus **12 siam
 - **T8. Tolerance against the reference** (fixture). JS `detectAiStones` plus
   `chooseAiStonePalette`, then `placeAiStones` with `points` = the pinned reference grid and
   `mmPerPx = 2.3/(16/shrink)`:
-  - the kept set matches the pinned strings to within 1 % (at most 2 of 246 and 1 of 148);
+  - the kept set matches the pinned strings to within 1 % (at most 4 of 416 and 2 of 252);
   - at least 95 % of the reference's kept stones get its colour (F2);
-  - palette identical; pitch within 1 % of 16.0; AI stones 224.
+  - palette identical (`jet, sapphire, gold, hematite`); pitch within 1 % of 16.0; AI stones 384.
 - **T9. AI image view and wiring** (source-level):
   - `index.html` has `value="ai"` inside `#imageStudioViewAi` (with `hidden`), the
     `.view-toggle label[hidden]` rule, the `ai-stones` Fill style option, `#imgAiStoneShrink`
@@ -996,7 +1047,7 @@ safety-system case `:277`) and T7 (`:299`, defaults).
 
 ## Findings for decision
 
-All resolved (commit "IMG-023 spec: findings F1-F6 resolved"). The original finding text is kept
+All resolved (commit "IMG-023 spec: findings F1-F6 resolved"; F6 revised by the D9 follow-up). The original finding text is kept
 under each resolution.
 
 - **F1. Resolved: per-colour band widened.** The setup-to-setup band for per-colour counts is
@@ -1021,7 +1072,11 @@ under each resolution.
   0.26-0.32, and to tumbler and bottle at 0.48-0.61. The default plate (270 mm) and a grown Flat
   Sheet keep 1.0. On every vessel the one-stone lines break and the hint always shows. The prompt
   asks for about 70 stones across; a mug band would need roughly 30 at SS6.
-- **F6. Kept.** The box re-sizes only when detection is `ok` (D2(b)); on a photo, detection fails,
-  the box is left alone and the hint says so. It is intentional that AI stones also works on a
-  rhinestone picture imported directly, without a redraw: such an image is sized from its own
-  pitch like a redrawn one.
+- **F6. Resolved by D9 (photo gate).** The box re-sizes only when detection is `ok` (D2(b)). The
+  first resolution said that on a photo detection fails; the build's browser check showed it does
+  not (the Einstein photo re-sized to 218 × 205 mm and grew the sheet), because photos have
+  specular dots. D9's gate (at least 300 dot stones and coverage at least 0.35) now makes a photo
+  `ok: false` with reason `'not-ai-stones'`: the box is left alone, the sheet is not grown, and the
+  hint says so. It is still intentional that AI stones also works on a rhinestone picture imported
+  directly, without a redraw: such an image passes the gate and is sized from its own pitch like a
+  redrawn one.

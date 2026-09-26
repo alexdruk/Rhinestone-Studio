@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { detectAiStones } from '../src/image/index.js';
-import { isJetLikeLab, ellipseRowHalfWidths } from '../src/image/AiStoneDetect.js';
+import { isJetLikeLab, ellipseRowHalfWidths, AI_STONE_MIN_DOT_STONES, AI_STONE_MIN_COVERAGE } from '../src/image/AiStoneDetect.js';
 import { chooseAiStonePalette, placeAiStones, catalogueLabs, weightedLabDistance } from '../src/geometry/AiStoneSampler.js';
 import { GeometryEngine } from '../src/geometry/index.js';
 import { fitAiStoneBox, aiStoneEffectiveShrink } from '../src/redraw/index.js';
@@ -35,25 +35,29 @@ const engine = new GeometryEngine();
 
 // ---- the synthetic detection fixture (spec: "Synthetic detection fixture") --------------------
 
-const P = 16, ROWH = P * Math.sqrt(3) / 2, M = 20, W = 256, H = 248, ROWS = 16, COLS = 14, DOTLESS_ROW = 7;
+const P = 16, ROWH = P * Math.sqrt(3) / 2, M = 20, W = 416, H = 248, ROWS = 16, COLS = 24, DOTLESS_ROW = 7;
 const DISC2 = 45, OPAQUE2 = 92, DOT2 = 2.25;
 const SAPPHIRE = [0x22, 0x69, 0xd3], GOLD = [0xf3, 0xbd, 0x32], JET = [0x14, 0x14, 0x14], GAP = [8, 8, 8], WHITE = [255, 255, 255];
 
-function fixtureStones() {
+// IMG-023 D9: 24 columns (384 stones, 362 with a dot) so the fixture clears AI_STONE_MIN_DOT_STONES.
+// `rows`/`cols`/`dotless` let the gate tests draw the same honeycomb at other sizes.
+function fixtureStones({ rows = ROWS, cols = COLS, dotless = (r, c, edge) => r === DOTLESS_ROW && !edge } = {}) {
   const stones = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const cx = M + c * P + (r % 2 === 1 ? P / 2 : 0);
       const cy = M + r * ROWH;
-      const edge = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1;
-      stones.push({ cx, cy, rgb: edge ? JET : (c < 7 ? SAPPHIRE : GOLD), dot: !(r === DOTLESS_ROW && !edge), hx: cx - 0.30 * P / 2, hy: cy - 0.35 * P / 2 });
+      const edge = r === 0 || r === rows - 1 || c === 0 || c === cols - 1;
+      stones.push({ cx, cy, rgb: edge ? JET : (c < cols / 2 ? SAPPHIRE : GOLD), dot: !dotless(r, c, edge), hx: cx - 0.30 * P / 2, hy: cy - 0.35 * P / 2 });
     }
   }
   return stones;
 }
 
-function drawFixture() {
-  const stones = fixtureStones();
+function drawFixture(options = {}) {
+  const stones = fixtureStones(options);
+  const cols = options.cols ?? COLS, rows = options.rows ?? ROWS;
+  const W = Math.ceil(2 * M + (cols - 1) * P + P / 2), H = Math.ceil(2 * M + (rows - 1) * ROWH);
   const data = new Uint8ClampedArray(W * H * 4);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -79,35 +83,43 @@ const DETECTION = detectAiStones(FIXTURE);
 
 // Reference output on the fixture (spec: "Reference output on the fixture"), one character per
 // reference hexgrid() point: '.' not kept, J/S/G = jet/sapphire/gold.
+// '.' not kept, J/S/G/H = jet/sapphire/gold/hematite. Row lengths are pinned by the strings.
 const REFERENCE_GRID = {
-  1.0: { rows: 18, cols: 16, total: 246, codes: [
-    '................', '.JJJJJJJJJJJJJJ.', '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.', '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.',
-    '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.', '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.', '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.',
-    '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.', '.JJSSSSSJGGGGGJJ', '.JSSSSSSGGGGGGJ.', '.JJJJJJJJJJJJJJJ', '.JJJJJJJJJJJJJJ.'
+  1.0: { total: 416, codes: [
+    '...........................', '.JJJJJJJJJJJJJJJJJJJJJJJJ.', '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.',
+    '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.', '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.',
+    '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.', '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.',
+    '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSSGGGGGGGGGGGJ.', '.JJSSSSSSSSSSHGGGGGGGGGGJJ.', '.JSSSSSSSSSSHGGGGGGGGGGGJ.',
+    '.JJJJJJJJJJJJJJJJJJJJJJJJJ.', '.JJJJJJJJJJJJJJJJJJJJJJJJ.'
   ] },
-  0.8: { rows: 15, cols: 13, total: 148, codes: [
-    '.............', '.JJJJJJJJJJJ.', '.JSSSSSGGGGGJ', '.JSSSSGGGGGJ.', '.JSSSSSGGGGGJ', '.JSSSSJGGGGJ.', '.JSSSSSGGGGG.',
-    '.JSSSSJGGGGJ.', '.JSSSSSGGGGGJ', '.JSSSSJGGGGJ.', '.JSSSSSGGGGGJ', '.JSSSSGGGGGJ.', '.JSSSSSGGGGGJ', '.JJJJJJJJJJJ.',
-    '.............'
+  0.8: { total: 252, codes: [
+    '.....................', '.JJJJJJJJJJJJJJJJJJJ.', '.JSSSSSSSSSGGGGGGGGGJ', '.JSSSSSSSSGGGGGGGGGJ.', '.JSSSSSSSSHGGGGGGGGGJ',
+    '.JSSSSSSSSHGGGGGGGGJ.', '.JSSSSSSSSHGGGGGGGGG.', '.JSSSSSSSSHGGGGGGGGJ.', '.JSSSSSSSSSGGGGGGGGGJ', '.JSSSSSSSSHGGGGGGGGJ.',
+    '.JSSSSSSSSSGGGGGGGGGJ', '.JSSSSSSSSGGGGGGGGGJ.', '.JSSSSSSSSHGGGGGGGGGJ', '.JJJJJJJJJJJJJJJJJJJ.', '.....................'
   ] }
 };
-const CODE_ID = { J: 'jet', S: 'sapphire', G: 'gold' };
+const CODE_ID = { J: 'jet', S: 'sapphire', G: 'gold', H: 'hematite' };
 
 // ---- T1. Detection -----------------------------------------------------------------------------
 
-await test('T1. detection on the synthetic honeycomb: 224 stones, pitch within 2% of 16, one-to-one within 1 px, the 12 dot-less discs found', () => {
+await test('T1. detection on the synthetic honeycomb: 384 stones, pitch within 2% of 16, one-to-one within 1 px, the 22 dot-less discs found, coverage asserted', () => {
+  assert.deepEqual([FIXTURE.widthPx, FIXTURE.heightPx], [416, 248]);
   const sha = createHash('sha256').update(Buffer.from(FIXTURE.data.buffer)).digest('hex');
-  assert.equal(sha, '06827c645e6d454c29843a35607f07500435986111e216879fd38bfa65b18253', 'the fixture is drawn exactly as the spec pins it');
+  assert.equal(sha, '751403d63cd40cd5b68ead63950584a9a5bccca4fc72ba5b59aac6a3f7bd0b33', 'the fixture is drawn exactly as the spec pins it');
   let opaque = 0, white = 0;
   for (let i = 0; i < W * H; i++) {
     if (FIXTURE.data[i * 4 + 3] === 255) opaque++;
     if (FIXTURE.data[i * 4] === 255 && FIXTURE.data[i * 4 + 1] === 255 && FIXTURE.data[i * 4 + 2] === 255) white++;
   }
-  assert.deepEqual([opaque, white], [51014, 1442]);
+  assert.deepEqual([opaque, white], [86954, 2462]);
 
   assert.equal(DETECTION.ok, true);
-  assert.equal(DETECTION.dotCount, 212);
-  assert.equal(DETECTION.stones.length, 224);
+  assert.equal(DETECTION.dotCount, 362);
+  assert.equal(DETECTION.stones.length, 384);
+  const dotStones = DETECTION.stones.filter((s) => s.fromDot).length;
+  assert.equal(dotStones, 362);
+  assert.equal(DETECTION.coverage, dotStones * DETECTION.pitchPx ** 2 * 0.866 / opaque, 'coverage = dot stones x pitch^2 x 0.866 / subject pixels');
+  assert.ok(DETECTION.coverage > 0.9 && DETECTION.coverage < 0.95, `coverage ${DETECTION.coverage}`);
   assert.ok(Math.abs(DETECTION.pitchPx / 16 - 1) <= 0.02, `pitch ${DETECTION.pitchPx}`);
   const used = new Set();
   for (const [i, s] of STONES.entries()) {
@@ -121,7 +133,7 @@ await test('T1. detection on the synthetic honeycomb: 224 stones, pitch within 2
     used.add(best);
     if (!s.dot) assert.equal(DETECTION.stones[best].fromDot, false, `dot-less stone ${i} comes from the dot-less step`);
   }
-  assert.equal(DETECTION.stones.filter((s) => !s.fromDot).length, 12);
+  assert.equal(DETECTION.stones.filter((s) => !s.fromDot).length, 22);
 
   // Too few highlights: six white pixels on grey.
   const small = { widthPx: 60, heightPx: 20, data: new Uint8ClampedArray(60 * 20 * 4) };
@@ -135,6 +147,38 @@ await test('T1b. the elliptical kernels equal OpenCV\'s MORPH_ELLIPSE masks for 
   assert.deepEqual(rows(9), ['000010000', '011111110', '011111110', '111111111', '111111111', '111111111', '011111110', '011111110', '000010000']);
   assert.deepEqual(rows(7), ['0001000', '0111110', '1111111', '1111111', '1111111', '0111110', '0001000']);
   assert.deepEqual(rows(5), ['00100', '11111', '11111', '11111', '00100']);
+});
+
+await test('T1c. photo gate (D9): scattered highlight clusters at the right size but low density -> not-ai-stones; 299 dot stones fail the count rule, 300 pass', () => {
+  assert.equal(AI_STONE_MIN_DOT_STONES, 300);
+  assert.equal(AI_STONE_MIN_COVERAGE, 0.35);
+  // 40 clusters of 3 x 3 white 2 x 2 dots, 12 px apart, far apart on an opaque grey 600 x 600 image.
+  const photo = { widthPx: 600, heightPx: 600, data: new Uint8ClampedArray(600 * 600 * 4) };
+  for (let i = 0; i < 600 * 600; i++) photo.data.set([100, 100, 100, 255], i * 4);
+  let clusters = 0;
+  for (let gy = 0; gy < 7 && clusters < 40; gy++) {
+    for (let gx = 0; gx < 6 && clusters < 40; gx++, clusters++) {
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) {
+        const x0 = 40 + gx * 95 + k * 12, y0 = 30 + gy * 80 + j * 12;
+        for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) photo.data.set([255, 255, 255, 255], ((y0 + dy) * 600 + x0 + dx) * 4);
+      }
+    }
+  }
+  const p = detectAiStones(photo);
+  assert.equal(p.ok, false);
+  assert.equal(p.reason, 'not-ai-stones');
+  assert.equal(p.dotCount, 360, 'enough dots: only coverage rejects it');
+  assert.ok(p.coverage < AI_STONE_MIN_COVERAGE, `coverage ${p.coverage}`);
+  assert.deepEqual(Object.keys(p).sort(), ['coverage', 'dotCount', 'heightPx', 'ok', 'reason', 'widthPx']);
+
+  // 15 x 20 honeycomb: every stone dotted = 300 dot stones; one interior stone without a dot = 299.
+  const full = detectAiStones(drawFixture({ rows: 15, cols: 20, dotless: () => false }));
+  assert.equal(full.ok, true, JSON.stringify({ reason: full.reason, coverage: full.coverage }));
+  assert.equal(full.stones.filter((s) => s.fromDot).length, 300);
+  const short = detectAiStones(drawFixture({ rows: 15, cols: 20, dotless: (r, c) => r === 7 && c === 10 }));
+  assert.equal(short.ok, false);
+  assert.equal(short.reason, 'not-ai-stones');
+  assert.ok(short.coverage >= AI_STONE_MIN_COVERAGE, `coverage ${short.coverage} passes; the count rule rejects it`);
 });
 
 // ---- T2. Palette -------------------------------------------------------------------------------
@@ -288,7 +332,8 @@ await test('T7. engine: ai-stones stones are stoneSize, catalogue colours; brigh
   assert.equal(layout.sourceMode, 'ai-stones');
   assert.ok(layout.stones.length > 200, `count ${layout.stones.length}`);
   assert.ok(layout.stones.every((s) => s.sizeMm === 2));
-  assert.deepEqual([...new Set(layout.stones.map((s) => s.color))].sort(), ['gold', 'jet', 'sapphire']);
+  const paletteIds = chooseAiStonePalette(DETECTION.stones.map((s) => s.lab), catalogueLabs(PALETTE)).map((k) => PALETTE[k].id);
+  assert.ok(layout.stones.every((s) => paletteIds.includes(s.color) || s.color === 'jet'), 'colours are the palette plus Jet');
   const key = (l) => JSON.stringify(l.stones.map((s) => [s.xMm, s.yMm, s.sizeMm, s.color]));
   const same = [
     { sizeMode: 'brightness', brightnessSizesMm: [2, 2.8, 4] },
@@ -310,15 +355,15 @@ await test('T7. engine: ai-stones stones are stoneSize, catalogue colours; brigh
 // ---- T8. Tolerance against the reference -------------------------------------------------------
 
 await test('T8. tolerance against the reference on the fixture: kept set within 1%, >= 95% colour agreement, palette/pitch/AI stones', () => {
-  assert.equal(DETECTION.stones.length, 224);
+  assert.equal(DETECTION.stones.length, 384);
   assert.ok(Math.abs(DETECTION.pitchPx / 16 - 1) <= 0.01, `pitch ${DETECTION.pitchPx}`);
   const ids = PALETTE.map((p) => p.id);
-  assert.deepEqual(chooseAiStonePalette(DETECTION.stones.map((s) => s.lab), catalogueLabs(PALETTE)).map((k) => ids[k]), ['jet', 'sapphire', 'gold']);
+  assert.deepEqual(chooseAiStonePalette(DETECTION.stones.map((s) => s.lab), catalogueLabs(PALETTE)).map((k) => ids[k]), ['jet', 'sapphire', 'gold', 'hematite']);
   for (const shrink of [1.0, 0.8]) {
     const ref = REFERENCE_GRID[shrink];
     const mm = 2.3 / (16 / shrink);
     const points = [];
-    for (let j = 0; j < ref.rows; j++) for (let k = 0; k < ref.cols; k++) points.push({ xMm: k * 2.3 + (j % 2 ? 1.15 : 0), yMm: j * 2.3 * Math.sqrt(3) / 2, code: ref.codes[j][k] });
+    for (let j = 0; j < ref.codes.length; j++) for (let k = 0; k < ref.codes[j].length; k++) points.push({ xMm: k * 2.3 + (j % 2 ? 1.15 : 0), yMm: j * 2.3 * Math.sqrt(3) / 2, code: ref.codes[j][k] });
     assert.equal(points.filter((p) => p.code !== '.').length, ref.total);
     const placed = placeAiStones({ detection: DETECTION, imageBuffer: FIXTURE, placement: { xMm: 0, yMm: 0, widthMm: W * mm, heightMm: H * mm }, stoneSizeMm: 2, gapMm: 0.3, palette: PALETTE, points });
     const byPos = new Map(placed.map((s) => [`${s.xMm},${s.yMm}`, s.color]));
