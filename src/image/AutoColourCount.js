@@ -13,7 +13,7 @@
  * mean-ΔE sweep and its 1% tie band retired with the median-cut quantizer they scored.
  */
 
-import { labelCatalogColors, FIELD_ON_THRESHOLD } from './ColorQuantize.js';
+import { labelCatalogColors, labelErrorPaletteColors, FIELD_ON_THRESHOLD } from './ColorQuantize.js';
 import { prepareImageField, compositeChannelOntoWhite } from './ImageFieldPipeline.js';
 import { resizeField } from './Resize.js';
 
@@ -56,17 +56,24 @@ export function prepareAutoColorField(imageBuffer, params = {}) {
  * @param {{r: Uint8ClampedArray, g: Uint8ClampedArray, b: Uint8ClampedArray, data: Uint8ClampedArray}} field
  *   Same shape quantizeColors() itself takes (r/g/b/data), e.g. from prepareAutoColorField().
  * @param {{id: string, hex: string}[]} palette Catalog entries, same shape quantizeColors() takes.
- * @param {{chromaScale?: number}} [options] IMG-017: the layer's resolved vividness, so Auto counts
- *   the same scaled labels the pipeline will. Default 1.
+ * @param {{chromaScale?: number, paletteRule?: (string|null)}} [options] IMG-017: the layer's resolved
+ *   vividness, so Auto counts the same scaled labels the pipeline will. Default 1. IMG-024: with
+ *   paletteRule exactly 'error' the count is the error rule's greedy pick count (at least 2).
  * @returns {{resolvedCount: number}}
  */
-export function chooseAutoColorCount(field, palette, { chromaScale = 1 } = {}) {
+export function chooseAutoColorCount(field, palette, { chromaScale = 1, paletteRule } = {}) {
   const { r, g, b, data } = field;
 
   // Mirrors quantizeColors()'s own eligibility rule (FIELD_ON_THRESHOLD on `data`) exactly, so "no
   // subject pixels" is detected the same way quantizeColors() itself would report colorGroups:[].
   const eligible = new Uint8Array(data.length);
   for (let i = 0; i < data.length; i++) eligible[i] = data[i] >= FIELD_ON_THRESHOLD ? 1 : 0;
+  if (paletteRule === 'error') {
+    // IMG-024: pickCount, not keptIds.length -- the greedy is prefix-stable, so quantising at this
+    // count reproduces the same picks and groups.
+    const { pickCount, eligibleCount } = labelErrorPaletteColors({ r, g, b, eligible, palette, maxColors: AUTO_MAX_K, chromaScale });
+    return { resolvedCount: eligibleCount === 0 ? 1 : Math.max(2, pickCount) };
+  }
   const { keptIds, eligibleCount } = labelCatalogColors({ r, g, b, eligible, palette, maxColors: AUTO_MAX_K, chromaScale });
   if (eligibleCount === 0) {
     return { resolvedCount: 1 };

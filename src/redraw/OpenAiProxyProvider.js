@@ -24,13 +24,13 @@ export function createOpenAiProxyProvider({ fetch, costLabel = '' }) {
   return {
     id: OPENAI_PROXY_PROVIDER_ID,
     consent: { recipientName: 'OpenAI', costLabel, needsAccessCode: true },
-    async redraw({ pngDataUrl, accessCode = '', signal }) {
+    async redraw({ pngDataUrl, accessCode = '', signal, style = 'stones' }) {
       let response;
       try {
         response = await fetch(REDRAW_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Redraw-Access-Code': accessCode },
-          body: JSON.stringify({ image: pngDataUrl }),
+          body: JSON.stringify({ image: pngDataUrl, style }),
           signal
         });
       } catch (error) {

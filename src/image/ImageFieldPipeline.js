@@ -193,7 +193,11 @@ function normalizeParams(params) {
   // docs/specifications/IMG-017-Vividness.md decision 3.
   const vividness = typeof params.vividness === 'number' && Number.isFinite(params.vividness) && params.vividness >= 1 && params.vividness <= 2 ? params.vividness : 1;
 
-  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette, maskMode, vividness };
+  // IMG-024: read-site permissive -- exactly 'error' selects ColorQuantize.js's error palette rule,
+  // anything else today's rule. See docs/specifications/IMG-024-FlatArtworkStyle.md D4.
+  const paletteRule = params.paletteRule === 'error' ? 'error' : null;
+
+  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette, maskMode, vividness, paletteRule };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -310,7 +314,8 @@ export function prepareImageField(imageBuffer, params = {}) {
     const g = resizeField(gNative, options.maxWidthPx, options.maxHeightPx);
     const b = resizeField(bNative, options.maxWidthPx, options.maxHeightPx);
     const { labels, colorGroups } = quantizeColors({
-      r: r.data, g: g.data, b: b.data, data: field.data, colorCount: options.colorCount, palette: options.palette, chromaScale: options.vividness
+      r: r.data, g: g.data, b: b.data, data: field.data, colorCount: options.colorCount, palette: options.palette, chromaScale: options.vividness,
+      paletteRule: options.paletteRule
     });
     field.labels = labels;
     field.colorGroups = colorGroups;

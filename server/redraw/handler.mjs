@@ -4,7 +4,7 @@
 // 18+ global fetch, FormData and Blob. fetch, now and timeoutMs are injectable so tests never touch
 // the network or wait on real time. See docs/specifications/IMG-022-RedrawProvider.md D3-D5.
 import { timingSafeEqual } from 'node:crypto';
-import { buildRedrawPrompt, PROMPT_VERSION } from './prompt.mjs';
+import { buildRedrawPrompt, PROMPT_VERSIONS, REDRAW_STYLES } from './prompt.mjs';
 import { redrawConfigStatus, REDRAW_ENV_DEFAULTS } from './env.mjs';
 import { FAKE_REDRAW_DATA_URL } from '../../src/redraw/FakeRedrawProvider.js';
 
@@ -84,7 +84,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
   }
 
   // One OpenAI request. Resolves a Response, or TIMEOUT; rejects if fetch itself rejects.
-  async function attemptOpenAi(pngBuffer, clientGone) {
+  async function attemptOpenAi(pngBuffer, clientGone, style) {
     const controller = new AbortController();
     const onGone = () => controller.abort();
     clientGone.addEventListener('abort', onGone, { once: true });
@@ -92,7 +92,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
     try {
       const form = new FormData();
       form.append('model', settings.imageModel);
-      form.append('prompt', buildRedrawPrompt());
+      form.append('prompt', buildRedrawPrompt(undefined, style));
       form.append('image', new Blob([pngBuffer], { type: 'image/png' }), 'source.png');
       form.append('quality', settings.imageQuality);
       form.append('size', '1024x1024');
@@ -114,7 +114,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
     }
   }
 
-  async function callOpenAi(res, pngBuffer) {
+  async function callOpenAi(res, pngBuffer, style) {
     // Aborts the upstream call if the browser disconnects first (Cancel), so no paid call is left
     // running for nobody.
     const clientGone = new AbortController();
@@ -126,7 +126,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
     for (let attempt = 1; attempt <= 2 && !clientGone.signal.aborted; attempt++) {
       let outcome;
       try {
-        outcome = await attemptOpenAi(pngBuffer, clientGone.signal);
+        outcome = await attemptOpenAi(pngBuffer, clientGone.signal, style);
       } catch {
         outcome = null; // fetch rejected (DNS, reset, abort)
       }
@@ -158,7 +158,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
     if (response.status !== 200) return sendFailure(res, 502, 'provider-failed', openAiMessage);
     const b64 = body && Array.isArray(body.data) && body.data[0] ? body.data[0].b64_json : null;
     if (!isPngBase64(b64)) return sendFailure(res, 502, 'invalid-output', 'The image service returned no image.');
-    return sendJson(res, 200, { dataUrl: PNG_DATA_URL_PREFIX + b64, model: settings.imageModel, promptVersion: PROMPT_VERSION });
+    return sendJson(res, 200, { dataUrl: PNG_DATA_URL_PREFIX + b64, model: settings.imageModel, promptVersion: PROMPT_VERSIONS[style] });
   }
 
   async function handleConfig(req, res) {
@@ -182,8 +182,11 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
       if (!parsed || typeof parsed.image !== 'string' || !parsed.image.startsWith(PNG_DATA_URL_PREFIX)) {
         return sendFailure(res, 400, 'provider-failed', 'The upload must be a PNG image.');
       }
-      if (settings.fake) return sendJson(res, 200, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: PROMPT_VERSION });
-      return await callOpenAi(res, Buffer.from(parsed.image.slice(PNG_DATA_URL_PREFIX.length), 'base64'));
+      // IMG-024 (D1): a body with no style key is 'stones', so older clients keep working.
+      const style = 'style' in parsed ? parsed.style : 'stones';
+      if (!REDRAW_STYLES.includes(style)) return sendFailure(res, 400, 'provider-failed', 'Unknown redraw style.');
+      if (settings.fake) return sendJson(res, 200, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: PROMPT_VERSIONS[style] });
+      return await callOpenAi(res, Buffer.from(parsed.image.slice(PNG_DATA_URL_PREFIX.length), 'base64'), style);
     } catch (error) {
       console.error('Redraw request failed:', error && error.message ? error.message : error);
       return sendFailure(res, 502, 'provider-failed', '');

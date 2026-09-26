@@ -199,7 +199,7 @@ await test('T6. app.js and index.html source guards', () => {
   assert.ok(codeLines(functionSource('function writeSelectedControlsToLayer(')).includes("l.vividness=resolveImageVividness(Number(el('imgVividness').value));"), 'the Studio write statement is present verbatim');
 
   const resolverSource = codeLines(functionSource('function resolveImageColorCount('));
-  assert.match(resolverSource, new RegExp(`chooseAutoColorCount\\(field,imageColorPalette\\(\\),\\{chromaScale:${RESOLVED.replace(/[.()]/g, '\\$&')}\\}\\)`), 'the chooseAutoColorCount() call passes chromaScale');
+  assert.match(resolverSource, new RegExp(`chooseAutoColorCount\\(field,imageColorPalette\\(\\),\\{chromaScale:${RESOLVED.replace(/[.()]/g, '\\$&')},paletteRule:layer\\.paletteRule\\}\\)`), 'the chooseAutoColorCount() call passes chromaScale');
 
   const select = /<select\b[^>]*\bid="imgVividness"[^>]*>([\s\S]*?)<\/select>/.exec(indexHtml);
   assert.ok(select, 'index.html has a imgVividness select');
