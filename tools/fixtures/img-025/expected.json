@@ -14,9 +14,9 @@
    "filled": 15,
    "recoloured": 310,
    "removed": 22,
-   "outlined": 151,
+   "outlined": 150,
    "after": 4155,
-   "sha256": "a80a0e7aa1d2a9174120b9b5d85c4435bb625051c3e593e20ee74b772a38264d"
+   "sha256": "41602f5aee48f987c241ad31dfca7d43bad9e1eecf5935cb0d73bebc0ddde5b6"
   }
  },
  "portrait_photo": {
@@ -34,9 +34,9 @@
    "filled": 5,
    "recoloured": 157,
    "removed": 6,
-   "outlined": 104,
+   "outlined": 103,
    "after": 6191,
-   "sha256": "37a6be98bb3d8aa6eb156a1d2e7f9a7aba6129a4b8cdb1c4865783aa07bfa81d"
+   "sha256": "ea04fc06eab61ffb9a3853bb675433027761b7eca4caac8e60ad019a81596a62"
   }
  },
  "portrait_stones": {
@@ -54,9 +54,9 @@
    "filled": 14,
    "recoloured": 870,
    "removed": 0,
-   "outlined": 49,
+   "outlined": 13,
    "after": 8807,
-   "sha256": "dedb41c826d9994bce17ee9f50c998795449bb78a4938dcd962d2afc4fd30c20"
+   "sha256": "331788281b795f13c261758d2d799a4e4591badece06b148052d01ed0434e852"
   }
  },
  "tiger_flat": {
@@ -74,9 +74,9 @@
    "filled": 0,
    "recoloured": 501,
    "removed": 0,
-   "outlined": 118,
+   "outlined": 112,
    "after": 4651,
-   "sha256": "24e7d134e9e50a574676c85d101d0412cf9967a139a16c78ba4b28e3a8975bf9"
+   "sha256": "dda34bed36814314a850675029f169692f908748bbfe6a9fdbf2e4c4889fe488"
   }
  },
  "tiger_photo": {

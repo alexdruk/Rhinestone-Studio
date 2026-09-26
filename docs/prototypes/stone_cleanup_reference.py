@@ -19,7 +19,8 @@ Steps (all on the lattice; ties always go to the colour earlier in `palette`):
    appears on >= 4, takes the top colour.
 3. Crumbs: 6-connected groups of fewer than CRUMB_MIN stones are removed.
 4. Jet outline (optional): a stone with <= 4 occupied neighbours becomes 'jet', unless its centre is
-   within one pitch of the placement box edge (the image frame). Neighbour counts are taken before
+   less than FRAME_PITCHES (1.1) pitches from the placement box edge (the image frame; 1.1 rather than 1
+   so the staggered rows' first stones, exactly one pitch in, are never decided by rounding). Neighbour counts are taken before
    any recolouring in this step.
 Usage: python3 stone_cleanup_reference.py fixture.grid.txt [--outline]
 Prints JSON: counts and the sha256 of the output grid text (same format, header line excluded).
@@ -29,6 +30,7 @@ from collections import deque
 
 HOLE_MAX = 10
 CRUMB_MIN = 4
+FRAME_PITCHES = 1.1
 SQRT3_2 = 3 ** 0.5 / 2
 
 def nbrs(r, c):
@@ -94,12 +96,12 @@ def remove_crumbs(g):
     return len(drop)
 
 def outline(g, h):
-    P = h['pitchMm']; b = h['box']; n = 0
+    P = h['pitchMm']; F = FRAME_PITCHES * P; b = h['box']; n = 0
     edge = {k: sum(m in g for m in nbrs(*k)) <= 4 for k in g}
     for (r, c), is_edge in edge.items():
         if not is_edge or g[(r, c)] == 'jet': continue
         x = h['x0Mm'] + c * P + (r % 2) * P / 2; y = h['y0Mm'] + r * P * SQRT3_2
-        if x - b['xMm'] < P or y - b['yMm'] < P or b['xMm'] + b['widthMm'] - x < P or b['yMm'] + b['heightMm'] - y < P: continue
+        if x - b['xMm'] < F or y - b['yMm'] < F or b['xMm'] + b['widthMm'] - x < F or b['yMm'] + b['heightMm'] - y < F: continue
         g[(r, c)] = 'jet'; n += 1
     return n
 

@@ -38,8 +38,8 @@ cleanupLatticeStones({ stones, pitchMm, palette, placement, layerId, stoneSizeMm
 // -> { stones /* the input, unchanged */, stats: { skipped: 'not-lattice' } }   (D3)
 ```
 
-It also exports the constants `CLEANUP_HOLE_MAX = 10`, `CLEANUP_CRUMB_MIN = 4` and
-`CLEANUP_SPECKLE_ROUNDS = 2`.
+It also exports the constants `CLEANUP_HOLE_MAX = 10`, `CLEANUP_CRUMB_MIN = 4`,
+`CLEANUP_SPECKLE_ROUNDS = 2` and `CLEANUP_FRAME_PITCHES = 1.1` (the reference's `FRAME_PITCHES`).
 
 ### D2. Where it runs
 
@@ -53,8 +53,10 @@ It runs only when all of these hold:
 
 - `options.cleanup === true`;
 - mode is `'staggered'` or `'ai-stones'`;
-- size mode is uniform;
-- `brightnessThinning` is 0, because thinning makes holes on purpose.
+- for `'staggered'` only, size mode is uniform. AI stones ignores size mode (its stones are always
+  one size), so an AI stones layer runs whatever its stored `sizeMode` is.
+
+`brightnessThinning` is not a condition: neither mode reads it (audit decision A1 below).
 
 Otherwise nothing changes. `fillGaps` then runs as today, against the cleaned set.
 
@@ -85,8 +87,8 @@ The steps run in this order, exactly as in the reference:
 3. **Crumbs.** 6-connected groups of fewer than 4 stones are removed.
 4. **Outline.** This runs only when `outline === true`:
    - A stone with at most 4 neighbours becomes catalogue id `'jet'`.
-   - The exception is a stone whose centre is within one pitch of the edge of the unrotated
-     placement box.
+   - The exception is a stone whose centre is less than `CLEANUP_FRAME_PITCHES` (1.1) pitches from
+     the edge of the unrotated placement box. A stone exactly one pitch in is therefore excluded.
    - Neighbour counts are taken before any recolouring.
 
 All ties go to the colour that comes earlier in the `palette` passed in. That is the catalogue
@@ -134,8 +136,7 @@ The controls go in Image → Strass, in the Trace section, right after Fill styl
 When any of D2's conditions other than `cleanup` fails:
 
 - both checkboxes are disabled;
-- a hint line shows "Clean-up works with Staggered Fill and AI stones, one stone size, no
-  brightness thinning".
+- a hint line shows "Clean-up works with Staggered Fill (one stone size) and AI stones".
 
 Jet outline is also disabled while Clean up is off.
 
@@ -157,10 +158,28 @@ Each change commits history, like the other Trace controls.
   mutation fails. For example, a colour could be present only on pixels whose eligible index is
   not a multiple of the stride.
 
+## Audit decisions (settled after review)
+
+The spec report raised five points. They were answered as follows, and the text of this spec now
+follows the answers.
+
+- **A1. Thinning condition: dropped.** Staggered and AI stones never read `brightnessThinning`,
+  and `#imgBrightnessThinning` is disabled outside Organic/Edge, so a stale nonzero value would
+  have locked Clean up off with no way to clear it. D2, D8, the disabling logic and T5 are amended.
+- **A2. Cache keys: agreed.** The build adds the two fields to the live params only. T7 keeps
+  asserting that no existing key gained them.
+- **A3. Frame rounding: margin widened to 1.1 pitches.** The reference now has
+  `FRAME_PITCHES = 1.1`, so the frame test no longer compares two values that are equal by
+  construction. The six `.grid.txt` fixtures are unchanged; `expected.json` gains the new outlined
+  counts and hashes. The cleanup-only figures do not change.
+- **A4. Confirmed as written:** the skipped stats text (audit note A7), unknown colours losing ties
+  (A5), index numbering (A6), and the write-on-tick rule for the two fields (D7's write lines).
+- **A5. No outline on full-frame AI stone pictures: accepted** (audit note A8).
+
 ## Audit notes
 
-These record what the code at `1b9b7b7` says about the decisions. None of them changes a decision.
-The report lists the ones that need an answer.
+These record what the code at `1b9b7b7` says about the decisions. The report lists the ones that
+needed an answer; "Audit decisions" above records the answers.
 
 - **A1. Both modes emit an exact lattice.**
   - Staggered uses `sampleStaggeredFieldFillPoints()` (`src/geometry/StoneSampler.js:1921`). It
@@ -182,15 +201,16 @@ The report lists the ones that need an answer.
     (`app.js:847`) leave `fillMode` out on purpose.
   - So the build adds the two fields to the live params only. T7 checks that, and also that none
     of the four keys above gained them.
-- **A3. The frame test is on a knife edge for Staggered (D4 step 4).**
-  - Odd rows start exactly one pitch in from the left edge of the placement box. The reference's
-    `x − box.xMm < pitch` therefore compares two values that are equal by construction, and float
-    rounding decides.
-  - Shown on `portrait_flat --outline`: if each stone's x is recomputed from a lattice anchored on
-    an odd-row stone instead of the fixture origin, `outlined` becomes 152 instead of 151.
-  - The build keeps the reference comparison exactly, and it reads each stone's own `xMm`/`yMm`,
-    never a position recomputed from lattice indices. For a given layer the result is then
-    deterministic. Moving the layer can still flip one of these stones.
+- **A3. The frame test was on a knife edge for Staggered (D4 step 4). Resolved.**
+  - Odd rows start exactly one pitch in from the left edge of the placement box. The first
+    reference's `x − box.xMm < pitch` therefore compared two values that are equal by construction,
+    and float rounding decided.
+  - Shown on the first reference's `portrait_flat --outline`: if each stone's x was recomputed from
+    a lattice anchored on an odd-row stone instead of the fixture origin, `outlined` became 152
+    instead of 151.
+  - The margin is now `1.1 × pitch` (audit decision A3), so a stone one pitch in is excluded by
+    0.1 pitch, far beyond float error. The build still reads each stone's own `xMm`/`yMm`, never a
+    position recomputed from lattice indices.
 - **A4. The reference point does not change the result.**
   - D3 counts rows from `stones[0]`. The fixtures count them from their own origin. The two
     numberings differ by a row shift and a per-row column shift.
@@ -216,9 +236,9 @@ The report lists the ones that need an answer.
   panel shows "Clean-up: skipped (stones are not on one lattice)" in that case (see A1: not
   expected in practice).
 - **A8. Full-frame AI stone pictures get no outline.** On `tiger_stones` the outline figure is 0,
-  because the AI covered the whole frame and every edge stone is within one pitch of it. That
+  because the AI covered the whole frame and every edge stone is less than 1.1 pitches from it. That
   matches the reference and D4. It means Jet outline does nothing for an AI stones layer that
-  fills its box.
+  fills its box. The AI already draws a Jet outline on Stone pictures.
 
 ## Design
 
@@ -274,8 +294,9 @@ removed: 0, outlined: 0 } }`.
 - **Outline.**
   1. First compute, for every stone, whether it has at most 4 occupied neighbours.
   2. Then, for each such stone that is not already `'jet'`, skip it if any of these is below
-     `pitchMm`: `x − xMm`, `y − yMm`, `xMm + widthMm − x` or `yMm + heightMm − y`. Here x and y
-     are the stone's own `xMm`/`yMm` (A3), and the other four are placement values.
+     `CLEANUP_FRAME_PITCHES * pitchMm`: `x − xMm`, `y − yMm`, `xMm + widthMm − x` or
+     `yMm + heightMm − y`. Here x and y are the stone's own `xMm`/`yMm` (A3), and the other four
+     are placement values.
   3. Otherwise set it to `'jet'`.
 
   `outlined` counts the stones changed.
@@ -301,12 +322,13 @@ removed: 0, outlined: 0 } }`.
 - **`generateImageLayout()`.** Insert the pass after the S-200 block ends (`:1383`) and before the
   IMG-013 comment (`:1385`).
 
-  Uniform size means `options.mixedOptions` is null, so running after the S-200 block is the same
-  as running straight after the primary stones.
+  For Staggered, uniform size means `options.mixedOptions` is null, so running after the S-200 block
+  is the same as running straight after the primary stones. AI stones never runs the S-200 block
+  (its stones are sized by the AI stone sampler), so the same holds.
 
   ```js
   let cleanupStats = null;
-  if (options.cleanup && (options.mode === 'staggered' || isAiStones) && options.sizeMode === 'uniform' && options.brightnessThinning === 0) {
+  if (options.cleanup && (isAiStones || (options.mode === 'staggered' && options.sizeMode === 'uniform'))) {
     const cleaned = cleanupLatticeStones({ stones, pitchMm: options.stoneSizeMm + options.gapMm, palette: options.palette, placement, layerId: options.layerId, stoneSizeMm: options.stoneSizeMm, outline: options.jetOutline });
     stones = cleaned.stones;
     cleanupStats = cleaned.stats;
@@ -354,7 +376,7 @@ Layouts without clean-up serialise exactly as before.
 - **Disabling (`renderImageStudio()`).** After the AI stone shrink lines (`:6726`–`:6728`), add:
 
   ```js
-  const cleanupEligible=(mode==='staggered'||mode==='ai-stones')&&resolveSizeMode(l.sizeMode)==='uniform'&&resolveImageBrightnessThinning(l.brightnessThinning)===0;
+  const cleanupEligible=mode==='ai-stones'||(mode==='staggered'&&resolveSizeMode(l.sizeMode)==='uniform');
   el('imgCleanup').disabled=!cleanupEligible;
   el('imgJetOutline').disabled=!cleanupEligible||l.cleanup!==true;
   el('imgCleanupHint').hidden=cleanupEligible;
@@ -386,7 +408,7 @@ Layouts without clean-up serialise exactly as before.
   <!-- IMG-025: clean-up of the finished stones; enabled per D8 by app.js renderImageStudio(). -->
   <label class="checkbox-row" title="Fills small holes, fixes single odd-coloured stones and removes stray crumbs"><input type="checkbox" id="imgCleanup"> Clean up stones</label>
   <label class="checkbox-row" title="Turns the outer edge of the design into one row of Jet stones"><input type="checkbox" id="imgJetOutline"> Jet outline</label>
-  <p class="hint" id="imgCleanupHint" hidden>Clean-up works with Staggered Fill and AI stones, one stone size, no brightness thinning</p>
+  <p class="hint" id="imgCleanupHint" hidden>Clean-up works with Staggered Fill (one stone size) and AI stones</p>
   ```
 
   `.checkbox-row` already exists (`:329`–`:330`).
@@ -455,21 +477,21 @@ These come from `python3 docs/prototypes/stone_cleanup_reference.py tools/fixtur
 |---|---|---|---|---|---|---|
 | `tiger_photo` | 7,058 | 3 | 605 | 1 | 7,060 | 192 |
 | `tiger_stones` | 8,209 | 129 | 761 | 0 | 8,338 | 0 |
-| `tiger_flat` | 4,651 | 0 | 501 | 0 | 4,651 | 118 |
-| `portrait_photo` | 6,192 | 5 | 157 | 6 | 6,191 | 104 |
-| `portrait_stones` | 8,793 | 14 | 870 | 0 | 8,807 | 49 |
-| `portrait_flat` | 4,162 | 15 | 310 | 22 | 4,155 | 151 |
+| `tiger_flat` | 4,651 | 0 | 501 | 0 | 4,651 | 112 |
+| `portrait_photo` | 6,192 | 5 | 157 | 6 | 6,191 | 103 |
+| `portrait_stones` | 8,793 | 14 | 870 | 0 | 8,807 | 13 |
+| `portrait_flat` | 4,162 | 15 | 310 | 22 | 4,155 | 150 |
 
 Outline changes only colours, so Before/Filled/Recoloured/Removed/After are the same with and
-without `--outline`. The sha256 values are in `expected.json`.
+without `--outline`. The sha256 values are in `expected.json`. The Outlined column is from the
+reference with `FRAME_PITCHES = 1.1` (audit decision A3); the other columns are as first measured.
 
 ## Acceptance figures
 
 - **Fixtures.** Build each fixture's stones from its grid.
   - Stone `(r, c)` sits at `x = x0Mm + c * pitchMm + (r mod 2) * pitchMm / 2` and
     `y = y0Mm + r * pitchMm * SQRT3_2`, with `SQRT3_2 = Math.sqrt(3) / 2`. That is equal to the
-    script's `3 ** 0.5 / 2`, which was checked. Evaluate left to right, as the script does, so
-    that A3's knife-edge stones round the same way.
+    script's `3 ** 0.5 / 2`, which was checked. Evaluate left to right, as the script does.
   - The colour is `palette[letter]`, `placement` is the header `box`, and `stoneSizeMm` is any
     positive value.
 
@@ -496,13 +518,13 @@ IMG tests.
 | T2c | A single odd stone in an even field is recoloured (own 0, top 6). A pair of adjacent odd stones in an even field are both recoloured (own 1, top 5). A stone whose 4+ neighbours split 2–2 between two other colours is kept (own 0, top 2). A stone with 3 neighbours, all another colour, is kept. | Both speckle branches and both thresholds | Speckle without the `own == 1` branch; own-0 threshold 3 → 2; neighbour minimum 4 → 3 |
 | T2d | A one-stone-wide Jet line through a field keeps every interior Jet stone (own 2). | The speckle rule leaves thin lines alone | Rule widened to `own <= 2` |
 | T2e | A 3-stone detached group is removed. A 4-stone detached group is kept. `removed` counts stones. | Crumb threshold | `CRUMB_MIN` 4 → 3 or 5; `removed` counts groups |
-| T2f | With `outline: true` on a block with the placement box offset from the origin: straight-edge stones (4 neighbours) and corner stones become `'jet'`, interior stones do not, and stones within one pitch of any of the four box edges do not. A block edge stone already `'jet'` is not counted. | Outline rule, frame exclusion on all four sides, count | Outline without the frame exclusion; exclusion ignores `xMm`/`yMm` offset; `<= 4` → `<= 3`; already-Jet stones counted |
+| T2f | With `outline: true` on a block with the placement box offset from the origin: straight-edge stones (4 neighbours) and corner stones become `'jet'`, interior stones do not, and stones less than 1.1 pitches from any of the four box edges do not. On each side, an edge stone exactly 1 pitch in is excluded and one 1.2 pitches in is outlined. A block edge stone already `'jet'` is not counted. | Outline rule, frame exclusion on all four sides, 1.1-pitch margin, count | Outline without the frame exclusion; exclusion ignores `xMm`/`yMm` offset; margin 1.1 → 1 pitch; `<= 4` → `<= 3`; already-Jet stones counted |
 | T2g | Output order: surviving originals in input order, then filled stones in fill order with `sizeMm === stoneSizeMm`, the layer id, `index` from `n`; unchanged stones are the same objects; the input array and its stones are unchanged after the call; `recoloured` excludes outlined stones. | D5 and purity | Filled stones prepended; filled `sizeMm` = pitch; input mutated |
 | T3 | Ties: a hole whose neighbours split 3–3 between two colours takes the one earlier in `palette`, and swapping the palette order swaps the result. The same holds for a speckle tie. A colour not in the palette loses a tie to a palette colour. | Palette-order tie rule (D4, A5) | Tie to the later palette colour; ties by string order; unknown colour ranks first |
 | T4 | Moving one stone by 0.3 × pitch returns the input array unchanged with `stats` `{ skipped: 'not-lattice' }`. Moving it by 0.2 × pitch does not skip. Two stones on one lattice point skip. Empty input gives zero stats. | D3 skip | Tolerance 0.25 → 0.5; duplicate-point check removed |
-| T5 | Engine wiring, on a synthetic image with a planted hole, speckle and crumb: <br>• clean-up runs for Staggered and AI stones (AI stones through a stub `aiStoneDetection`) when `cleanup: true`; <br>• it does not run, and `cleanupStats` is null, for each failing condition: another mode (all 6 others), `sizeMode` `'brightness'` with 2 sizes, `sizeMode` `'mixed'`, `brightnessThinning` 0.5, and `cleanup` missing, `false`, `'true'` or `1`; <br>• with `fillGaps: true`, the result equals the IMG-013 pass run on the cleaned stones and `cleanupStats` is not skipped; <br>• at `rotationDeg` 30, the stones equal the 0° cleaned stones rotated by `rotatePointsAroundCenter` about the placement centre, with the same `cleanupStats`; <br>• `jetOutline: true` with `cleanup` off changes nothing. | D2 and D9 engine side | Gate on `cleanup` truthy; `'fill'` allowed; sizeMode check dropped; thinning check dropped; clean-up moved after fillGaps (fillers break the lattice, so it skips); clean-up moved after rotation (skips) |
+| T5 | Engine wiring, on a synthetic image with a planted hole, speckle and crumb: <br>• clean-up runs for Staggered and AI stones (AI stones through a stub `aiStoneDetection`) when `cleanup: true`; <br>• it does not run, and `cleanupStats` is null, for each failing condition: another mode (all 6 others), `sizeMode` `'brightness'` with 2 sizes, `sizeMode` `'mixed'` (both on Staggered), and `cleanup` missing, `false`, `'true'` or `1`; <br>• AI stones with `sizeMode` `'mixed'` still runs; <br>• with `fillGaps: true`, the result equals the IMG-013 pass run on the cleaned stones and `cleanupStats` is not skipped; <br>• at `rotationDeg` 30, the stones equal the 0° cleaned stones rotated by `rotatePointsAroundCenter` about the placement centre, with the same `cleanupStats`; <br>• `jetOutline: true` with `cleanup` off changes nothing. | D2 and D9 engine side | Gate on `cleanup` truthy; `'fill'` allowed; sizeMode check dropped; sizeMode check applied to AI stones too; clean-up moved after fillGaps (fillers break the lattice, so it skips); clean-up moved after rotation (skips) |
 | T6 | Byte identity: for each of the 8 fill modes, `JSON.stringify(layout.toJSON())` with no `cleanup`/`jetOutline` equals a sha256 captured on the build's parent commit before `GeometryEngine.js` is edited, and equals the run with `cleanup: false`. A layout without clean-up has no `cleanupStats` key in `toJSON()`; one with it round-trips through `StoneLayout.fromJSON()`. A project with an image layer without the fields round-trips through the extracted `validateProject()` byte-identically. | D6 compatibility | `toJSON()` always writes `cleanupStats`; `normalizeImageParams()` defaults `cleanup` to true |
-| T7 | app.js/index.html wiring: <br>• the import literal contains `fillGaps:true,cleanup:true` and no `jetOutline`; <br>• the live params contain `cleanup:layer.cleanup,jetOutline:layer.jetOutline,` and the includeStats return has `cleanupStats:result.cleanupStats??null`; <br>• the four A2 keys (`:1166`, `:2767`, `autoColorCountKeyParts`, the `computeImageColorField` key) do not mention `cleanup`; <br>• index.html has both checkboxes with the D8 titles and labels, in `#imageStudioGroupTrace` after `#imgAiStoneShrinkField`, plus the hint with the D8 text and `#imageStudioStatCleanup`; <br>• both ids are in `HISTORY_TRACKED_CONTROL_IDS`. <br>Run through `new Function` with DOM stubs: <br>• the disabling block: eligible Staggered with cleanup off gives Jet disabled, Clean up enabled, hint hidden; each failing condition gives both disabled and the hint shown; <br>• the write lines: an old layer with the box unticked gains no key, ticking writes `true`, unticking a layer that has the key writes `false`; <br>• the stats-line formatter: `+3 filled, 605 recoloured, 1 removed` without an outlined part at 0, with `, 192 outlined` at 192, the A7 text when skipped, and hidden when null. | D6–D9 wiring | Import literal without `cleanup:true`; params missing a field; Jet outline enabled while Clean up is off; hint never shown; write adds `cleanup:false` to old layers; ids not history-tracked; `outlined` shown at 0 |
+| T7 | app.js/index.html wiring: <br>• the import literal contains `fillGaps:true,cleanup:true` and no `jetOutline`; <br>• the live params contain `cleanup:layer.cleanup,jetOutline:layer.jetOutline,` and the includeStats return has `cleanupStats:result.cleanupStats??null`; <br>• the four A2 keys (`:1166`, `:2767`, `autoColorCountKeyParts`, the `computeImageColorField` key) do not mention `cleanup`; <br>• index.html has both checkboxes with the D8 titles and labels, in `#imageStudioGroupTrace` after `#imgAiStoneShrinkField`, plus the hint with the D8 text and `#imageStudioStatCleanup`; <br>• both ids are in `HISTORY_TRACKED_CONTROL_IDS`. <br>Run through `new Function` with DOM stubs: <br>• the disabling block: eligible Staggered with cleanup off gives Jet disabled, Clean up enabled, hint hidden; each failing condition gives both disabled and the hint shown; AI stones with `sizeMode` `'mixed'` is eligible; <br>• the write lines: an old layer with the box unticked gains no key, ticking writes `true`, unticking a layer that has the key writes `false`; <br>• the stats-line formatter: `+3 filled, 605 recoloured, 1 removed` without an outlined part at 0, with `, 192 outlined` at 192, the A7 text when skipped, and hidden when null. | D6–D9 wiring | Import literal without `cleanup:true`; params missing a field; Jet outline enabled while Clean up is off; hint never shown; write adds `cleanup:false` to old layers; ids not history-tracked; `outlined` shown at 0 |
 | T8 | D10: `#imageRedraw` has the new title; index.html contains both `.image-redraw-style` rules; test-img-024's T6 fails under a no-stride mutation (checked by hand in the build, stated in the report). | D10(a), (b), (d) | Old title kept; select rule missing |
 
 "Checked by hand" for T8 and for every mutation above means this. The build applies the mutation,
