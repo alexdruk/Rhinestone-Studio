@@ -530,7 +530,8 @@ These go in a new `tools/test-img-024-flat-artwork-style.mjs`, registered in `to
 ## Existing tests that grep the text this build changes
 
 Each edited line is listed below with the tests that grep it, including regex-escaped forms, and
-what happens to each test.
+what happens to each test. The `test-img-022` line numbers were refreshed at `1b9b7b7` (IMG-025
+D10c), after this build and the redraw-timeout fix moved them; the other rows still hold.
 
 | Edit | Test and line | What it matches | Result |
 |---|---|---|---|
@@ -540,17 +541,17 @@ what happens to each test.
 | `computeImageColorField()` key and `prepareImageField` call | `test-img-017:178` (`/const key=\[[^\]]*\bvividness\b[^\]]*\]\.join/`), `:179` (`/prepareImageField\(buffer,\{[^}]*\bvividness\b[^}]*\}\)/`), `test-img-012:323` (marker `const imageColorFieldCache=new Map();\nfunction computeImageColorField(layer){`), `test-img-012:354` `new Function` list | regex / marker | Hold: the added text has no `]`, `}` or new identifier |
 | live params `:1184` gains `paletteRule:layer.paletteRule,` after `palette:imageColorPalette(),` | `test-img-017:185` (exactly two `/const params=\{[^;]*\};/`), `:186` (`vividness:` + RESOLVED), `test-img-023:412` (the tail `aiStoneDetection:mode==='ai-stones'?…,...mixedSizeParamsFor(layer)}`), `test-img-011:143` (`/colorCount:resolveImageColorCount\(layer\)/`), `test-img-009:271` (`maskMode:` needle), `test-img-021:123` and the other `generateImageStonesLive` extractors (`test-img-004`, `-005`, `-006`, `-010`, `-012`, `-013`, `-018`, `test-fill-algorithms-integration`, `test-image-trace-regression`, `test-rs-3039-large-layout`, `test-mono-006b`) | count / substring / execution | Hold: no `;`, the tail is untouched, and there is no new dependency |
 | export-regions params `:3485` gains the same key | `test-img-008:356`–`:363` (needle list), `test-img-017:189`–`:190`, `test-img-021:234`–`:235`, `test-img-009:279` | needles | Hold: needles are only checked for presence |
-| Redraw style storage lines after `:5615` | `test-img-022:463`–`:467` (slice `const REDRAW_ERROR_MESSAGES={` … `function syncImageRedrawControls(l){`, run via `new Function`), `test-img-022:708` (`const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';`) | slice / substring | Hold: the insert goes before the slice start |
-| `syncImageRedrawControls()` body | `test-img-022:463` (end marker only) | marker | Hold |
-| `startImageRedraw()` body | `test-img-022:710` (the first three lines verbatim, with `\n`) | substring | Hold: the insert is after `const layerId=` |
+| Redraw style storage lines after `:5615` | `test-img-022:470`–`:476` (slice `const REDRAW_ERROR_MESSAGES={` … `function syncImageRedrawControls(l){`, run via `new Function`), `test-img-022:715` (`const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';`) | slice / substring | Hold: the insert goes before the slice start |
+| `syncImageRedrawControls()` body | `test-img-022:470` (end marker only) | marker | Hold |
+| `startImageRedraw()` body | `test-img-022:717` (the first three lines verbatim, with `\n`) | substring | Hold: the insert is after `const layerId=` |
 | `redrawImage` call `:5683`, detection `:5689`–`:5690`, `applyRedraw` call `:5694` | no test greps these (checked: `signal:redrawRun.signal`, `detection.ok?detection.pitchPx`, `aiPitchPx,shrink`, `const layerId=layer.id,source`) | — | — |
-| index.html `.image-redraw-row` | `test-img-022:705`–`:707` (ids present), `test-img-016:115` (selects matching `/colou?r/i`) | ids / regex | Hold: the new id does not match |
-| `src/redraw` wire body | `test-img-022:445` (`deepEqual(JSON.parse(posts[0].init.body), { image: … })`) | deepEqual | **Moves.** Add `style: 'stones'` |
-| redraw record gains `style` | `test-img-022:562`–`:566` and `:578`–`:581` (`deepEqual(out.redraw, {...})` / `second.redraw`) | deepEqual | **Moves.** Add `style: 'stones'` to both expected records |
-| same | `test-img-022:567`–`:569` (changed-key set; `['redraw']` is the only new key) | set | Hold: a stones redraw adds no layer key |
-| `redrawImage()` result shape | `test-img-022:426`, `:499` (deepEqual results) | deepEqual | Hold: the result gains no key |
-| handler success / fake response | `test-img-022:245` (`{ dataUrl, model, promptVersion: 2 }` for a body with no style) | deepEqual | Hold |
-| prompt | `test-img-022:170`–`:180` (T1, stones text and `PROMPT_VERSION` 2), `:259` (`form.get('prompt') === buildRedrawPrompt()`) | text | Hold |
+| index.html `.image-redraw-row` | `test-img-022:712` (ids present), `test-img-016:115` (selects matching `/colou?r/i`) | ids / regex | Hold: the new id does not match |
+| `src/redraw` wire body | `test-img-022:452` (`deepEqual(JSON.parse(posts[0].init.body), { image: … })`) | deepEqual | **Moves.** Add `style: 'stones'` |
+| redraw record gains `style` | `test-img-022:569`–`:573` and `:584`–`:588` (`deepEqual(out.redraw, {...})` / `second.redraw`) | deepEqual | **Moves.** Add `style: 'stones'` to both expected records |
+| same | `test-img-022:576` (changed-key set; `['redraw']` is the only new key) | set | Hold: a stones redraw adds no layer key |
+| `redrawImage()` result shape | `test-img-022:433`, `:506` (deepEqual results) | deepEqual | Hold: the result gains no key |
+| handler success / fake response | `test-img-022:251` (`{ dataUrl, model, promptVersion: 2 }` for a body with no style) | deepEqual | Hold |
+| prompt | `test-img-022:170`–`:180` (T1, stones text and `PROMPT_VERSION` 2), `:265` (`form.get('prompt') === buildRedrawPrompt()`) | text | Hold |
 | AiStoneSampler move | `test-img-023:14` (imports from `AiStoneSampler.js`), `:188`–`:361` (calls) | import | Hold through the re-export |
 | ImageFieldPipeline field keys | `test-img-001:82`, `test-img-002:143` (`Object.keys(field)` set) | key set | Hold: no field key is added |
 

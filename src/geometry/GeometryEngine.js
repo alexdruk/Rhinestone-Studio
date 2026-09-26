@@ -49,6 +49,9 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
 import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
+// IMG-025 (Stone clean-up): runs on the finished Staggered / AI stones lattice in
+// generateImageLayout() below -- see StoneCleanup.js's own doc comment.
+import { cleanupLatticeStones } from './StoneCleanup.js';
 // IMG-010 (Line Design): the only S-200/IMG-013-adjacent mode whose stones never come from a single
 // sampleFieldByMode() call -- see LineDesignSampler.js's own doc comment and this file's
 // generateImageLayout() branch below.
@@ -1200,6 +1203,10 @@ export class GeometryEngine {
    *   field's `data`/blur/resize/colorCount all run on. See
    *   docs/specifications/IMG-009-SubjectMask.md. 'whole' keeps every pixel, see
    *   docs/specifications/IMG-018-WholeImageMask.md.
+   * @param {boolean} [params.cleanup] IMG-025: exactly true runs the stone clean-up pass on a
+   *   Staggered (uniform size) or AI stones layout. See docs/specifications/IMG-025-StoneCleanup.md.
+   * @param {boolean} [params.jetOutline] IMG-025: exactly true adds the one-stone Jet outline to that
+   *   pass; read only while clean-up runs.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
@@ -1382,6 +1389,16 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
+    // IMG-025 (D2): clean-up on the finished lattice, after any colour mapping and before the IMG-013
+    // gap fill (whose fillers are off the lattice) and the IMG-021 rotation. AI stones ignores size
+    // mode, so only Staggered needs uniform size; null cleanupStats means the pass did not run.
+    let cleanupStats = null;
+    if (options.cleanup && (isAiStones || (options.mode === 'staggered' && options.sizeMode === 'uniform'))) {
+      const cleaned = cleanupLatticeStones({ stones, pitchMm: options.stoneSizeMm + options.gapMm, palette: options.palette, placement, layerId: options.layerId, stoneSizeMm: options.stoneSizeMm, outline: options.jetOutline });
+      stones = cleaned.stones;
+      cleanupStats = cleaned.stats;
+    }
+
     // IMG-013: runs last, against the combined primary + S-200-infill stone set (S-200 infill counts
     // as "existing" from gap-fill's own point of view, decision 2) -- reuses the same colorAt()
     // closure built above (Task C) and the same on-field mask test (fieldPixelOn(), decision 4).
@@ -1410,7 +1427,7 @@ export class GeometryEngine {
       stones = rotatePointsAroundCenter(stones, options.rotationDeg, imagePlacementCenter(options)).map((point) => new Stone(point));
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats, cleanupStats });
   }
 
   /**
@@ -2623,6 +2640,10 @@ function normalizeImageParams(params) {
     // with no fillGaps field (every project saved before this milestone) coerces to false, which
     // skips the gap-fill pass entirely, so it regenerates byte-identically.
     fillGaps: Boolean(params.fillGaps),
+    // IMG-025 (D6): read-site permissive -- only exactly true turns each on; missing or anything else
+    // is off, so a project saved before this milestone regenerates byte-identically.
+    cleanup: params.cleanup === true,
+    jetOutline: params.jetOutline === true,
     // IMG-021: same normalizeRotationDeg()/assertFiniteNumber() convention normalizeShapeParams() uses.
     rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.

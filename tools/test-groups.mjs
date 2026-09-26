@@ -222,6 +222,8 @@ export const GROUPS = {
     'test-img-021-rotated-image-stones.mjs',
     // IMG-023: AI stones -- detection, palette, placement, sizing, against the reference prototype.
     'test-img-023-ai-stone-transfer.mjs',
+    // IMG-025: stone clean-up -- the port against the reference fixtures, the engine gate, wiring.
+    'test-img-025-stone-cleanup.mjs',
     'test-image-trace-regression.mjs',
     'test-fill-algorithms.mjs',
     'test-fill-algorithms-integration.mjs',

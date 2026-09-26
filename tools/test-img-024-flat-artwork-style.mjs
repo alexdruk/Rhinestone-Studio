@@ -266,21 +266,39 @@ await test('T5. error rule: keeps the 1.00% Siam block the share floor drops; Au
 
 // ---- T6. Stride sampling -------------------------------------------------------------------------
 
-await test('T6. stride: 300 x 300 samples every 3rd eligible pixel (30,000); repeat calls agree; 100 x 100 samples every pixel', () => {
+await test('T6. stride: 300 x 300 picks come from every 3rd eligible pixel (30,000), not all of them; repeat calls agree; 100 x 100 samples every pixel', () => {
   assert.equal(ERROR_PALETTE_MAX_SAMPLES, 40000);
-  const big = makeField(300, 300, (x, y) => [(x * 7 + y * 13) % 256, (x * 3 + y * 5) % 256, (x * 11 + y * 2) % 256]);
+  // IMG-025 (D10d): Siam sits only on eligible ordinals k with k % 3 !== 0, so the stride-3 sample
+  // never sees it and the full population does; the first 30 columns are ineligible, so ordinals
+  // are not pixel indices. A no-stride build picks Siam and fails the first deepEqual.
+  const W = 300, H = 300, SKIP = 30;
+  const eligible = new Uint8Array(W * H);
+  const ordinal = new Int32Array(W * H).fill(-1);
+  let count = 0;
+  for (let i = 0; i < W * H; i++) if (i % W >= SKIP) { eligible[i] = 1; ordinal[i] = count++; }
+  assert.equal(count, 81000);
+  const big = makeField(W, H, (x, y) => {
+    const k = ordinal[y * W + x];
+    if (k >= 0 && y >= 120 && y < 180 && k % 3 !== 0) return hexRgb('#9b1c1c');
+    return hexRgb(y < 150 ? '#141414' : '#eec6a4');
+  });
   const catLabs = PALETTE.map((p) => rgbToLab(...hexRgb(p.hex)));
-  const labsOf = (field) => Array.from({ length: field.data.length }, (_, i) => rgbToLab(field.r[i], field.g[i], field.b[i]));
-  const allBig = labsOf(big);
-  const sample = allBig.filter((_, k) => k % 3 === 0);
-  assert.equal(sample.length, 30000);
-  const direct = chooseAiStonePalette(sample, catLabs, 8);
-  const first = labelErrorPaletteColors({ ...big, eligible: eligibleOf(big), palette: PALETTE });
-  assert.equal(first.pickCount, direct.length);
-  assert.deepEqual(first.keptIds, direct);
-  const second = labelErrorPaletteColors({ ...big, eligible: eligibleOf(big), palette: PALETTE });
+  const eligibleLabs = [];
+  for (let i = 0; i < W * H; i++) if (eligible[i]) eligibleLabs.push(rgbToLab(big.r[i], big.g[i], big.b[i]));
+  const sample = eligibleLabs.filter((_, k) => k % 3 === 0);
+  assert.equal(sample.length, 27000);
+  const strided = chooseAiStonePalette(sample, catLabs, 8);
+  const unstrided = chooseAiStonePalette(eligibleLabs, catLabs, 8);
+  const siam = PALETTE.findIndex((p) => p.id === 'siam');
+  assert.ok(!strided.includes(siam) && unstrided.includes(siam), 'the fixture separates the two populations');
+  const first = labelErrorPaletteColors({ ...big, eligible, palette: PALETTE });
+  assert.equal(first.pickCount, strided.length);
+  assert.deepEqual(first.keptIds, strided);
+  assert.notDeepEqual(first.keptIds, unstrided);
+  const second = labelErrorPaletteColors({ ...big, eligible, palette: PALETTE });
   assert.deepEqual(second, first);
 
+  const labsOf = (field) => Array.from({ length: field.data.length }, (_, i) => rgbToLab(field.r[i], field.g[i], field.b[i]));
   const small = makeField(100, 100, (x, y) => [(x * 7 + y * 13) % 256, (x * 3 + y * 5) % 256, (x * 11 + y * 2) % 256]);
   const smallDirect = chooseAiStonePalette(labsOf(small), catLabs, 8);
   const smallOut = labelErrorPaletteColors({ ...small, eligible: eligibleOf(small), palette: PALETTE });

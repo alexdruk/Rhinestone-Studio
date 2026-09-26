@@ -1181,7 +1181,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     }
     return includeStats?cached:cached.stones;
   }
-  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),cleanup:layer.cleanup,jetOutline:layer.jetOutline,aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null,cleanupStats:result.cleanupStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2672,7 +2672,7 @@ function syncSelectedControlsFromLayer(){
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgAiStoneShrink').value=String(resolveAiStoneShrink(l.aiStoneShrink));el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgAiStoneShrink').value=String(resolveAiStoneShrink(l.aiStoneShrink));el('imgCleanup').checked=l.cleanup===true;el('imgJetOutline').checked=l.jetOutline===true;el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2871,6 +2871,10 @@ function writeSelectedControlsToLayer(){
   // IMG-023 (D2/D5): written only for a layer that uses AI stones or already has the key, so no other
   // layer gains it.
   if(resolveImageFillMode(l.fillMode)==='ai-stones'||l.aiStoneShrink!==undefined)l.aiStoneShrink=resolveAiStoneShrink(Number(el('imgAiStoneShrink').value));
+  // IMG-025 (D6): same rule as aiStoneShrink above -- a key is written only once ticked or already
+  // present, so an unrelated edit never adds cleanup/jetOutline to an older layer.
+  if(l.cleanup!==undefined||el('imgCleanup').checked)l.cleanup=el('imgCleanup').checked;
+  if(l.jetOutline!==undefined||el('imgJetOutline').checked)l.jetOutline=el('imgJetOutline').checked;
   const colorField=computeImageColorField(l);
   if(colorField){
     const colorMap={...l.colorMap};
@@ -5129,7 +5133,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning','imgAiStoneShrink'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning','imgAiStoneShrink','imgCleanup','imgJetOutline'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 // IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
 // #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
@@ -5595,7 +5599,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1.4,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1.4,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true,cleanup:true};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -6726,6 +6730,11 @@ async function renderImageStudio(){
   el('imgAiStoneShrink').disabled=!isAiStones;el('imgAiStoneShrink').title=isAiStones?'':'Only used when Fill style is set to AI stones.';
   const aiStoneHint=aiStoneShrinkHintText(l);
   el('imgAiStoneShrinkHint').textContent=aiStoneHint;el('imgAiStoneShrinkHint').hidden=!aiStoneHint;
+  // IMG-025 (D8): the same rule as the engine gate (D2); Jet outline also needs Clean up ticked.
+  const cleanupEligible=mode==='ai-stones'||(mode==='staggered'&&resolveSizeMode(l.sizeMode)==='uniform');
+  el('imgCleanup').disabled=!cleanupEligible;
+  el('imgJetOutline').disabled=!cleanupEligible||l.cleanup!==true;
+  el('imgCleanupHint').hidden=cleanupEligible;
   // IMG-023 (D8): the AI image view exists only for a redrawn layer.
   el('imageStudioViewAi').hidden=!l.redraw;
   el('imgSeed').value=resolveImageSeed(l.seed);
@@ -6851,6 +6860,15 @@ async function renderImageStudio(){
   }else{
     checkFixEl.textContent='Only applies to Contour Fill and Radial Fill.';
   }
+  // IMG-025 (D9): one line under the stats, hidden when clean-up did not run.
+  const cleanupText=imageCleanupStatsText(checkFixResult.cleanupStats);
+  el('imageStudioStatCleanup').textContent=cleanupText;el('imageStudioStatCleanup').hidden=!cleanupText;
+}
+// IMG-025 (D9, audit note A7): the studio's clean-up stats line; '' when clean-up did not run.
+function imageCleanupStatsText(stats){
+  if(!stats)return'';
+  if(stats.skipped)return'Clean-up: skipped (stones are not on one lattice)';
+  return`Clean-up: +${stats.filled} filled, ${stats.recoloured} recoloured, ${stats.removed} removed`+(stats.outlined>0?`, ${stats.outlined} outlined`:'');
 }
 el('imageStudioView').addEventListener('change',renderImageStudio);
 

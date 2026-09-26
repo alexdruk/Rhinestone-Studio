@@ -287,6 +287,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .image-redraw-row button.btn[hidden]{display:none}
 .image-redraw-row label[hidden]{display:none}
+/* IMG-025 (D10b): the style label sits inline with its select, at the button's height. */
+.image-redraw-style{display:flex;align-items:center;gap:6px;margin:0}
+.image-redraw-style select{width:auto;height:var(--control-height-sm)}
 #imageStudioCanvasColumn{display:flex;flex-direction:column;gap:var(--space-3);height:100%}
 #imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
 .view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
@@ -1166,7 +1169,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                Visibility is set by syncImageRedrawControls() in app.js. -->
           <div class="image-redraw-row">
             <label id="imageRedrawStyleField" class="image-redraw-style" hidden>Redraw style <select id="imageRedrawStyle"><option value="stones" selected>Stone picture</option><option value="flat">Flat artwork</option></select></label>
-            <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn as a flat, stone-scale illustration">Redraw with AI</button>
+            <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn by AI in the chosen style">Redraw with AI</button>
             <button id="imageRedrawCancel" class="btn sm" hidden>Cancel</button>
             <button id="imageRedrawUseOriginal" class="btn sm" hidden title="Go back to the image as it was before the redraw">Use original</button>
           </div>
@@ -1198,6 +1201,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <!-- IMG-023: the size of an AI stones layer, as a share of how large the AI drew it (1 = one AI
                stone per real stone). Enabled only while Fill style is AI stones (app.js renderImageStudio()). -->
           <div class="field" id="imgAiStoneShrinkField"><label for="imgAiStoneShrink">AI stone size</label><select id="imgAiStoneShrink" title="Only used when Fill style is set to AI stones."><option value="1" selected>100% (as drawn)</option><option value="0.9">90%</option><option value="0.8">80%</option></select><p class="hint" id="imgAiStoneShrinkHint" hidden></p></div>
+          <!-- IMG-025: clean-up of the finished stones; enabled per D8 by app.js renderImageStudio(). -->
+          <label class="checkbox-row" title="Fills small holes, fixes single odd-coloured stones and removes stray crumbs"><input type="checkbox" id="imgCleanup"> Clean up stones</label>
+          <label class="checkbox-row" title="Turns the outer edge of the design into one row of Jet stones"><input type="checkbox" id="imgJetOutline"> Jet outline</label>
+          <p class="hint" id="imgCleanupHint" hidden>Clean-up works with Staggered Fill (one stone size) and AI stones</p>
         </details>
         <details class="advanced-section" id="imageStudioGroupPosition" open>
           <summary>Position &amp; size</summary>
@@ -1267,6 +1274,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <dt>Colours</dt><dd id="imageStudioStatColors">—</dd>
           <dt>Bounding box</dt><dd id="imageStudioStatBox">—</dd>
         </dl>
+        <p class="hint" id="imageStudioStatCleanup" hidden></p>
       </div>
     </div>
     <footer class="lightbox-footer">
