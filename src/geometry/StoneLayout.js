@@ -40,8 +40,12 @@ export class StoneLayout {
    *   -- see nudgeOrDropStonePoints() (StoneSampler.js). Additive and optional, following the exact
    *   outlineStats precedent above: null/absent for every non-Contour/Radial image layout and every
    *   layout produced before this field existed.
+   * @param {{filled: number, recoloured: number, removed: number, outlined: number}|{skipped: string}|null} [params.cleanupStats]
+   *   IMG-025: what the stone clean-up pass changed on a Staggered / AI stones image layout (see
+   *   StoneCleanup.js). Same additive precedent as checkFixStats: null/absent whenever clean-up did
+   *   not run, and for every layout produced before this field existed.
    */
-  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null } = {}) {
+  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null, cleanupStats = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {
       throw new TypeError('StoneLayout requires a non-empty layerId.');
     }
@@ -52,6 +56,7 @@ export class StoneLayout {
     this.outlineStats = outlineStats;
     this.baseBoundingBoxMm = baseBoundingBoxMm;
     this.checkFixStats = checkFixStats;
+    this.cleanupStats = cleanupStats;
   }
 
   get count() {
@@ -105,6 +110,9 @@ export class StoneLayout {
     if (this.checkFixStats) {
       json.checkFixStats = { ...this.checkFixStats };
     }
+    if (this.cleanupStats) {
+      json.cleanupStats = { ...this.cleanupStats };
+    }
     if (this.baseBoundingBoxMm) {
       const b = this.baseBoundingBoxMm;
       json.baseBoundingBoxMm = {
@@ -129,7 +137,8 @@ export class StoneLayout {
       stones: value.stones ?? [],
       outlineStats: value.outlineStats ?? null,
       baseBoundingBoxMm: value.baseBoundingBoxMm ?? null,
-      checkFixStats: value.checkFixStats ?? null
+      checkFixStats: value.checkFixStats ?? null,
+      cleanupStats: value.cleanupStats ?? null
     });
   }
 }
