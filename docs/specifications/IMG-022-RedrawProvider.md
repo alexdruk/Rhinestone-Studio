@@ -55,7 +55,7 @@ Failures reject with a `RedrawError` (an `Error` subclass exported from `src/red
 | `unauthorized` | The access code is missing or wrong (401). |
 | `rate-limited` | Our hourly limit (429), or OpenAI's own rate limit. |
 | `network` | Our server could not be reached (`fetch` rejected, not by abort). |
-| `provider-failed` | The provider answered with a failure, including OpenAI 4xx/5xx after the retry, an OpenAI timeout after the retry, and a content-policy refusal. |
+| `provider-failed` | The provider answered with a failure, including OpenAI 4xx/5xx after the retry, an OpenAI timeout, and a content-policy refusal. |
 | `invalid-output` | The returned image did not decode or failed the subject-coverage check (D7), twice. |
 
 **(spec)** Cancelling is not an error code. An aborted `signal` rejects with the platform's
@@ -128,7 +128,7 @@ New folder `server/redraw/` with three files:
   quotes, no expansion). Values already in `process.env` win over the file. It exports
   `loadRedrawEnv({ env = process.env, envFileText })` → the settings in D4 with defaults applied.
 * `prompt.mjs`: `PROMPT_VERSION` and `buildRedrawPrompt()` (D6).
-* `handler.mjs`: `createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = 120000 })`
+* `handler.mjs`: `createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = settings.timeoutMs })`
   → `{ handleConfig(req, res), handleRedraw(req, res) }`. The injectable `fetch`, `now` and
   `timeoutMs` mean tests never touch the network or wait on real time.
 
@@ -176,6 +176,7 @@ documented in a new tracked `.env.example`, with no real values.
 | `OPENAI_IMAGE_QUALITY` | `high` | Sent as `quality`. Changed from `medium` by IMG-023 (D6). |
 | `REDRAW_ACCESS_CODE` | none, always required | Requests without a matching `X-Redraw-Access-Code` header get 401. Unset, both routes are 404, fake mode included. |
 | `REDRAW_RATE_LIMIT_PER_HOUR` | `20` | In memory, per client IP. |
+| `REDRAW_TIMEOUT_SECONDS` | `300` | How long one OpenAI call may take. A timeout is not retried and answers 504 `provider-failed`. Added by fix/redraw-timeout: `gpt-image-2` at `high` takes 147-161 s. |
 | `REDRAW_COST_LABEL` | empty | Free text for the consent dialog, e.g. "about $0.05 per image". Returned by the config route. |
 | `REDRAW_FAKE` | unset | `1` returns the fixture image with no OpenAI call, for local and browser checks. Mounts the routes without `OPENAI_API_KEY`. |
 
@@ -201,7 +202,7 @@ OpenAI.
 | `output_format` | `png` |
 | `n` | `1` |
 
-Each attempt times out after 120 s (`timeoutMs`). A 5xx or a timeout is retried once. Mapping:
+Each attempt times out after `REDRAW_TIMEOUT_SECONDS` (default 300 s, `timeoutMs`). A 5xx or a `fetch` rejection is retried once; a timeout is not, because the timed-out call is usually still running and billed at OpenAI. Mapping:
 
 | OpenAI outcome | Our response |
 |---|---|
@@ -210,7 +211,8 @@ Each attempt times out after 120 s (`timeoutMs`). A 5xx or a timeout is retried 
 | 429 | 429 `rate-limited` |
 | 401 or 403 (our key is bad) | 502 `provider-failed`. Not `unauthorized`, which would tell the user their access code is wrong. |
 | any other 4xx, including a content-policy refusal | 502 `provider-failed`, with OpenAI's `error.message` passed on |
-| 5xx or timeout twice | 502 `provider-failed` |
+| 5xx twice | 502 `provider-failed` |
+| timeout (no retry) | 504 `provider-failed`, "The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY." |
 | `fetch` itself rejects twice (DNS, reset) | 502 `provider-failed` |
 
 `background` stays `transparent`. Transparent backgrounds on `gpt-image-2` are a preview feature
@@ -418,7 +420,7 @@ In the Source group (`index.html:1152`), after `#imageStudioRemove` (`:1157`):
   `AbortController`.
 * `#imageRedrawUseOriginal` **Use original**: shown when the selected image layer has `redraw`. It
   works even when no provider is available (it makes no request).
-* `#imageRedrawStatus`, a `.hint` line: "Redrawing… this can take up to two minutes." while a request
+* `#imageRedrawStatus`, a `.hint` line: "Redrawing… this can take up to five minutes." while a request
   runs, then the result or error message.
 
 Visibility is set in `renderImageStudio()` (`app.js:6506`), next to the existing

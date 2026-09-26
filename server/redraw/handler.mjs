@@ -5,7 +5,7 @@
 // the network or wait on real time. See docs/specifications/IMG-022-RedrawProvider.md D3-D5.
 import { timingSafeEqual } from 'node:crypto';
 import { buildRedrawPrompt, PROMPT_VERSION } from './prompt.mjs';
-import { redrawConfigStatus } from './env.mjs';
+import { redrawConfigStatus, REDRAW_ENV_DEFAULTS } from './env.mjs';
 import { FAKE_REDRAW_DATA_URL } from '../../src/redraw/FakeRedrawProvider.js';
 
 export const OPENAI_IMAGE_EDITS_URL = 'https://api.openai.com/v1/images/edits';
@@ -66,7 +66,7 @@ function isPngBase64(b64) {
 // IMG-023 (D7): OpenAI's safety-system refusal. Matched case-insensitively on error.message.
 const SAFETY_SYSTEM_PATTERN = /safety system/i;
 
-export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = 120000, logger = console }) {
+export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = settings.timeoutMs || REDRAW_ENV_DEFAULTS.REDRAW_TIMEOUT_SECONDS * 1000, logger = console }) {
   const { configured } = redrawConfigStatus(settings);
   const requestTimesByIp = new Map();
 
@@ -122,6 +122,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
 
     let response = null;
     let body = null;
+    let timedOut = false;
     for (let attempt = 1; attempt <= 2 && !clientGone.signal.aborted; attempt++) {
       let outcome;
       try {
@@ -131,7 +132,9 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
       }
       if (clientGone.signal.aborted) return;
       response = null;
-      if (outcome === TIMEOUT || outcome === null || outcome.status >= 500) continue;
+      // A timed-out call is usually still running, and billed, at OpenAI, so it is not retried.
+      if (outcome === TIMEOUT) { timedOut = true; break; }
+      if (outcome === null || outcome.status >= 500) continue;
       response = outcome;
       body = null;
       try { body = await response.json(); } catch { body = null; }
@@ -145,6 +148,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
       break;
     }
     if (clientGone.signal.aborted) return;
+    if (timedOut) return sendFailure(res, 504, 'provider-failed', 'The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY.');
     if (!response) return sendFailure(res, 502, 'provider-failed', 'The image service did not respond. Try again later.');
 
     const openAiMessage = messageOf(body);
