@@ -66,9 +66,13 @@ position matched exactly between the two setups (identical hashes).
 
 ### 2. Tolerant (differ between setups)
 
-These are the AI-stone count and the per-colour counts. They are pinned to Setup A's values with a
-tolerance of **max(0.5 % of the pinned value, 10 stones)**. Setup B's values are listed next to
-them, as `A / B`.
+These are the AI-stone count and the per-colour counts. They are pinned to Setup A's values with
+these setup-to-setup tolerances (F1, resolved):
+
+- AI-stone count and Jet: **max(0.5 % of the pinned value, 10 stones)**;
+- every other per-colour count: **max(1.5 % of the pinned value, 15 stones)**.
+
+Setup B's values are listed next to them, as `A / B`. All of them fall inside these bands.
 
 | Run | AI stones | Per-colour counts, `A / B` |
 |---|---|---|
@@ -83,8 +87,9 @@ them, as `A / B`.
 
 The Siam counts behind the brief's "(siam 1355)" and "(siam 98, the lips)" are identical in both
 setups. The largest AI-stone difference is 9 (portrat). The largest Jet difference is 4 (tiger 0.8).
-Portrat's **light-peach** differs by 11 (shrink 1.0) and 12 (0.8). That exceeds the stated
-tolerance of 10 even between two runs of the reference itself. See finding F1.
+Portrat's **light-peach** differs by 11 (shrink 1.0) and 12 (0.8). That exceeded the first band
+of 10 even between two runs of the reference itself, and is why per-colour counts have the wider
+band (F1).
 
 Pitch is identical in both setups, so the difference comes after highlight detection: it is in the
 step that adds stones without a dot, which uses the distance transform, Gaussian blur and
@@ -311,10 +316,12 @@ stones (reference `palette()`). Colour distance is weighted Lab:
 The catalogue is `imageColorPalette()` (`app.js:735`). It matches the reference's `CATALOGUE`
 exactly: 23 entries, same ids, same order, same hex (checked against `STONE_COLORS`).
 
-AI stones ignores Auto colour count and Vividness. While `'ai-stones'` is selected,
-`renderImageStudio()` disables `#imgColorCount` and `#imgVividness`, with the title "Not used by AI
-stones: it picks up to 8 colours from the stones the AI drew." This sits next to the existing
-Organic/Edge disabling at `app.js:6642-6643`, the same idiom.
+AI stones ignores Auto colour count, Vividness and colour overrides. While `'ai-stones'` is
+selected, `renderImageStudio()` disables `#imgColorCount`, `#imgVividness` and the eight Colours
+rows `#imgColorPick0`-`#imgColorPick7` (F3), all with the title "Not used by AI stones: it picks up
+to 8 colours from the stones the AI drew." This sits next to the existing Organic/Edge disabling at
+`app.js:6642-6643`, the same idiom. `#imgColorReset` and the Colours canvas view are left as they
+are.
 
 ### D4. Grid
 
@@ -589,7 +596,7 @@ gap 0.3.
   - **AI-stone count** within **3 %**.
 - **Colour.** Call `placeAiStones()` with `points` set to the reference's own stone positions (from
   `<name>-100.json` / `<name>-80.json`) and the reference's scale
-  (`mmPerPx = 2.3 / (pinnedPitch / shrink)`, box = the whole image). **At least 97 %** of the
+  (`mmPerPx = 2.3 / (pinnedPitch / shrink)`, box = the whole image). **At least 95 %** (F2) of the
   reference's stones must get the reference's colour at the same position. A reference stone that
   the JS keep-rule drops counts as a mismatch.
 
@@ -598,7 +605,8 @@ gap 0.3.
   - a pitch change of 0.2 % alone moves colours at fixed positions by up to 10 %, as measured above.
 
   With the scale held at the pinned pitch, the measured floor for a port that differs only in
-  8-bit L\* rounding is 97.66 % (tiger 1.0). See F2.
+  8-bit L\* rounding is 97.66 % (tiger 1.0). The band is 95 % to leave room for the port's other
+  differences (F2).
 
 ## Anchors
 
@@ -788,13 +796,15 @@ crystal, silver, gold, citrine, sapphire, light-sapphire and jet, plus **12 siam
   `chooseAiStonePalette`, then `placeAiStones` with `points` = the pinned reference grid and
   `mmPerPx = 2.3/(16/shrink)`:
   - the kept set matches the pinned strings to within 1 % (at most 2 of 246 and 1 of 148);
-  - at least 97 % of the reference's kept stones get its colour;
+  - at least 95 % of the reference's kept stones get its colour (F2);
   - palette identical; pitch within 1 % of 16.0; AI stones 224.
 - **T9. AI image view and wiring** (source-level):
   - `index.html` has `value="ai"` inside `#imageStudioViewAi` (with `hidden`), the
     `.view-toggle label[hidden]` rule, the `ai-stones` Fill style option, `#imgAiStoneShrink`
     (options 1, 0.9, 0.8), `#imgAiStoneShrinkHint` and `#imageRedrawStatusDetail`.
   - Inside `renderImageStudio()`, `ctx.drawImage(` is still 2 and `drawInBox(` still 3.
+  - `renderImageStudio()` disables `imgColorCount`, `imgVividness` and `imgColorPick0`-`7` for
+    `'ai-stones'` with one shared title (D3, F3).
   - `HISTORY_TRACKED_CONTROL_IDS` includes `'imgAiStoneShrink'`.
   - `detectAiStones` is imported from `./src/image/index.js` and `SHEET_MAX_MM` from the products
     barrel.
@@ -977,7 +987,8 @@ safety-system case `:277`) and T7 (`:299`, defaults).
 
 ## Non-goals
 
-- The Colours rows and the Colours canvas view are not adapted to AI stones (F3).
+- The Colours rows are disabled, not adapted, for AI stones, and the Colours canvas view still shows
+  the quantised field (F3).
 - IMG-008's vector-first SVG regions for an AI stones layer still come from the traced field (as for
   Line Design).
 - There is no phase alignment of the real grid to the AI lattice.
@@ -985,36 +996,32 @@ safety-system case `:277`) and T7 (`:299`, defaults).
 
 ## Findings for decision
 
-- **F1. The per-colour tolerance fails between the two reference setups.** Portrat's light-peach
-  differs by 11 (shrink 1.0) and 12 (0.8). The stated band, max(0.5 %, 10), allows at most 10. The
-  spec pins the band as decided and records the violation. Options:
-  - widen the per-colour band to max(1.5 %, 10);
-  - exempt the per-colour counts from the setup-to-setup band, keeping it for the AI-stone count and
-    Jet only (the two figures the decision's evidence was taken from).
-- **F2. The 97 % colour band has almost no margin.** It is measurable only under the controlled
-  protocol above: reference positions and the reference scale. A literal end-to-end comparison
-  shares no positions with the reference (D4), and a 0.2 % pitch change alone costs up to 10 %.
-  Even under the protocol, a port that differs only in 8-bit L\* rounding reaches 97.66 % on
-  tiger 1.0. The real port will also differ in the dot-less step, morphology borders and merge-tie
-  order, so it may land just under 97 %. Options:
-  - keep 97 % and accept that the build may report a near-miss for a decision;
-  - set the band to 95 % now.
-- **F3. The Colours rows keep working on a mode that ignores them.** D3 disables only colour count
-  and vividness. The Colours rows (`#imgColorPick0-7`) and the Colours canvas view keep showing the
-  quantised field. AI stones ignores `colorMap`, so a pick there changes nothing. Options:
-  - disable the rows too, with the same title (smallest);
-  - let AI stones apply `colorMap` by catalogue id (a follow-up).
-- **F4. Jet can be a 9th colour.** The Jet rule uses Jet even when the greedy palette did not pick
-  it (reference behaviour, kept). All four measured palettes contain Jet, so this has not been seen
-  in practice.
-- **F5. Vessels always get heavily shrunk.** D2's fit-to-canvas rule means the four designs
-  (205-249 mm at shrink 1.0) fit the default mug canvas (257.6 × 85 mm) at an effective shrink of
-  0.26-0.32, and tumbler and bottle at 0.48-0.61. The default plate (270 mm) and a grown Flat Sheet
-  keep 1.0. On every vessel the one-stone lines will break and the hint will always show. The prompt
-  asks for about 70 stones across; a mug band would need roughly 30 at SS6. Options:
-  - accept this for now;
-  - send a product-aware stone count in the prompt (a later milestone, PROMPT_VERSION 3).
-- **F6. Choosing AI stones on a photo re-sizes it.** D2(b) re-sizes the box when Fill style becomes
-  AI stones, because decision 2 makes the size a function of the AI pitch. On a photo, detection
-  fails (`ok: false`), the box is left alone, and the hint says so. On an image that happens to
-  contain highlight-like dots, the box would jump. Worth a glance in the browser check.
+All resolved (commit "IMG-023 spec: findings F1-F6 resolved"). The original finding text is kept
+under each resolution.
+
+- **F1. Resolved: per-colour band widened.** The setup-to-setup band for per-colour counts is
+  **max(1.5 %, 15 stones)**; the AI-stone count and Jet keep **max(0.5 %, 10)** ("Reference
+  figures", group 2). *Finding:* portrat's light-peach differs by 11 (shrink 1.0) and 12 (0.8)
+  between the two reference setups, which the first band, max(0.5 %, 10), did not allow.
+- **F2. Resolved: colour band 95 %.** The colour-agreement band is **95 %**, under the controlled
+  protocol (reference positions, reference scale), for the four-image acceptance run and for T8.
+  *Finding:* a literal end-to-end comparison shares no positions with the reference (D4), and a
+  0.2 % pitch change alone costs up to 10 %. Even under the protocol, a port that differs only in
+  8-bit L\* rounding reaches 97.66 % on tiger 1.0, leaving almost no margin under 97 % for the
+  dot-less step, morphology borders and merge-tie order.
+- **F3. Resolved: Colours rows disabled.** While `'ai-stones'` is selected, `#imgColorPick0`-`7`
+  are disabled with the same title as colour count and vividness (D3). *Finding:* AI stones ignores
+  `colorMap`, so a pick in those rows changed nothing.
+- **F4. Accepted as reference behaviour.** The Jet rule uses Jet even when the greedy palette did
+  not pick it, so Jet can be a 9th colour. All four measured palettes contain Jet, so this has not
+  been seen in practice.
+- **F5. Accepted for now; backlog row added.** `docs/BACKLOG.md` has "Product-aware stone count in
+  the redraw prompt (PROMPT_VERSION 3)". *Finding:* D2's fit-to-canvas rule fits the four designs
+  (205-249 mm at shrink 1.0) to the default mug canvas (257.6 × 85 mm) at an effective shrink of
+  0.26-0.32, and to tumbler and bottle at 0.48-0.61. The default plate (270 mm) and a grown Flat
+  Sheet keep 1.0. On every vessel the one-stone lines break and the hint always shows. The prompt
+  asks for about 70 stones across; a mug band would need roughly 30 at SS6.
+- **F6. Kept.** The box re-sizes only when detection is `ok` (D2(b)); on a photo, detection fails,
+  the box is left alone and the hint says so. It is intentional that AI stones also works on a
+  rhinestone picture imported directly, without a redraw: such an image is sized from its own
+  pitch like a redrawn one.
