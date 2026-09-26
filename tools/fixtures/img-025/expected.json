@@ -1,0 +1,122 @@
+{
+ "portrait_flat": {
+  "cleanup": {
+   "before": 4162,
+   "filled": 15,
+   "recoloured": 310,
+   "removed": 22,
+   "outlined": 0,
+   "after": 4155,
+   "sha256": "d7576bf6339f4c698492875e0185d5191d278721494191426f4a6b431a098fdc"
+  },
+  "outline": {
+   "before": 4162,
+   "filled": 15,
+   "recoloured": 310,
+   "removed": 22,
+   "outlined": 151,
+   "after": 4155,
+   "sha256": "a80a0e7aa1d2a9174120b9b5d85c4435bb625051c3e593e20ee74b772a38264d"
+  }
+ },
+ "portrait_photo": {
+  "cleanup": {
+   "before": 6192,
+   "filled": 5,
+   "recoloured": 157,
+   "removed": 6,
+   "outlined": 0,
+   "after": 6191,
+   "sha256": "f679e566938f36ab749915eeaca800b43b9c549c0e7690aa67389cd24d7efe28"
+  },
+  "outline": {
+   "before": 6192,
+   "filled": 5,
+   "recoloured": 157,
+   "removed": 6,
+   "outlined": 104,
+   "after": 6191,
+   "sha256": "37a6be98bb3d8aa6eb156a1d2e7f9a7aba6129a4b8cdb1c4865783aa07bfa81d"
+  }
+ },
+ "portrait_stones": {
+  "cleanup": {
+   "before": 8793,
+   "filled": 14,
+   "recoloured": 870,
+   "removed": 0,
+   "outlined": 0,
+   "after": 8807,
+   "sha256": "f13c3333c7e81f1758e6ab115251e22dd916006e5b8141f025eceb693f8918f5"
+  },
+  "outline": {
+   "before": 8793,
+   "filled": 14,
+   "recoloured": 870,
+   "removed": 0,
+   "outlined": 49,
+   "after": 8807,
+   "sha256": "dedb41c826d9994bce17ee9f50c998795449bb78a4938dcd962d2afc4fd30c20"
+  }
+ },
+ "tiger_flat": {
+  "cleanup": {
+   "before": 4651,
+   "filled": 0,
+   "recoloured": 501,
+   "removed": 0,
+   "outlined": 0,
+   "after": 4651,
+   "sha256": "ecdc2744b5d2e087624802877faa28f94990d73d0c5bd1a1273717626f21b6a4"
+  },
+  "outline": {
+   "before": 4651,
+   "filled": 0,
+   "recoloured": 501,
+   "removed": 0,
+   "outlined": 118,
+   "after": 4651,
+   "sha256": "24e7d134e9e50a574676c85d101d0412cf9967a139a16c78ba4b28e3a8975bf9"
+  }
+ },
+ "tiger_photo": {
+  "cleanup": {
+   "before": 7058,
+   "filled": 3,
+   "recoloured": 605,
+   "removed": 1,
+   "outlined": 0,
+   "after": 7060,
+   "sha256": "6aed176c53dc2935c6e232da26001e2f8190c41601d53892ff4f5e132d18ceb6"
+  },
+  "outline": {
+   "before": 7058,
+   "filled": 3,
+   "recoloured": 605,
+   "removed": 1,
+   "outlined": 192,
+   "after": 7060,
+   "sha256": "d325c22acba49d2084a805238e969194633a25248052b56eaa22a0ad1e3d79b0"
+  }
+ },
+ "tiger_stones": {
+  "cleanup": {
+   "before": 8209,
+   "filled": 129,
+   "recoloured": 761,
+   "removed": 0,
+   "outlined": 0,
+   "after": 8338,
+   "sha256": "4801ab88c8f1c596f542f434a75f1de210a0363c64b834f0ddd3d625f60b8ae5"
+  },
+  "outline": {
+   "before": 8209,
+   "filled": 129,
+   "recoloured": 761,
+   "removed": 0,
+   "outlined": 0,
+   "after": 8338,
+   "sha256": "4801ab88c8f1c596f542f434a75f1de210a0363c64b834f0ddd3d625f60b8ae5"
+  }
+ }
+}
