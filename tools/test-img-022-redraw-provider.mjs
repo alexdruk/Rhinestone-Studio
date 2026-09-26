@@ -155,6 +155,8 @@ function spyFetch(responder) {
 }
 const okImage = () => new Response(JSON.stringify({ data: [{ b64_json: FAKE_B64 }] }), { status: 200 });
 const status = (code, body = {}) => new Response(JSON.stringify(body), { status: code });
+// IMG-023: handler tests that hit an OpenAI 4xx pass a logger, so the suite output stays clean.
+function recordingLogger() { const lines = []; return { lines, warn: (line) => lines.push(line) }; }
 
 async function post(handler, { code = 'letmein', ip, body = UPLOAD_BODY } = {}) {
   const res = makeRes();
@@ -165,17 +167,18 @@ async function post(handler, { code = 'letmein', ip, body = UPLOAD_BODY } = {}) 
 
 // ---- T1. Prompt --------------------------------------------------------------------------------
 
-await test('T1. prompt: Variant 1 text verbatim, palette line = every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 1', () => {
-  assert.equal(PROMPT_VERSION, 1);
+await test('T1. prompt: IMG-023 "designer" text verbatim, palette line = every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 2', () => {
+  assert.equal(PROMPT_VERSION, 2);
   const lines = buildRedrawPrompt().split('\n');
   assert.deepEqual(lines.slice(0, -1), [
-    'You are a rhinestone mosaic artist. Turn the attached image into a rhinestone mosaic picture.',
-    'Rules:',
-    '1. All stones are round and the same size. The picture is exactly 100 stones wide, in staggered (honeycomb) rows.',
-    '2. Each stone is ONE flat colour taken from the palette below. No gradients inside a stone, no reflections, no sparkle, only a small white highlight dot.',
-    '3. Use at most 8 colours from the palette for the whole picture, and use large even areas of one colour rather than mixing colours stone by stone.',
-    '4. Dark outlines, eyes, mouth and other key details are chains of Jet or Hematite stones, one stone wide.',
-    '5. Square image, subject fills the frame, transparent background, no frame, no text, no tables, no labels.',
+    'You are a professional designer of hot-fix rhinestone transfer templates. Design a rhinestone version of the attached image that a machine can set stone by stone.',
+    'Use identical round stones in honeycomb rows, about 70 stones across. Every stone is one flat colour from the palette below, drawn as a glossy round stone with a small white highlight dot.',
+    'Design choices a good template designer makes:',
+    '- Simplify: fewer, larger colour areas; drop texture and fine shading that stones cannot show.',
+    '- Keep what makes the subject recognisable, and exaggerate it slightly if needed.',
+    '- Separate colour areas and outline the subject with one-stone-wide chains of Jet stones, with no gaps.',
+    '- Use at most 8 palette colours, with strong contrast between neighbouring areas.',
+    'Square image, subject fills the frame, transparent background, no shadow or glow, no text.',
     'Palette (name and hex):'
   ]);
   assert.deepEqual(lines[lines.length - 1].split(', '), Object.values(STONE_COLORS).map((c) => `${c.name} ${c.previewColor}`));
@@ -239,7 +242,7 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
   let spy = spyFetch(okImage);
   let res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.json(), { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 });
+  assert.deepEqual(res.json(), { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 2 });
   const { url, init } = spy.calls[0];
   assert.equal(url, OPENAI_IMAGE_EDITS_URL);
   assert.equal(url, 'https://api.openai.com/v1/images/edits');
@@ -248,7 +251,7 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
   const form = init.body;
   assert.ok(form instanceof FormData);
   assert.equal(form.get('model'), 'gpt-image-2');
-  assert.equal(form.get('quality'), 'medium');
+  assert.equal(form.get('quality'), 'high');
   assert.equal(form.get('size'), '1024x1024');
   assert.equal(form.get('background'), 'transparent');
   assert.equal(form.get('output_format'), 'png');
@@ -262,10 +265,10 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
   assert.deepEqual([...form.keys()].sort(), ['background', 'image', 'model', 'n', 'output_format', 'prompt', 'quality', 'size']);
 
   spy = spyFetch(okImage);
-  const custom = loadRedrawEnv({ env: { OPENAI_API_KEY: 'sk-test', REDRAW_ACCESS_CODE: 'letmein', OPENAI_IMAGE_MODEL: 'gpt-image-9', OPENAI_IMAGE_QUALITY: 'high' } });
+  const custom = loadRedrawEnv({ env: { OPENAI_API_KEY: 'sk-test', REDRAW_ACCESS_CODE: 'letmein', OPENAI_IMAGE_MODEL: 'gpt-image-9', OPENAI_IMAGE_QUALITY: 'medium' } });
   res = await post(createRedrawHandler({ settings: custom, fetch: spy.fetch }));
   assert.equal(spy.calls[0].init.body.get('model'), 'gpt-image-9');
-  assert.equal(spy.calls[0].init.body.get('quality'), 'high');
+  assert.equal(spy.calls[0].init.body.get('quality'), 'medium');
   assert.equal(res.json().model, 'gpt-image-9');
 });
 
@@ -274,17 +277,34 @@ await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not
     [() => status(429), 429, 'rate-limited'],
     [() => status(401, { error: { message: 'bad key' } }), 502, 'provider-failed'],
     [() => status(403), 502, 'provider-failed'],
-    [() => status(400, { error: { message: 'Your request was rejected by the safety system.' } }), 502, 'provider-failed', 'Your request was rejected by the safety system.'],
+    [() => status(400, { error: { message: 'Invalid size.' } }), 502, 'provider-failed', 'Invalid size.'],
     [() => new Response(JSON.stringify({ data: [{ b64_json: Buffer.from('not a png at all').toString('base64') }] }), { status: 200 }), 502, 'invalid-output'],
     [() => new Response(JSON.stringify({ data: [] }), { status: 200 }), 502, 'invalid-output']
   ];
   for (const [responder, httpStatus, code, message] of cases) {
     const spy = spyFetch(responder);
-    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
+    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
     assert.equal(res.statusCode, httpStatus);
     assert.equal(res.json().code, code);
     if (message) assert.equal(res.json().message, message);
     assert.equal(spy.calls.length, 1, `${code} is not retried`);
+  }
+  // IMG-023 (D7): a safety-system refusal is retried once, then answered 422 'declined' with OpenAI's
+  // message; the retry shares the two-attempt budget.
+  const SAFETY = 'Your request was rejected by the safety system. request ID req_abc123';
+  const safetyCases = [
+    [() => status(400, { error: { message: SAFETY } }), 422, 'declined'],
+    [(n) => (n === 1 ? status(400, { error: { message: SAFETY } }) : okImage()), 200, null],
+    [(n) => (n === 1 ? status(500) : status(400, { error: { message: SAFETY } })), 422, 'declined'],
+    [() => status(400, { error: { message: 'Rejected by our Safety System.' } }), 422, 'declined']
+  ];
+  for (const [responder, httpStatus, code] of safetyCases) {
+    const spy = spyFetch(responder);
+    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
+    assert.equal(res.statusCode, httpStatus);
+    if (code) assert.equal(res.json().code, code);
+    if (code) assert.ok(res.json().message.toLowerCase().includes('safety system'));
+    assert.equal(spy.calls.length, 2, 'two calls at most');
   }
   // Upload that is not a PNG data URL, and a malformed body.
   for (const body of [JSON.stringify({ image: 'data:image/jpeg;base64,AAAA' }), 'not json']) {
@@ -294,9 +314,26 @@ await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not
   }
 });
 
+await test('T6b. every OpenAI 4xx is logged with its status and message, never the key or the access code; 200 and 5xx are not', async () => {
+  for (const [responder, expected] of [
+    [() => status(400, { error: { message: 'Invalid size.' } }), ['Redraw: OpenAI returned 400: Invalid size.']],
+    [() => status(401, { error: { message: 'bad key' } }), ['Redraw: OpenAI returned 401: bad key']],
+    [() => status(403), ['Redraw: OpenAI returned 403: ']],
+    [() => status(429, { error: { message: 'slow down' } }), ['Redraw: OpenAI returned 429: slow down']],
+    [() => status(400, { error: { message: 'safety system' } }), ['Redraw: OpenAI returned 400: safety system', 'Redraw: OpenAI returned 400: safety system']],
+    [okImage, []],
+    [() => status(500), []]
+  ]) {
+    const logger = recordingLogger();
+    await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spyFetch(responder).fetch, logger }));
+    assert.deepEqual(logger.lines, expected);
+    for (const line of logger.lines) assert.ok(!line.includes('sk-test') && !line.includes('letmein'));
+  }
+});
+
 await test('T7. env: defaults, environment wins over the file, quotes and comments; config route 404 unless the access code and a key are set', async () => {
   const defaults = loadRedrawEnv({ env: {} });
-  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'medium', accessCode: '', rateLimitPerHour: 20, costLabel: '', fake: false });
+  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', fake: false });
   const file = '# comment\n\nOPENAI_IMAGE_MODEL=from-file\nREDRAW_COST_LABEL="about $0.05 per image"\nREDRAW_ACCESS_CODE=\'quoted\'\nREDRAW_RATE_LIMIT_PER_HOUR=5\n';
   const merged = loadRedrawEnv({ env: { OPENAI_IMAGE_MODEL: 'from-env' }, envFileText: file });
   assert.equal(merged.imageModel, 'from-env');
@@ -411,6 +448,30 @@ await test('T8b. the proxy provider posts the upload with the access code and ma
   }
   configureRedraw({ fetch: async (url) => { if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' }); throw new TypeError('offline'); }, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD` });
   await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === 'network');
+});
+
+await test('T8c. declined: the proxy maps 422 declined to RedrawError with the detail kept, redrawImage() does not retry it, and app.js builds the D7 message and details line', async () => {
+  const MESSAGE = 'Your request was rejected by the safety system. request ID req_abc123';
+  let posts = 0;
+  configureRedraw({ fetch: async (url) => { if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' }); posts++; return status(422, { code: 'declined', message: MESSAGE }); }, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD` });
+  setRedrawAccessCode('letmein');
+  let caught = null;
+  await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }).catch((e) => { caught = e; });
+  assert.ok(caught instanceof RedrawError && caught.code === 'declined' && caught.detail === MESSAGE);
+  assert.equal(posts, 1, 'no client retry');
+
+  const block = appJs.slice(appJs.indexOf('const REDRAW_ERROR_MESSAGES={'), appJs.indexOf('function syncImageRedrawControls(l){'));
+  const messageFn = block.slice(block.indexOf('function redrawErrorMessage(error){'));
+  const detailFn = block.slice(block.indexOf('function redrawErrorDetail(error){'), block.indexOf('function redrawErrorMessage(error){'));
+  const tables = block.slice(0, block.indexOf('function setImageRedrawStatus('));
+  const build = (availability) => new Function('RedrawError', 'redrawAvailability', `${tables}\n${detailFn}\n${messageFn}\nreturn { redrawErrorMessage, redrawErrorDetail };`)(RedrawError, availability);
+  const { redrawErrorMessage, redrawErrorDetail } = build({ consent: { recipientName: 'OpenAI' } });
+  assert.equal(redrawErrorMessage(caught), 'OpenAI declined to redraw this image. This often happens with well-known cartoon characters or brands. Try again or use a different image; your design is unchanged.');
+  assert.equal(redrawErrorDetail(caught), 'Details: req_abc123');
+  assert.equal(redrawErrorDetail(new RedrawError('declined', 'no id here')), '');
+  assert.equal(redrawErrorDetail(new RedrawError('provider-failed', 'req_zzz')), '');
+  assert.ok(build(null).redrawErrorMessage(caught).startsWith('The redraw service declined to redraw this image.'));
+  configureRedraw();
 });
 
 await test('T9. fixtures: routes and coverages are the pinned figures, and the fake PNG decodes to exactly the D2 formula', () => {
@@ -582,6 +643,37 @@ async function extractProjectFunctions() {
     `${source}\nreturn { validateProject, defaultProject };`
   )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
+
+await test('T10d. with an AI stone pitch the redraw becomes an AI stones layer sized per IMG-023 D2; Use original restores fillMode exactly', () => {
+  const layer = baseLayer();
+  const frozen = JSON.stringify(layer);
+  const W0 = 1024 * 2.3 / 11.467;
+  const out = applyRedraw(layer, RESULT, { canvas: { width: 1000, height: 1000 }, ...SIZE, now: NOW, aiPitchPx: 11.467 });
+  assert.equal(out.fillMode, 'ai-stones');
+  assert.ok(Math.abs(out.w - W0) < 1e-9 && Math.abs(out.h - W0) < 1e-9);
+  assert.equal(out.redraw.previousFillMode, 'staggered');
+  assert.ok(!('aiStoneShrink' in out), 'applyRedraw writes no aiStoneShrink');
+  assert.equal(JSON.stringify(restoreOriginal(out)), frozen);
+  const small = applyRedraw(layer, RESULT, { canvas: { width: 200, height: 200 }, ...SIZE, now: NOW, aiPitchPx: 11.467 });
+  assert.ok(Math.abs(small.w - 180) < 1e-9, 'fitted to the canvas minus 20 mm');
+  const shrunk = applyRedraw(layer, RESULT, { canvas: { width: 1000, height: 1000 }, ...SIZE, now: NOW, aiPitchPx: 11.467, shrink: 0.8 });
+  assert.ok(Math.abs(shrunk.w - W0 * 0.8) < 1e-9);
+
+  const noMode = baseLayer();
+  delete noMode.fillMode;
+  const a = applyRedraw(noMode, RESULT, { canvas: CANVAS, ...SIZE, now: NOW, aiPitchPx: 11.467 });
+  assert.equal(a.redraw.previousFillMode, null);
+  const back = restoreOriginal(JSON.parse(JSON.stringify(a)));
+  assert.ok(!('fillMode' in back));
+  assert.equal(JSON.stringify(back), JSON.stringify(noMode));
+
+  const second = applyRedraw({ ...out, fillMode: 'edge' }, RESULT, { canvas: CANVAS, ...SIZE, now: NOW, aiPitchPx: 11.467 });
+  assert.equal(second.redraw.previousFillMode, 'staggered', 'a second redraw keeps the first previousFillMode');
+  const fallback = applyRedraw(out, RESULT, { canvas: CANVAS, ...SIZE, now: NOW });
+  assert.equal(fallback.fillMode, 'ai-stones', 'without a pitch fillMode is left as it is');
+  assert.equal(fallback.redraw.previousFillMode, 'staggered');
+  assert.equal(restoreOriginal(fallback).fillMode, 'staggered');
+});
 
 await test('T11. a project without redraw round-trips byte-identical; Use original round-trips too; validateProject() accepts a good redraw and rejects bad ones', async () => {
   const { validateProject, defaultProject } = await extractProjectFunctions();

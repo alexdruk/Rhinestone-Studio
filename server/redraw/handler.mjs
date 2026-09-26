@@ -54,12 +54,19 @@ async function readBody(req, maxBytes) {
   return { text: Buffer.concat(chunks).toString('utf8') };
 }
 
+function messageOf(body) {
+  return body && body.error && typeof body.error.message === 'string' ? body.error.message : '';
+}
+
 function isPngBase64(b64) {
   if (typeof b64 !== 'string' || b64.length < 12) return false;
   return Buffer.from(b64.slice(0, 12), 'base64').subarray(0, 8).equals(PNG_SIGNATURE);
 }
 
-export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = 120000 }) {
+// IMG-023 (D7): OpenAI's safety-system refusal. Matched case-insensitively on error.message.
+const SAFETY_SYSTEM_PATTERN = /safety system/i;
+
+export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = Date.now, timeoutMs = 120000, logger = console }) {
   const { configured } = redrawConfigStatus(settings);
   const requestTimesByIp = new Map();
 
@@ -114,6 +121,7 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
     if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) clientGone.abort(); });
 
     let response = null;
+    let body = null;
     for (let attempt = 1; attempt <= 2 && !clientGone.signal.aborted; attempt++) {
       let outcome;
       try {
@@ -122,16 +130,25 @@ export function createRedrawHandler({ settings, fetch = globalThis.fetch, now = 
         outcome = null; // fetch rejected (DNS, reset, abort)
       }
       if (clientGone.signal.aborted) return;
+      response = null;
       if (outcome === TIMEOUT || outcome === null || outcome.status >= 500) continue;
       response = outcome;
+      body = null;
+      try { body = await response.json(); } catch { body = null; }
+      if (response.status >= 400 && response.status < 500) {
+        // IMG-023 (D7): every OpenAI 4xx is logged with its status and message -- never the key,
+        // the access code, the upload or a request header.
+        logger.warn(`Redraw: OpenAI returned ${response.status}: ${messageOf(body)}`);
+        // A safety-system refusal is retried once, within the same two-attempt budget.
+        if (SAFETY_SYSTEM_PATTERN.test(messageOf(body)) && attempt < 2) continue;
+      }
       break;
     }
     if (clientGone.signal.aborted) return;
     if (!response) return sendFailure(res, 502, 'provider-failed', 'The image service did not respond. Try again later.');
 
-    let body = null;
-    try { body = await response.json(); } catch { body = null; }
-    const openAiMessage = body && body.error && typeof body.error.message === 'string' ? body.error.message : '';
+    const openAiMessage = messageOf(body);
+    if (response.status >= 400 && response.status < 500 && SAFETY_SYSTEM_PATTERN.test(openAiMessage)) return sendFailure(res, 422, 'declined', openAiMessage);
     if (response.status === 429) return sendFailure(res, 429, 'rate-limited', 'The image service is busy. Try again later.');
     if (response.status === 401 || response.status === 403) return sendFailure(res, 502, 'provider-failed', 'The redraw server is not set up correctly.');
     if (response.status !== 200) return sendFailure(res, 502, 'provider-failed', openAiMessage);

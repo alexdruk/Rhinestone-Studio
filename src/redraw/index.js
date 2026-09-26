@@ -17,9 +17,10 @@ import { decodeDataUrlToBuffer, computeSubjectMask } from '../image/index.js';
 import { resizeImageBuffer, SUBJECT_MASK_RESIZE_TRIGGER_PX, SUBJECT_MASK_MAX_DIMENSION_PX } from '../image/ImageFieldPipeline.js';
 import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiProxyProvider.js';
 
-export { applyRedraw, restoreOriginal } from './RedrawLayerTransform.js';
+export { applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, aiStoneMmPerPx } from './RedrawLayerTransform.js';
 
-export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output']);
+// IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
+export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined']);
 const REDRAW_CONFIG_ENDPOINT = '/api/redraw/config';
 const REDRAW_MAX_UPLOAD_PX = 1536;
 const REDRAW_MIN_SUBJECT_COVERAGE = 0.01;

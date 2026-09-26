@@ -290,6 +290,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 #imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
 .view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
 .view-toggle label{display:flex;align-items:center;gap:4px;cursor:pointer}
+/* IMG-023: the label sets display, so [hidden] needs its own override. */
+.view-toggle label[hidden]{display:none}
 #imageStudioStats dl{margin:0}
 #imageStudioStats dt{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:var(--space-4)}
 #imageStudioStats dt:first-child{margin-top:0}
@@ -1167,6 +1169,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <button id="imageRedrawUseOriginal" class="btn sm" hidden title="Go back to the image as it was before the redraw">Use original</button>
           </div>
           <p class="hint" id="imageRedrawStatus" aria-live="polite"></p>
+          <!-- IMG-023: "Details: <request ID>" under a declined redraw. -->
+          <p class="hint" id="imageRedrawStatusDetail"></p>
           <!-- RS-3037: shown only while Object type is not Flat Sheet (toggled by
                renderImageStudio()/updateObjectTemplateDetail() in app.js). Reuses the #objectType
                change handler itself (dispatches a real change event) rather than duplicating its
@@ -1188,7 +1192,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
             </div>
           </div>
-          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option><option value="organic">Organic - hand-set, non-grid look</option><option value="edge">Edge - dense along edges, thinner inside</option><option value="line-design">Line Design - traced outline and lines, filled interior</option></select></div>
+          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option><option value="organic">Organic - hand-set, non-grid look</option><option value="edge">Edge - dense along edges, thinner inside</option><option value="line-design">Line Design - traced outline and lines, filled interior</option><option value="ai-stones">AI stones - reads the stones in an AI redraw</option></select></div>
+          <!-- IMG-023: the size of an AI stones layer, as a share of how large the AI drew it (1 = one AI
+               stone per real stone). Enabled only while Fill style is AI stones (app.js renderImageStudio()). -->
+          <div class="field" id="imgAiStoneShrinkField"><label for="imgAiStoneShrink">AI stone size</label><select id="imgAiStoneShrink" title="Only used when Fill style is set to AI stones."><option value="1" selected>100% (as drawn)</option><option value="0.9">90%</option><option value="0.8">80%</option></select><p class="hint" id="imgAiStoneShrinkHint" hidden></p></div>
         </details>
         <details class="advanced-section" id="imageStudioGroupPosition" open>
           <summary>Position &amp; size</summary>
@@ -1240,6 +1247,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div id="imageStudioCanvasColumn">
         <div id="imageStudioView" class="view-toggle" role="radiogroup" aria-label="Canvas view">
           <label><input type="radio" name="imageStudioView" value="source">Source</label>
+          <!-- IMG-023: shown only for a redrawn layer (app.js renderImageStudio()). -->
+          <label id="imageStudioViewAi" hidden><input type="radio" name="imageStudioView" value="ai">AI image</label>
           <label><input type="radio" name="imageStudioView" value="mask">Mask</label>
           <label><input type="radio" name="imageStudioView" value="colors">Colours</label>
           <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
