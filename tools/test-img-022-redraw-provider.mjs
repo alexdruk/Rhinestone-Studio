@@ -213,7 +213,7 @@ await test('T3. rate limit: requests 1-20 from one IP pass, the 21st gets 429, a
   assert.equal((await post(handler2, { ip: 'C' })).statusCode, 200);
 });
 
-await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out twice', async () => {
+await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out once, with no retry, as 504', async () => {
   let spy = spyFetch((n) => (n === 1 ? status(500) : okImage()));
   let res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
   assert.equal(res.statusCode, 200);
@@ -228,9 +228,15 @@ await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provi
 
   spy = spyFetch(() => new Promise(() => {}));
   res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, timeoutMs: 10 }));
-  assert.equal(res.statusCode, 502);
-  assert.equal(res.json().code, 'provider-failed');
-  assert.equal(spy.calls.length, 2);
+  assert.equal(res.statusCode, 504);
+  assert.deepEqual(res.json(), { code: 'provider-failed', message: 'The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY.' });
+  assert.equal(spy.calls.length, 1);
+
+  // With no timeoutMs injected, the handler uses the settings' REDRAW_TIMEOUT_SECONDS.
+  spy = spyFetch(() => new Promise(() => {}));
+  res = await post(createRedrawHandler({ settings: { ...KEY_SETTINGS, timeoutMs: 10 }, fetch: spy.fetch }));
+  assert.equal(res.statusCode, 504);
+  assert.equal(spy.calls.length, 1);
 
   spy = spyFetch(() => { throw new TypeError('fetch failed'); });
   res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
@@ -333,7 +339,8 @@ await test('T6b. every OpenAI 4xx is logged with its status and message, never t
 
 await test('T7. env: defaults, environment wins over the file, quotes and comments; config route 404 unless the access code and a key are set', async () => {
   const defaults = loadRedrawEnv({ env: {} });
-  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', fake: false });
+  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', timeoutMs: 300000, fake: false });
+  assert.equal(loadRedrawEnv({ env: { REDRAW_TIMEOUT_SECONDS: '10' } }).timeoutMs, 10000);
   const file = '# comment\n\nOPENAI_IMAGE_MODEL=from-file\nREDRAW_COST_LABEL="about $0.05 per image"\nREDRAW_ACCESS_CODE=\'quoted\'\nREDRAW_RATE_LIMIT_PER_HOUR=5\n';
   const merged = loadRedrawEnv({ env: { OPENAI_IMAGE_MODEL: 'from-env' }, envFileText: file });
   assert.equal(merged.imageModel, 'from-env');

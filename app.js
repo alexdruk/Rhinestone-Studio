@@ -5677,7 +5677,7 @@ async function startImageRedraw(){
   // from the original image); a result that no longer matches is dropped, not applied.
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
   redrawRun=new AbortController();
-  setImageRedrawStatus('Redrawing… this can take up to two minutes.');
+  setImageRedrawStatus('Redrawing… this can take up to five minutes.');
   syncImageRedrawControls(layer);
   try{
     const result=await redrawImage({dataUrl:source,signal:redrawRun.signal});

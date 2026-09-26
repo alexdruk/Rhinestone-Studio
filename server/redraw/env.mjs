@@ -5,7 +5,8 @@
 export const REDRAW_ENV_DEFAULTS = Object.freeze({
   OPENAI_IMAGE_MODEL: 'gpt-image-2',
   OPENAI_IMAGE_QUALITY: 'high',
-  REDRAW_RATE_LIMIT_PER_HOUR: 20
+  REDRAW_RATE_LIMIT_PER_HOUR: 20,
+  REDRAW_TIMEOUT_SECONDS: 300
 });
 
 // KEY=value lines; blank lines and # comments skipped; one pair of surrounding quotes removed; no
@@ -30,6 +31,7 @@ export function loadRedrawEnv({ env = process.env, envFileText = '' } = {}) {
   const get = (key) => (env[key] !== undefined ? env[key] : file[key]);
   const str = (key) => (typeof get(key) === 'string' ? get(key).trim() : '');
   const limit = Number(str('REDRAW_RATE_LIMIT_PER_HOUR'));
+  const timeoutSeconds = Number(str('REDRAW_TIMEOUT_SECONDS'));
   return {
     openaiApiKey: str('OPENAI_API_KEY'),
     imageModel: str('OPENAI_IMAGE_MODEL') || REDRAW_ENV_DEFAULTS.OPENAI_IMAGE_MODEL,
@@ -37,6 +39,7 @@ export function loadRedrawEnv({ env = process.env, envFileText = '' } = {}) {
     accessCode: str('REDRAW_ACCESS_CODE'),
     rateLimitPerHour: Number.isInteger(limit) && limit > 0 ? limit : REDRAW_ENV_DEFAULTS.REDRAW_RATE_LIMIT_PER_HOUR,
     costLabel: str('REDRAW_COST_LABEL'),
+    timeoutMs: (Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds : REDRAW_ENV_DEFAULTS.REDRAW_TIMEOUT_SECONDS) * 1000,
     fake: str('REDRAW_FAKE') === '1'
   };
 }
