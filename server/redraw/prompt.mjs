@@ -4,16 +4,19 @@
 // docs/specifications/IMG-022-RedrawProvider.md D6.
 import { STONE_COLORS } from '../../src/renderer/StoneColors.js';
 
-export const PROMPT_VERSION = 1;
+// IMG-023 (D6): version 2 is the "designer" prompt chosen by experiment; see
+// docs/specifications/IMG-023-AiStoneTransfer.md.
+export const PROMPT_VERSION = 2;
 
 const PROMPT_LINES = [
-  'You are a rhinestone mosaic artist. Turn the attached image into a rhinestone mosaic picture.',
-  'Rules:',
-  '1. All stones are round and the same size. The picture is exactly 100 stones wide, in staggered (honeycomb) rows.',
-  '2. Each stone is ONE flat colour taken from the palette below. No gradients inside a stone, no reflections, no sparkle, only a small white highlight dot.',
-  '3. Use at most 8 colours from the palette for the whole picture, and use large even areas of one colour rather than mixing colours stone by stone.',
-  '4. Dark outlines, eyes, mouth and other key details are chains of Jet or Hematite stones, one stone wide.',
-  '5. Square image, subject fills the frame, transparent background, no frame, no text, no tables, no labels.',
+  'You are a professional designer of hot-fix rhinestone transfer templates. Design a rhinestone version of the attached image that a machine can set stone by stone.',
+  'Use identical round stones in honeycomb rows, about 70 stones across. Every stone is one flat colour from the palette below, drawn as a glossy round stone with a small white highlight dot.',
+  'Design choices a good template designer makes:',
+  '- Simplify: fewer, larger colour areas; drop texture and fine shading that stones cannot show.',
+  '- Keep what makes the subject recognisable, and exaggerate it slightly if needed.',
+  '- Separate colour areas and outline the subject with one-stone-wide chains of Jet stones, with no gaps.',
+  '- Use at most 8 palette colours, with strong contrast between neighbouring areas.',
+  'Square image, subject fills the frame, transparent background, no shadow or glow, no text.',
   'Palette (name and hex):'
 ];
 

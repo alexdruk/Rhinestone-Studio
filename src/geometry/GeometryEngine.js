@@ -29,7 +29,7 @@ import { weightSizeMm } from './WeightSizing.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
-import { prepareImageField, DEFAULT_THRESHOLD } from '../image/index.js';
+import { prepareImageField, DEFAULT_THRESHOLD, detectAiStones } from '../image/index.js';
 // IMG-008: reuses the same marching-squares Boolean-op tracer Vector Boolean Operations use, to
 // trace per-colour silhouettes from an image layer's own working field for the SVG export's
 // underlying vector regions -- see resolveImagePolygons() and imageRegionColorId() below.
@@ -53,6 +53,9 @@ import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
 // sampleFieldByMode() call -- see LineDesignSampler.js's own doc comment and this file's
 // generateImageLayout() branch below.
 import { generateLineDesignStonePoints, LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO } from './LineDesignSampler.js';
+// IMG-023 (AI stones): placement from the stones an AI drew -- see AiStoneSampler.js and
+// generateImageLayout()'s isAiStones branch below.
+import { placeAiStones } from './AiStoneSampler.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -68,7 +71,9 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // sampleFieldByMode() (StoneSampler.js's switch has no case for it); generateImageLayout() branches
 // on it before that call and calls LineDesignSampler.js's own candidate generation instead. See
 // docs/specifications/IMG-010-LineDesign.md's "Architecture decision" section.
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design']);
+// IMG-023: 'ai-stones' is an eighth, following the same precedent with its own sampler
+// (AiStoneSampler.js). See docs/specifications/IMG-023-AiStoneTransfer.md D1.
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design', 'ai-stones']);
 const DEFAULT_MODE = 'outline';
 // IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
 // -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
@@ -1164,7 +1169,7 @@ export class GeometryEngine {
    * @param {number} params.heightMm Placement height.
    * @param {number} params.stoneSizeMm
    * @param {number} [params.gapMm]
-   * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'} [params.mode] Default 'fill' -- a
+   * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'|'line-design'|'ai-stones'} [params.mode] Default 'fill' -- a
    *   raster density field has no vector perimeter, so 'outline' is not supported (see RS-1011).
    * @param {string} [params.color]
    * @param {number} [params.threshold] 0-255, default 128.
@@ -1199,6 +1204,9 @@ export class GeometryEngine {
    */
   generateImageLayout(params = {}) {
     const options = normalizeImageParams(params);
+    // IMG-023 (D1): AI stones reads the stones the AI drew and needs no prepared field, so
+    // prepareImageField() (a subject-mask pass on every regenerate) is skipped for it.
+    const isAiStones = options.mode === 'ai-stones';
 
     // IMG-004 follow-up: a dimensionless fraction of the placement's own widthMm, not a pixel count
     // -- resizeField() is downscale-only and aspect-preserving (src/image/Resize.js), so the working
@@ -1206,7 +1214,7 @@ export class GeometryEngine {
     // height may be the binding dimension). prepareImageField() converts this fraction to a pixel
     // radius itself, from the post-resize field's own real widthPx.
     const edgeBandFraction = options.edgeWidthMm / options.widthMm;
-    const field = prepareImageField(options.imageBuffer, {
+    const field = isAiStones ? null : prepareImageField(options.imageBuffer, {
       threshold: options.threshold,
       invert: options.invert,
       blurRadiusPx: options.blurRadiusPx,
@@ -1247,7 +1255,7 @@ export class GeometryEngine {
     // IMG-010: 'line-design' has its own candidate generation (LineDesignSampler.js, below) --
     // StoneSampler.js's switch has no case for it, so the call is skipped entirely rather than
     // silently falling through to its `default` (plain Grid Fill) branch.
-    const points = isLineDesign ? [] : sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
+    const points = isLineDesign || isAiStones ? [] : sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
       seed: options.seed,
       spread: options.spread,
       edgeThinning: options.edgeThinning,
@@ -1266,7 +1274,7 @@ export class GeometryEngine {
     // decision 4: it is the modal label within LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO of the stone's
     // own radius (fieldModalLabelAt()), not the label of its centre pixel, so every call passes the
     // stone's own size.
-    const labeled = options.colorCount > 1 && field.labels !== null;
+    const labeled = options.colorCount > 1 && field !== null && field.labels !== null;
     const colorAt = (xMm, yMm, sizeMm) => {
       if (!labeled) return options.color;
       const label = fieldModalLabelAt(field, placement, xMm, yMm, (sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO);
@@ -1275,7 +1283,21 @@ export class GeometryEngine {
     };
 
     let stones;
-    if (isLineDesign) {
+    if (isAiStones) {
+      // IMG-023 (D1/D4): every stone is the layer's own size and a catalogue colour; sizeMode is
+      // ignored (this branch comes before isBrightness).
+      const detection = options.aiStoneDetection ?? detectAiStones(options.imageBuffer);
+      const aiPoints = placeAiStones({ detection, imageBuffer: options.imageBuffer, placement, stoneSizeMm: options.stoneSizeMm, gapMm: options.gapMm, palette: options.palette });
+      stones = aiPoints.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: point.color,
+        layerId: options.layerId,
+        index,
+        metadata: { kind: 'ai-stone' }
+      }));
+    } else if (isLineDesign) {
       // IMG-010: three concurrently-generated populations (outline/line chains at a fixed SS6,
       // fill rings at a fixed SS10, plus GapFill.js's own pocket pass) from LineDesignSampler.js's
       // own candidate generation -- never sampleFieldByMode(), see the architecture note on
@@ -1338,7 +1360,7 @@ export class GeometryEngine {
     // anticipated (and Task D never measured) running S-200's additive infill on top of an
     // already two-size layout. `options.mixedOptions` is otherwise mode-agnostic, so this mode is
     // excluded here rather than in normalizeMixedSizeParams() itself.
-    if (options.mixedOptions && !isLineDesign) {
+    if (options.mixedOptions && !isLineDesign && !isAiStones) {
       const infillPoints = generateMixedSizeInfillPoints({
         mode: options.mode,
         source: { kind: 'field', field, placement },
@@ -1367,7 +1389,7 @@ export class GeometryEngine {
     // IMG-010: Line Design's own pocket pass already ran inside generateLineDesignStonePoints()
     // above (decision f, against its own hole-filled subject mask, not `field`) -- running this
     // generic fillGaps pass again here would double-apply GapFill.js against the wrong mask.
-    if (options.fillGaps && !isLineDesign) {
+    if (options.fillGaps && !isLineDesign && !isAiStones) {
       const isInside = (xMm, yMm) => fieldPixelOn(field, xMm - placement.xMm, yMm - placement.yMm, placement.widthMm, placement.heightMm);
       const gapFillStones = generateGapFillStones({
         baseStones: stones,
@@ -2536,6 +2558,12 @@ function normalizeImageParams(params) {
   // IMG-018: 'whole' is the third value, see docs/specifications/IMG-018-WholeImageMask.md.
   const maskMode = params.maskMode === 'subject' ? 'subject' : params.maskMode === 'whole' ? 'whole' : 'threshold';
 
+  // IMG-023: optional precomputed detectAiStones() result (app.js caches it per imageSrc).
+  const aiStoneDetection = params.aiStoneDetection ?? null;
+  if (aiStoneDetection !== null && (typeof aiStoneDetection !== 'object' || typeof aiStoneDetection.ok !== 'boolean')) {
+    throw new TypeError('GeometryEngine.generateImageLayout aiStoneDetection must be a detectAiStones() result when provided.');
+  }
+
   return {
     imageBuffer: params.imageBuffer,
     layerId: params.layerId,
@@ -2553,6 +2581,7 @@ function normalizeImageParams(params) {
     maxWidthPx: params.maxWidthPx,
     maxHeightPx: params.maxHeightPx,
     transparent,
+    aiStoneDetection,
     // IMG-002: permissive defaults, no validation beyond this -- src/image/ImageFieldPipeline.js's
     // own normalizeParams() is where colorCount/palette are actually range-/shape-checked (it throws
     // when colorCount > 1 has no palette); this is the same "read-site permissive default, no

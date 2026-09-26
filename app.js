@@ -98,8 +98,8 @@ import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
-import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm } from './src/products/index.js';
-import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile, chooseAutoColorCount, prepareAutoColorField } from './src/image/index.js';
+import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm, SHEET_MAX_MM } from './src/products/index.js';
+import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile, chooseAutoColorCount, prepareAutoColorField, detectAiStones } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
 // dependency on src/geometry/**/StoneLayout/Stone and never generates stone positions itself;
@@ -137,7 +137,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -229,6 +229,17 @@ const DEFAULT_IMAGE_MAX_DIMENSION_PX=400;
 // page session (no eviction) -- acceptable at this milestone's scope, see
 // docs/specifications/RS-1008-ImageTrace.md, "Out of Scope".
 const imageBufferCache=new Map();
+// IMG-023 (D1): detectAiStones() result per imageSrc (~1-2 s on a 1024 px image), so a regenerate of
+// an AI stones layer only re-runs placement. 2-entry LRU, like imageColorFieldCache.
+const aiStoneDetectionCache=new Map();
+function aiStoneDetectionFor(imageSrc,buffer){
+  let detection=aiStoneDetectionCache.get(imageSrc);
+  if(detection){aiStoneDetectionCache.delete(imageSrc);aiStoneDetectionCache.set(imageSrc,detection);return detection}
+  detection=detectAiStones(buffer);
+  aiStoneDetectionCache.set(imageSrc,detection);
+  if(aiStoneDetectionCache.size>2)aiStoneDetectionCache.delete(aiStoneDetectionCache.keys().next().value);
+  return detection;
+}
 // RS-0003.5D2: resolves a <select>'s value by nearest numeric match instead of an exact string
 // match. Fixes the #stoneSize dropdown showing blank on load: a layer's stoneSize is a plain JS
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
@@ -664,7 +675,7 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // #textMode value); every other layer type's stored value already equals the engine's own mode name
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
-const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design']);
+const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design','ai-stones']);
 const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
@@ -694,6 +705,9 @@ function invalidateAuthoredScaleForGeometryChange(layer,changedField){
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// IMG-023 (D2): layer.aiStoneShrink, the #imgAiStoneShrink step (1, 0.9 or 0.8). Missing/invalid -> 1,
+// so a layer without the field keeps one AI stone per real stone. Plain literals.
+function resolveAiStoneShrink(value){return value===0.9||value===0.8?value:1}
 // IMG-003: layer.seed/layer.spread -- read-site permissive defaults, the same precedent
 // layer.transparent (IMG-001) and layer.colorCount (IMG-002) already established. Default seed is a
 // fixed 1 (not random), so a pre-IMG-003 layer with no stored seed/spread regenerates identically to
@@ -1167,7 +1181,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     }
     return includeStats?cached:cached.stones;
   }
-  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2658,7 +2672,7 @@ function syncSelectedControlsFromLayer(){
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgAiStoneShrink').value=String(resolveAiStoneShrink(l.aiStoneShrink));el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2749,6 +2763,29 @@ function syncSelectedControlsFromLayer(){
 // the EXACT post-write regen call the existing 'path'-layer branch below already uses (see
 // `if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id)` further down) -- no updateAll()
 // call here, since this function is itself already running from inside one.
+// IMG-023 (D2): the four values an AI stones layer's size follows.
+function aiStoneSizingKey(l){return[resolveImageFillMode(l.fillMode),resolveAiStoneShrink(l.aiStoneShrink),l.stoneSize,l.gap].join('|')}
+// IMG-023 (D2(b)): sizes an AI stones layer from its AI stone pitch (one AI stone = one real stone,
+// times the shrink), keeping its centre; on a Flat Sheet the sheet grows first. Skipped until the
+// image is decoded, and when no AI stones are found. Writes the Position & size (and sheet) fields
+// too: the next write reads w/h back from them.
+function resizeAiStoneLayer(l){
+  const buffer=imageBufferCache.get(l.imageSrc);if(!buffer)return;
+  const detection=aiStoneDetectionFor(l.imageSrc,buffer);if(!detection.ok)return;
+  const isSheet=currentObjectTemplate().id==='sheet';
+  const box=fitAiStoneBox({centerXMm:l.x+l.w/2,centerYMm:l.y+l.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx:detection.pitchPx,stoneSizeMm:l.stoneSize,gapMm:l.gap,shrink:resolveAiStoneShrink(l.aiStoneShrink),canvas:project.canvas,sheetMaxMm:isSheet?SHEET_MAX_MM:null});
+  if(isSheet){project.canvas=box.canvas;setLengthField('sheetWidth',box.canvas.width);setLengthField('sheetHeight',box.canvas.height)}
+  l.x=box.x;l.y=box.y;l.w=box.w;l.h=box.h;
+  setLengthField('shapeX',l.x);setLengthField('shapeY',l.y);setLengthField('shapeW',l.w);setLengthField('shapeH',l.h);
+}
+// IMG-023 (D2): the Studio hint under #imgAiStoneShrink ('' hides it).
+function aiStoneShrinkHintText(l){
+  if(resolveImageFillMode(l.fillMode)!=='ai-stones')return '';
+  const buffer=imageBufferCache.get(l.imageSrc);if(!buffer)return '';
+  const detection=aiStoneDetectionFor(l.imageSrc,buffer);
+  if(!detection.ok)return 'No AI stones were found in this image. AI stones works on images redrawn with AI.';
+  return aiStoneEffectiveShrink({w:l.w,h:l.h,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx:detection.pitchPx,stoneSizeMm:l.stoneSize,gapMm:l.gap})<0.8-1e-9?'This design is smaller than the AI drew it, so fine lines may break.':'';
+}
 function writeSelectedControlsToLayer(){
   const regionSelection=drawingTool.activeSelection;
   if(regionSelection&&regionSelection.kind==='region'){
@@ -2764,6 +2801,9 @@ function writeSelectedControlsToLayer(){
     }
   }
   const l=selectedLayer();
+  // IMG-023 (D2(b)): an AI stones layer is re-sized at the end of this function when its mode, shrink,
+  // stone size or gap changed in this write.
+  const aiStoneSizingBefore=l.type==='image'?aiStoneSizingKey(l):null;
   // S-112A: detected here, before project.plate is overwritten further down in this same function
   // (project.plate.designTarget still holds the *previous* target, el('plateDesignTarget').value the
   // one the user just picked) -- true exactly once, on the edit that switches Design Target to Rim
@@ -2828,6 +2868,9 @@ function writeSelectedControlsToLayer(){
   // IMG-017: Number() first -- a select value is a string, and resolveImageVividness() accepts only
   // the four numeric steps, so the raw string would read back as 1 and the control would do nothing.
   l.vividness=resolveImageVividness(Number(el('imgVividness').value));
+  // IMG-023 (D2/D5): written only for a layer that uses AI stones or already has the key, so no other
+  // layer gains it.
+  if(resolveImageFillMode(l.fillMode)==='ai-stones'||l.aiStoneShrink!==undefined)l.aiStoneShrink=resolveAiStoneShrink(Number(el('imgAiStoneShrink').value));
   const colorField=computeImageColorField(l);
   if(colorField){
     const colorMap={...l.colorMap};
@@ -2954,6 +2997,8 @@ function writeSelectedControlsToLayer(){
   if(currentObjectTemplate().id==='sheet'){
     project.canvas={width:clampSheetDimensionMm(readLengthField('sheetWidth')),height:clampSheetDimensionMm(readLengthField('sheetHeight'))};
   }
+  // IMG-023 (D2(b)): after the sheet block above, so a grown Flat Sheet is not read back from stale fields.
+  if(l.type==='image'&&resolveImageFillMode(l.fillMode)==='ai-stones'&&aiStoneSizingKey(l)!==aiStoneSizingBefore)resizeAiStoneLayer(l);
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 // M14 (perf/move-drag-translate-fast-path): pure translation of an existing StoneLayout for the
 // move-drag fast path. Returns a NEW StoneLayout whose stones are fresh Stone copies of baseLayout's:
@@ -5084,7 +5129,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning','imgAiStoneShrink'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 // IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
 // #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
@@ -5575,11 +5620,19 @@ const REDRAW_ERROR_MESSAGES={
   'rate-limited':'The redraw limit has been reached. Try again later.',
   'network':'Could not reach the redraw service. Check your connection and try again.',
   'provider-failed':'The redraw service could not process this image.',
-  'invalid-output':'The redrawn image came back unusable, so nothing was changed. Try again.'
+  'invalid-output':'The redrawn image came back unusable, so nothing was changed. Try again.',
+  // IMG-023 (D7): prefixed with the provider's recipient name, since app.js never names the service.
+  'declined':' declined to redraw this image. This often happens with well-known cartoon characters or brands. Try again or use a different image; your design is unchanged.'
 };
-function setImageRedrawStatus(text){el('imageRedrawStatus').textContent=text;el('status').textContent=text}
+function setImageRedrawStatus(text,detail=''){el('imageRedrawStatus').textContent=text;el('imageRedrawStatusDetail').textContent=detail;el('status').textContent=text}
+// IMG-023 (D7): the secondary "Details: <request ID>" line for a declined redraw, '' otherwise.
+function redrawErrorDetail(error){
+  const match=error instanceof RedrawError&&error.code==='declined'?/\breq_[A-Za-z0-9]+/.exec(error.detail||''):null;
+  return match?`Details: ${match[0]}`:'';
+}
 function redrawErrorMessage(error){
   if(error&&error.name==='AbortError')return 'Redraw cancelled.';
+  if(error instanceof RedrawError&&error.code==='declined')return `${(redrawAvailability&&redrawAvailability.consent&&redrawAvailability.consent.recipientName)||'The redraw service'}${REDRAW_ERROR_MESSAGES.declined}`;
   const code=error instanceof RedrawError&&REDRAW_ERROR_MESSAGES[error.code]?error.code:'provider-failed';
   return code==='provider-failed'&&error&&error.detail?`${REDRAW_ERROR_MESSAGES[code]} ${error.detail}`:REDRAW_ERROR_MESSAGES[code];
 }
@@ -5631,8 +5684,14 @@ async function startImageRedraw(){
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
     const current=project.layers.find(x=>x.id===layerId);
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
-    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now});
+    // IMG-023 (D2(a)): the redrawn image becomes an AI stones layer sized from its own stone pitch; on
+    // a Flat Sheet the sheet grows first (the size then fits without shrinking).
+    const detection=aiStoneDetectionFor(result.dataUrl,buffer);
+    const aiPitchPx=detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
+    const grownCanvas=aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
     commitHistory();
+    if(grownCanvas)project.canvas=grownCanvas;
+    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
     syncSelectedControlsFromLayer();
@@ -5641,7 +5700,7 @@ async function startImageRedraw(){
   }catch(error){
     if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
     if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
-    setImageRedrawStatus(redrawErrorMessage(error));
+    setImageRedrawStatus(redrawErrorMessage(error),redrawErrorDetail(error));
   }finally{
     redrawRun=null;
     syncImageRedrawControlsForSelection();
@@ -6605,6 +6664,18 @@ function loadStudioImageElement(src){
   return img;
 }
 const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones','imageStudioGroupColors','imageStudioGroupOrganic','imageStudioGroupEdges'];
+// IMG-023 (D8): draws `img` contained (aspect kept, centred) in a canvas of the box's aspect, so a
+// redrawn layer's original is not stretched to the square redraw's box. Outside renderImageStudio()
+// on purpose -- see docs/specifications/IMG-023-AiStoneTransfer.md, "Existing tests".
+function letterboxToBoxAspect(img,boxW,boxH){
+  if(!img||!img.naturalWidth||!img.naturalHeight||!(boxW>0)||!(boxH>0))return img;
+  const long=Math.max(img.naturalWidth,img.naturalHeight);
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(boxW>=boxH?long:long*boxW/boxH));out.height=Math.max(1,Math.round(boxW>=boxH?long*boxH/boxW:long));
+  const f=Math.min(out.width/img.naturalWidth,out.height/img.naturalHeight),w=img.naturalWidth*f,h=img.naturalHeight*f;
+  out.getContext('2d').drawImage(img,(out.width-w)/2,(out.height-h)/2,w,h);
+  return out;
+}
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -6641,6 +6712,16 @@ async function renderImageStudio(){
   const edgeDisabledTitle=isEdge?'':'Only used when Fill style is set to Edge.';
   for(const id of['imgSeed','imgShuffle','imgSpread','imgBrightnessThinning']){el(id).disabled=!isPoisson;el(id).title=poissonDisabledTitle}
   for(const id of['imgEdgeWidth','imgEdgeThinning']){el(id).disabled=!isEdge;el(id).title=edgeDisabledTitle}
+  // IMG-023 (D2, D3, F3): AI stones picks its own colours, so colour count, vividness and the colour
+  // rows do nothing for it; its size follows the AI's stone pitch and the shrink step.
+  const isAiStones=mode==='ai-stones';
+  const aiStonesUnusedTitle=isAiStones?'Not used by AI stones: it picks up to 8 colours from the stones the AI drew.':'';
+  for(const id of['imgColorCount','imgVividness','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7']){el(id).disabled=isAiStones;el(id).title=aiStonesUnusedTitle}
+  el('imgAiStoneShrink').disabled=!isAiStones;el('imgAiStoneShrink').title=isAiStones?'':'Only used when Fill style is set to AI stones.';
+  const aiStoneHint=aiStoneShrinkHintText(l);
+  el('imgAiStoneShrinkHint').textContent=aiStoneHint;el('imgAiStoneShrinkHint').hidden=!aiStoneHint;
+  // IMG-023 (D8): the AI image view exists only for a redrawn layer.
+  el('imageStudioViewAi').hidden=!l.redraw;
   el('imgSeed').value=resolveImageSeed(l.seed);
   el('imgSpread').value=resolveImageSpread(l.spread);
   el('imgSpreadValue').textContent=String(resolveImageSpread(l.spread));
@@ -6666,8 +6747,8 @@ async function renderImageStudio(){
   // Resolves with the loaded <img> without drawing it -- the overlay branch below needs the load
   // awaited to complete BEFORE it touches ctx.globalAlpha, so the alpha set/draw/reset sequence can
   // stay fully synchronous (no await between them) and never leak a .35 alpha into the next render.
-  const drawSource=()=>new Promise(resolve=>{
-    const img=loadStudioImageElement(l.imageSrc);
+  const drawSource=(src=l.imageSrc)=>new Promise(resolve=>{
+    const img=loadStudioImageElement(src);
     if(img.complete&&img.naturalWidth){resolve(img);return}
     img.onload=()=>resolve(img);img.onerror=()=>resolve(img);
   });
@@ -6720,7 +6801,13 @@ async function renderImageStudio(){
     drawInBox(scratch);
   };
   const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
-  if(view==='source'){
+  // IMG-023 (D8): for a redrawn layer Source shows the original (aspect kept inside the box) and AI
+  // image shows the redraw; without a redraw both show the layer's own image.
+  if(view==='source'||(view==='ai'&&!l.redraw)){
+    const img=await drawSource(l.redraw?l.redraw.originalImageSrc:l.imageSrc);
+    if(token!==imageStudioRenderToken)return;
+    paintSource(l.redraw?letterboxToBoxAspect(img,l.w,l.h):img);
+  }else if(view==='ai'){
     const img=await drawSource();
     if(token!==imageStudioRenderToken)return;
     paintSource(img);

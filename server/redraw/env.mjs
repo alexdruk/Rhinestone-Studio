@@ -4,7 +4,7 @@
 
 export const REDRAW_ENV_DEFAULTS = Object.freeze({
   OPENAI_IMAGE_MODEL: 'gpt-image-2',
-  OPENAI_IMAGE_QUALITY: 'medium',
+  OPENAI_IMAGE_QUALITY: 'high',
   REDRAW_RATE_LIMIT_PER_HOUR: 20
 });
 

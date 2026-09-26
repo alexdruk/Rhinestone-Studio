@@ -217,6 +217,8 @@ export const GROUPS = {
     'test-img-018-whole-image-mask.mjs',
     'test-img-019-subject-mask-resized.mjs',
     'test-img-021-rotated-image-stones.mjs',
+    // IMG-023: AI stones -- detection, palette, placement, sizing, against the reference prototype.
+    'test-img-023-ai-stone-transfer.mjs',
     'test-image-trace-regression.mjs',
     'test-fill-algorithms.mjs',
     'test-fill-algorithms-integration.mjs',

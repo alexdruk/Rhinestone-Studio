@@ -173,7 +173,7 @@ documented in a new tracked `.env.example`, with no real values.
 |---|---|---|
 | `OPENAI_API_KEY` | none; required unless `REDRAW_FAKE=1` | Server-side only. Never sent to the browser or logged. |
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | Sent as `model`. |
-| `OPENAI_IMAGE_QUALITY` | `medium` | Sent as `quality`. |
+| `OPENAI_IMAGE_QUALITY` | `high` | Sent as `quality`. Changed from `medium` by IMG-023 (D6). |
 | `REDRAW_ACCESS_CODE` | none, always required | Requests without a matching `X-Redraw-Access-Code` header get 401. Unset, both routes are 404, fake mode included. |
 | `REDRAW_RATE_LIMIT_PER_HOUR` | `20` | In memory, per client IP. |
 | `REDRAW_COST_LABEL` | empty | Free text for the consent dialog, e.g. "about $0.05 per image". Returned by the config route. |

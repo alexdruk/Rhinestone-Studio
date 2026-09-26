@@ -70,3 +70,8 @@ export {
   readFileAsDataUrl,
   decodeDataUrlToBuffer
 } from './ImageDecoder.js';
+
+// IMG-023: the stones an AI drew in a rhinestone picture (AI stones fill mode).
+export {
+  detectAiStones
+} from './AiStoneDetect.js';

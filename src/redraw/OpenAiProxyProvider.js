@@ -11,7 +11,7 @@
 export const OPENAI_PROXY_PROVIDER_ID = 'openai-proxy';
 export const REDRAW_ENDPOINT = '/api/redraw';
 
-const KNOWN_FAILURE_CODES = new Set(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output']);
+const KNOWN_FAILURE_CODES = new Set(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined']);
 
 function failure(code, detail) {
   const error = new Error(detail || code);
