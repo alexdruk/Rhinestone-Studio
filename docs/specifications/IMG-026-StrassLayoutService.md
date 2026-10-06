@@ -604,6 +604,19 @@ Live service on the laptop, models already loaded:
 The laptop is the layout host for now (D5): both servers run there, and the app is opened from
 other machines at `http://<laptop>.local:5173`.
 
+**First live sunburst image (6 Oct 2026).** gpt-image-2.5-sunburst at quality high, with prompt v3,
+returned 1024 × 1024 px with flat stones and transparent gaps. Its brightest spots all lie in the
+gaps, so the watershed detector found no stone at all, and the empty result crashed
+`detect_stones()` (the service answered 500). Fix: every detector returns a two-dimensional array
+even when empty, and an empty or tiny candidate set skips fusion clean-up (then `no-stones`). The
+image is kept as `tests/fixtures/sunburst_flower.png`; it lays out to 1011 stones, 92.9 × 115.3 mm,
+0 violations, coverage 0.69. Visible weak spot: some dark separator lines between the lower petals
+are lost.
+
+**Model.** Production uses `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` with
+`OPENAI_IMAGE_QUALITY=high`. gpt-image-2 rejected the transparent background on 6 Oct 2026.
+Build C makes sunburst the default in `server/redraw/env.mjs`.
+
 **Open QA item (phase 9).** The face test, unchanged from the prototype, finds a face in `lake`
 and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal rule.
 

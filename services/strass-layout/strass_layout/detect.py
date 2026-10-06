@@ -160,7 +160,7 @@ def stardist_candidates(px, models, scale=STARDIST_SCALE):
             r = np.sqrt(rp.area / np.pi)
             p = probs[rp.label - 1] if rp.label - 1 < len(probs) else 0.5
             out.append((cy / scale, cx / scale, r / scale, p, rp.solidity, rp.eccentricity, STARDIST_VIEW_INDEX[vn]))
-    return np.array(out)
+    return np.array(out).reshape(-1, 7)
 
 
 def watershed_candidates(px, sig=2.2, h=0.025, med=5, amin=0.35):
@@ -187,7 +187,7 @@ def watershed_candidates(px, sig=2.2, h=0.025, med=5, amin=0.35):
         rin = dt.max()
         req = np.sqrt(rp.area / np.pi)
         pts.append((cy, cx, req, rin, rp.solidity, rp.eccentricity, rp.area))
-    return np.array(pts)
+    return np.array(pts).reshape(-1, 7)
 
 
 def _grads(px, sigma=1.0):
@@ -275,7 +275,11 @@ def detect_stones(px, models):
         C.append(np.stack([p[:, 0], p[:, 1], p[:, 2] * 0.85], 1))
         C.append(np.stack([p[:, 0], p[:, 1], p[:, 3]], 1))
     cands = np.concatenate(C)
+    if len(cands) == 0:
+        return np.empty((0, 4))
     f = _fuse(G, a, cands, 3.5, 30, FUSE_SMIN, FUSE_MIND)
     for _ in range(2):
+        if len(f) <= 8:
+            break
         f = _drop_small(f)
     return f
