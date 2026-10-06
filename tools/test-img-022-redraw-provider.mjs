@@ -227,7 +227,7 @@ await test('T3. rate limit: requests 1-20 from one IP pass, the 21st gets 429, a
   assert.equal((await post(handler2, { ip: 'C' })).statusCode, 202);
 });
 
-await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out once, with no retry, as 504', async () => {
+await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out once, with no retry, and the job fails provider-failed', async () => {
   let spy = spyFetch((n) => (n === 1 ? status(500) : okImage()));
   let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
   assert.equal(final.result.dataUrl, FAKE_REDRAW_DATA_URL);
@@ -289,7 +289,7 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
   assert.equal(final.result.model, 'gpt-image-9');
 });
 
-await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not unauthorized); 400 -> provider-failed with the message; 200 without a PNG -> invalid-output', async () => {
+await test('T6. job error mapping: OpenAI 429 -> job failed rate-limited; 401 -> provider-failed (not unauthorized); 400 -> provider-failed with the message; 200 without a PNG -> invalid-output', async () => {
   const cases = [
     [() => status(429), 429, 'rate-limited'],
     [() => status(401, { error: { message: 'bad key' } }), 502, 'provider-failed'],
@@ -466,7 +466,7 @@ await test('T8b. the proxy provider posts the upload with the access code and ma
   await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === 'network');
 });
 
-await test('T8c. declined: the proxy maps 422 declined to RedrawError with the detail kept, redrawImage() does not retry it, and app.js builds the D7 message and details line', async () => {
+await test('T8c. declined: the proxy maps a job failed with declined to RedrawError with the detail kept, redrawImage() does not retry it, and app.js builds the D7 message and details line', async () => {
   const MESSAGE = 'Your request was rejected by the safety system. request ID req_abc123';
   let posts = 0;
   configureRedraw({ fetch: async (url, init) => { if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' }); if (init.method === 'POST') { posts++; return status(202, { jobId: 'job-1' }); } return status(200, { stage: 'failed', error: { code: 'declined', message: MESSAGE } }); }, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD`, wait: async () => {} });

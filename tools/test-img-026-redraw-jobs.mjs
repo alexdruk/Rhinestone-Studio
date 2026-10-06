@@ -374,18 +374,22 @@ await test('7. DELETE answers 204, aborts the OpenAI or layout request in flight
   assert.equal(queue.calls.layout.length, 1, 'the cancelled job sent no layout');
 });
 
-await test('8. orphans: a running job not polled for 30 s is cancelled as if deleted; each poll restarts the 30 s; a finished job is not an orphan', async () => {
-  assert.equal(JOB_ORPHAN_MS, 30000);
+await test('8. orphans: a running job not polled for 180 s is cancelled as if deleted; each poll restarts the 180 s; a finished job is not an orphan', async () => {
+  assert.equal(JOB_ORPHAN_MS, 180000);
   const { fetch, calls } = router({ openAi: () => new Promise(() => {}) });
-  const { handler, clock } = makeHandler({ fetch });
+  const { handler, clock } = makeHandler({ fetch, timeoutMs: 3_600_000 });
   const jobId = await start(handler);
   await flush();
-  await clock.advance(29999);
-  assert.equal((await poll(handler, jobId)).json().stage, 'drawing', 'polled at 29.999 s');
-  await clock.advance(29999);
-  assert.equal((await poll(handler, jobId)).json().stage, 'drawing', 'the poll restarted the clock');
-  await clock.advance(30000);
-  assert.equal(calls.openAi[0].init.signal.aborted, true, 'the orphan\'s OpenAI request is aborted');
+  await clock.advance(179000);
+  assert.equal(calls.openAi[0].init.signal.aborted, false, 'not cancelled at 179 s without a poll');
+  assert.equal((await poll(handler, jobId)).json().stage, 'drawing', 'polled at 179 s');
+  await clock.advance(179999);
+  assert.equal(calls.openAi[0].init.signal.aborted, false, 'the poll restarted the clock');
+  assert.equal((await poll(handler, jobId)).json().stage, 'drawing', 'polled again at 179.999 s after the last poll');
+  await clock.advance(179999);
+  assert.equal(calls.openAi[0].init.signal.aborted, false, 'still running 1 ms before the orphan time');
+  await clock.advance(1);
+  assert.equal(calls.openAi[0].init.signal.aborted, true, 'the orphan\'s OpenAI request is aborted at 180 s');
   assert.deepEqual((await poll(handler, jobId)).json(), { code: 'not-found' });
 
   const placing = router({ layout: () => new Promise(() => {}) });
@@ -393,14 +397,16 @@ await test('8. orphans: a running job not polled for 30 s is cancelled as if del
   const id2 = await start(second.handler);
   await flush();
   assert.equal(placing.calls.layout.length, 1);
-  await second.clock.advance(30000);
+  await second.clock.advance(179999);
+  assert.equal(placing.calls.layout[0].init.signal.aborted, false, 'placing: not cancelled before 180 s');
+  await second.clock.advance(1);
   assert.equal(placing.calls.layout[0].init.signal.aborted, true, 'an orphan in placing aborts its layout request');
   assert.equal((await poll(second.handler, id2)).statusCode, 404);
 
   const done = makeHandler({ fetch: router().fetch });
   const id3 = await start(done.handler);
   await flush();
-  await done.clock.advance(5 * 60 * 1000);
+  await done.clock.advance(10 * 60 * 1000);
   assert.equal((await poll(done.handler, id3)).json().stage, 'done', 'a finished job is kept, not cancelled');
 });
 

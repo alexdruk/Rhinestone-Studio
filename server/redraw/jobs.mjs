@@ -1,10 +1,10 @@
 // IMG-026 build B: the redraw job store and the layout-service call. handler.mjs starts a job per
 // POST /api/redraw; the browser polls GET /api/redraw/:jobId every 3 s. A running job nobody has
-// polled for 30 s is cancelled (it replaces "abort when the browser disconnects"); a finished job is
+// polled for 180 s is cancelled (it replaces "abort when the browser disconnects"); a finished job is
 // kept for 30 min; at most 20 jobs are kept. now and timers are injected so tests control time.
 // See docs/specifications/IMG-026-StrassLayoutService.md, "Node jobs, prompt and colours (build B)".
 
-export const JOB_ORPHAN_MS = 30 * 1000;
+export const JOB_ORPHAN_MS = 180 * 1000;
 export const JOB_KEEP_MS = 30 * 60 * 1000;
 export const MAX_JOBS = 20;
 export const LAYOUT_TARGET_PITCH_MM = 2.1;
@@ -47,7 +47,7 @@ export function createJobStore({ now, timers, randomUUID }) {
     return job.stage === 'done' || job.stage === 'failed';
   }
 
-  // Restarts the 30 s orphan clock of a running job.
+  // Restarts the 180 s orphan clock of a running job.
   function touch(job) {
     timers.clearTimeout(job.orphanTimer);
     job.orphanTimer = isFinished(job) ? null : unref(timers.setTimeout(() => cancel(job), JOB_ORPHAN_MS));

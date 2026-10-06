@@ -106,7 +106,7 @@ async function jobResult(handler, body) {
 
 // ---- T1. Server style validation and default ----------------------------------------------------
 
-await test('T1. server: no style / stones -> 200 promptVersion 2 with the stones prompt; flat -> 200 promptVersion 1 with the flat prompt; any other value -> 400 with no upstream fetch; fake mode per style', async () => {
+await test('T1. server: no style / stones -> 202 job whose result has promptVersion 3 with the stones prompt; flat -> 202 job whose result has promptVersion 1 with the flat prompt; any other value -> 400 with no upstream fetch; fake mode per style', async () => {
   for (const body of [JSON.stringify({ image: FAKE_REDRAW_DATA_URL }), bodyWith({ style: 'stones' })]) {
     const spy = spyFetch(okImage);
     const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);

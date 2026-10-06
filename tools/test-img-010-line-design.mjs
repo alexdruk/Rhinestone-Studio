@@ -13,7 +13,7 @@ import { rawGridDistanceTransform } from '../src/geometry/ContourRingSampler.js'
 import { GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { rgbToLab, cie76Distance } from '../src/image/ColorSpace.js';
 import { computeSubjectMask } from '../src/image/index.js';
-import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
+import { CRYSTAL_COLORS, STONE_COLORS, LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-010 second follow-up: generateLineDesignStonePoints() now requires a `palette` (the
 // src/renderer/** import it used to reach directly is forbidden for src/geometry/**, per
@@ -21,7 +21,7 @@ import { CRYSTAL_COLORS, STONE_COLORS } from '../src/renderer/CrystalColors.js';
 // ({id,hex}, hex from previewColor/fill, identical values) for every direct engine.generateImageLayout()
 // call below with mode:'line-design'. Tests may import src/renderer/** freely; only src/geometry/**
 // itself may not.
-const LINE_DESIGN_PALETTE = CRYSTAL_COLORS.map((c) => ({ id: c.id, hex: c.previewColor }));
+const LINE_DESIGN_PALETTE = CRYSTAL_COLORS.filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 
 // IMG-010 -- Line Design: a filled subject traced as an outline chain plus skeleton-derived line
 // chains at SS6 (2.0mm), the interior filled with SS10 (2.8mm) rings, and the existing IMG-013
@@ -575,7 +575,7 @@ async function callRealGenerateImageStonesLive(layer, imageBufferCacheEntries, l
     resolveImageTransparentMode: (v) => v ?? 'white',
     resolveImageMaskMode: (v) => (v === 'subject' ? 'subject' : 'threshold'),
     resolveImageColorCount: (l) => l.colorCount ?? 1,
-    imageColorPalette: () => Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor })),
+    imageColorPalette: () => Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor })),
     resolveImageSeed: (v) => v ?? 1,
     resolveImageSpread: (v) => v ?? 1,
     resolveImageEdgeWidth: (v) => v ?? 6,

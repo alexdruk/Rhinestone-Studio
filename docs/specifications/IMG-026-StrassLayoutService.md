@@ -321,9 +321,10 @@ B could not be checked end to end against the real service.
     `{ dataUrl, model, promptVersion }` when OpenAI succeeded but the layout failed;
   - `error` is `{ code, message }` when failed.
 - `DELETE` answers 204, aborts the OpenAI or layout request in flight and drops the job.
-- **Orphans.** A job that nobody has polled for 30 s is cancelled as if deleted. The browser
+- **Orphans.** A job that nobody has polled for 180 s is cancelled as if deleted. The browser
   polls every 3 s, so this only catches closed tabs, and it replaces today's "abort when the
-  browser disconnects".
+  browser disconnects". 180 s, not 30 s, because Chrome wakes timers in a tab hidden for about 5
+  minutes only about once a minute, and a background tab must not lose a paid job.
 - **Lifetime.** A finished or failed job is kept for 30 min after it ends, then dropped. At most
   20 jobs are kept; when a 21st is created, the oldest finished job is dropped first, and if none
   is finished the request gets 429 `rate-limited`.
@@ -695,7 +696,7 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   prompt text and version, the `/api/redraw` response shape, the redraw button (builds B, C).
 - `tools/test-crystal-color-catalog.mjs:90`–`:91`: asserts 23 colours (build B → 27); `:158` and
   `:160` pin the six IMG-016 entries as `slice(17)` and the full id list (build B).
-- `tools/test-img-016-neutral-brown-stones.mjs:183`, `:185`–`:186` and `:221`–`:229`: the colour
+- `tools/test-img-016-neutral-brown-stones.mjs:183`, `:185`–`:186`, `:219` and `:221`–`:229`: the colour
   count, the six IMG-016 entries as `slice(17)` and the selector groups (build B); `:35` builds the
   quantizer stand-in palette from all of `STONE_COLORS` (build B, S13).
 - The quantizer stand-in palette (`const PALETTE = Object.values(STONE_COLORS)...`) in
