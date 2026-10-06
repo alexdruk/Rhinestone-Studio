@@ -7,6 +7,7 @@ import { fieldModalLabelAt, fieldPixelOn } from '../src/geometry/StoneSampler.js
 import { LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO } from '../src/geometry/LineDesignSampler.js';
 import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from '../src/geometry/GapFill.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-013 -- Fill Empty Slots: a same-layer, additive gap-fill pass for image layers, always on for
 // newly imported image layers (fillGaps:true set by the importImageFile new-layer factory), off/
@@ -35,7 +36,7 @@ function parseHex(hex) {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 
 // ---- Fixtures ---------------------------------------------------------------------------------
 

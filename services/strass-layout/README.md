@@ -88,6 +88,33 @@ Errors are `{ "error": code, "message": text }`:
 `GET /health` answers `{ "ok": true, "modelsLoaded": true, "version": "...", "busy": false }`.
 `busy` is true while a layout runs. One layout runs at a time; a second request waits.
 
+## Connecting the app
+
+The Node dev server (`tools/dev-server.mjs`) calls this service from inside each redraw job,
+after OpenAI has drawn the image. Two settings, read from the environment or the repo's `.env`
+(see `.env.example`), connect it:
+
+- `LAYOUT_SERVICE_URL`: the service's base URL, for example `http://127.0.0.1:8000` when both run
+  on the same Mac. The job posts to `<LAYOUT_SERVICE_URL>/layout`. When it is empty, or nothing
+  answers at that address, the job ends with `layout-unavailable` and still returns the OpenAI
+  image. The redraw routes stay on either way.
+- `LAYOUT_TIMEOUT_SECONDS`: how long one layout may take before the job gives up with
+  `layout-timeout` (default 180). A layout is not retried. On a slower Mac, raise it.
+
+The Node server sends one layout at a time, in job order, and passes the app's colour ids as
+`colorIds`. If this service's `catalogue.json` holds a colour the app does not know, every layout
+answers 422 `catalogue-mismatch` and the job ends with `layout-failed`.
+
+Start this service before the dev server, and check `GET /health` once:
+
+```
+curl http://127.0.0.1:8000/health
+LAYOUT_SERVICE_URL=http://127.0.0.1:8000 npm run dev
+```
+
+With `REDRAW_FAKE=1` the dev server calls neither OpenAI nor this service, and every job returns a
+fixed test layout.
+
 ## Calling the package
 
 ```

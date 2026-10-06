@@ -87,8 +87,8 @@ const LEGACY_COLORS = {
   emerald: { fill: '#2aa66a', stroke: '#0b5633', shine: '#c7ffdf', accent: '#16814e' }
 };
 
-await test('1. every required display name is present in the catalog (23 colors since IMG-016)', () => {
-  assert.equal(CRYSTAL_COLORS.length, 23, `expected 23 catalog colors, found ${CRYSTAL_COLORS.length}`);
+await test('1. every required display name is present in the catalog (27 colors since IMG-026)', () => {
+  assert.equal(CRYSTAL_COLORS.length, 27, `expected 27 catalog colors, found ${CRYSTAL_COLORS.length}`);
   const names = CRYSTAL_COLORS.map((c) => c.name);
   for (const required of REQUIRED_NAMES) {
     assert.ok(names.includes(required), `expected catalog to include a color named "${required}"`);
@@ -155,9 +155,9 @@ await test('5a. IMG-016: the 17 pre-IMG-016 entries keep their catalogue positio
 });
 
 await test('5b. IMG-016: the six new entries are appended last, in order, with their pinned name, group and values', () => {
-  const actual = CRYSTAL_COLORS.slice(17).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]);
+  const actual = CRYSTAL_COLORS.slice(17, 23).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]);
   assert.deepEqual(actual, IMG016_ENTRIES);
-  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0])]);
+  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
 });
 
 await test('6. STONE_COLORS (id-keyed map) matches the catalog array exactly, and the StoneColors.js shim re-exports the identical map', () => {

@@ -165,23 +165,37 @@ async function post(handler, { code = 'letmein', ip, body = UPLOAD_BODY } = {}) 
   return res;
 }
 
+// IMG-026 build B: the POST answers 202 { jobId } and the work runs in a job. This posts, then polls
+// GET /api/redraw/:jobId until the job is done or failed; `final` is that GET body ({ stage,
+// result?, error? }), or null when the POST did not start a job. No layout URL is set here, so a job
+// whose OpenAI call succeeded ends failed with layout-unavailable and the image in result.
+async function runJob(handler, opts) {
+  const res = await post(handler, opts);
+  if (res.statusCode !== 202) return { res, final: null };
+  const { jobId } = res.json();
+  for (let i = 0; i < 5000; i++) {
+    const r = makeRes();
+    await handler.handleJob(makeReq({ method: 'GET', headers: { 'x-redraw-access-code': 'letmein' } }), r, jobId);
+    const body = r.json();
+    if (body.stage === 'done' || body.stage === 'failed') return { res, final: body };
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  throw new Error('the redraw job did not finish');
+}
+
 // ---- T1. Prompt --------------------------------------------------------------------------------
 
-await test('T1. prompt: IMG-023 "designer" text verbatim, palette line = every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 2', () => {
-  assert.equal(PROMPT_VERSION, 2);
-  const lines = buildRedrawPrompt().split('\n');
-  assert.deepEqual(lines.slice(0, -1), [
-    'You are a professional designer of hot-fix rhinestone transfer templates. Design a rhinestone version of the attached image that a machine can set stone by stone.',
-    'Use identical round stones in honeycomb rows, about 70 stones across. Every stone is one flat colour from the palette below, drawn as a glossy round stone with a small white highlight dot.',
-    'Design choices a good template designer makes:',
-    '- Simplify: fewer, larger colour areas; drop texture and fine shading that stones cannot show.',
-    '- Keep what makes the subject recognisable, and exaggerate it slightly if needed.',
-    '- Separate colour areas and outline the subject with one-stone-wide chains of Jet stones, with no gaps.',
-    '- Use at most 8 palette colours, with strong contrast between neighbouring areas.',
-    'Square image, subject fills the frame, transparent background, no shadow or glow, no text.',
-    'Palette (name and hex):'
-  ]);
-  assert.deepEqual(lines[lines.length - 1].split(', '), Object.values(STONE_COLORS).map((c) => `${c.name} ${c.previewColor}`));
+await test('T1. prompt: IMG-026 v3 text (the spec\'s Appendix A) with the generated palette line, which is every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 3', async () => {
+  assert.equal(PROMPT_VERSION, 3);
+  const spec = await readFile(fileURLToPath(new URL('../docs/specifications/IMG-026-StrassLayoutService.md', import.meta.url)), 'utf8');
+  const appendix = spec.slice(spec.indexOf('## Appendix A'));
+  const block = appendix.slice(appendix.indexOf('```\n') + 4, appendix.indexOf('\n```', appendix.indexOf('```\n') + 4));
+  assert.ok(block.includes('\n<palette line>\n'));
+  const prompt = buildRedrawPrompt();
+  const lines = prompt.split('\n');
+  const paletteIndex = lines.indexOf('Use only the colours below, with exactly these hex values, as flat fills:') + 1;
+  assert.deepEqual(lines[paletteIndex].split(', '), Object.values(STONE_COLORS).map((c) => `${c.name} ${c.previewColor}`));
+  assert.equal(prompt, block.replace('<palette line>', lines[paletteIndex]));
 });
 
 // ---- T2-T7b. Server handler --------------------------------------------------------------------
@@ -200,55 +214,52 @@ await test('T2. a missing or wrong access code gets 401 unauthorized, and OpenAI
 await test('T3. rate limit: requests 1-20 from one IP pass, the 21st gets 429, another IP still passes, and the window slides after an hour', async () => {
   let t = 1_000_000;
   const handler = createRedrawHandler({ settings: FAKE_SETTINGS, now: () => t });
-  for (let i = 1; i <= 20; i++) assert.equal((await post(handler, { ip: 'A' })).statusCode, 200, `request ${i}`);
+  for (let i = 1; i <= 20; i++) assert.equal((await runJob(handler, { ip: 'A' })).res.statusCode, 202, `request ${i}`);
   const blocked = await post(handler, { ip: 'A' });
   assert.equal(blocked.statusCode, 429);
   assert.equal(blocked.json().code, 'rate-limited');
-  assert.equal((await post(handler, { ip: 'B' })).statusCode, 200);
+  assert.equal((await runJob(handler, { ip: 'B' })).res.statusCode, 202);
   t += 3_600_001;
-  assert.equal((await post(handler, { ip: 'A' })).statusCode, 200);
+  assert.equal((await runJob(handler, { ip: 'A' })).res.statusCode, 202);
   // A request with a wrong code is not counted.
   const handler2 = createRedrawHandler({ settings: FAKE_SETTINGS, now: () => t });
   for (let i = 0; i < 25; i++) await post(handler2, { ip: 'C', code: 'wrong' });
-  assert.equal((await post(handler2, { ip: 'C' })).statusCode, 200);
+  assert.equal((await post(handler2, { ip: 'C' })).statusCode, 202);
 });
 
-await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out once, with no retry, as 504', async () => {
+await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provider-failed; a fetch that never settles times out once, with no retry, and the job fails provider-failed', async () => {
   let spy = spyFetch((n) => (n === 1 ? status(500) : okImage()));
-  let res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().dataUrl, FAKE_REDRAW_DATA_URL);
+  let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
+  assert.equal(final.result.dataUrl, FAKE_REDRAW_DATA_URL);
   assert.equal(spy.calls.length, 2);
 
   spy = spyFetch(() => status(500));
-  res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.equal(res.statusCode, 502);
-  assert.equal(res.json().code, 'provider-failed');
+  ({ final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch })));
+  assert.equal(final.stage, 'failed');
+  assert.equal(final.error.code, 'provider-failed');
   assert.equal(spy.calls.length, 2);
 
   spy = spyFetch(() => new Promise(() => {}));
-  res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, timeoutMs: 10 }));
-  assert.equal(res.statusCode, 504);
-  assert.deepEqual(res.json(), { code: 'provider-failed', message: 'The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY.' });
+  ({ final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, timeoutMs: 10 })));
+  assert.deepEqual(final, { stage: 'failed', error: { code: 'provider-failed', message: 'The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY.' } });
   assert.equal(spy.calls.length, 1);
 
   // With no timeoutMs injected, the handler uses the settings' REDRAW_TIMEOUT_SECONDS.
   spy = spyFetch(() => new Promise(() => {}));
-  res = await post(createRedrawHandler({ settings: { ...KEY_SETTINGS, timeoutMs: 10 }, fetch: spy.fetch }));
-  assert.equal(res.statusCode, 504);
+  ({ final } = await runJob(createRedrawHandler({ settings: { ...KEY_SETTINGS, timeoutMs: 10 }, fetch: spy.fetch })));
+  assert.equal(final.error.message, 'The image service took too long. Try again, or set a lower OPENAI_IMAGE_QUALITY.');
   assert.equal(spy.calls.length, 1);
 
   spy = spyFetch(() => { throw new TypeError('fetch failed'); });
-  res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.equal(res.statusCode, 502);
+  ({ final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch })));
+  assert.equal(final.error.code, 'provider-failed');
   assert.equal(spy.calls.length, 2);
 });
 
 await test('T5. the outgoing request: images/edits, Bearer key, model/quality/size/background/output_format/n/prompt and a PNG image', async () => {
   let spy = spyFetch(okImage);
-  let res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.json(), { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 2 });
+  let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
+  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 3 });
   const { url, init } = spy.calls[0];
   assert.equal(url, OPENAI_IMAGE_EDITS_URL);
   assert.equal(url, 'https://api.openai.com/v1/images/edits');
@@ -272,13 +283,13 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
 
   spy = spyFetch(okImage);
   const custom = loadRedrawEnv({ env: { OPENAI_API_KEY: 'sk-test', REDRAW_ACCESS_CODE: 'letmein', OPENAI_IMAGE_MODEL: 'gpt-image-9', OPENAI_IMAGE_QUALITY: 'medium' } });
-  res = await post(createRedrawHandler({ settings: custom, fetch: spy.fetch }));
+  ({ final } = await runJob(createRedrawHandler({ settings: custom, fetch: spy.fetch })));
   assert.equal(spy.calls[0].init.body.get('model'), 'gpt-image-9');
   assert.equal(spy.calls[0].init.body.get('quality'), 'medium');
-  assert.equal(res.json().model, 'gpt-image-9');
+  assert.equal(final.result.model, 'gpt-image-9');
 });
 
-await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not unauthorized); 400 -> provider-failed with the message; 200 without a PNG -> invalid-output', async () => {
+await test('T6. job error mapping: OpenAI 429 -> job failed rate-limited; 401 -> provider-failed (not unauthorized); 400 -> provider-failed with the message; 200 without a PNG -> invalid-output', async () => {
   const cases = [
     [() => status(429), 429, 'rate-limited'],
     [() => status(401, { error: { message: 'bad key' } }), 502, 'provider-failed'],
@@ -289,10 +300,10 @@ await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not
   ];
   for (const [responder, httpStatus, code, message] of cases) {
     const spy = spyFetch(responder);
-    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
-    assert.equal(res.statusCode, httpStatus);
-    assert.equal(res.json().code, code);
-    if (message) assert.equal(res.json().message, message);
+    const { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
+    assert.equal(final.stage, 'failed', `HTTP ${httpStatus} before IMG-026`);
+    assert.equal(final.error.code, code);
+    if (message) assert.equal(final.error.message, message);
     assert.equal(spy.calls.length, 1, `${code} is not retried`);
   }
   // IMG-023 (D7): a safety-system refusal is retried once, then answered 422 'declined' with OpenAI's
@@ -306,10 +317,10 @@ await test('T6. status mapping: 429 -> rate-limited; 401 -> provider-failed (not
   ];
   for (const [responder, httpStatus, code] of safetyCases) {
     const spy = spyFetch(responder);
-    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
-    assert.equal(res.statusCode, httpStatus);
-    if (code) assert.equal(res.json().code, code);
-    if (code) assert.ok(res.json().message.toLowerCase().includes('safety system'));
+    const { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch, logger: recordingLogger() }));
+    if (httpStatus === 200) assert.equal(final.result.dataUrl, FAKE_REDRAW_DATA_URL);
+    if (code) assert.equal(final.error.code, code);
+    if (code) assert.ok(final.error.message.toLowerCase().includes('safety system'));
     assert.equal(spy.calls.length, 2, 'two calls at most');
   }
   // Upload that is not a PNG data URL, and a malformed body.
@@ -331,7 +342,7 @@ await test('T6b. every OpenAI 4xx is logged with its status and message, never t
     [() => status(500), []]
   ]) {
     const logger = recordingLogger();
-    await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spyFetch(responder).fetch, logger }));
+    await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spyFetch(responder).fetch, logger }));
     assert.deepEqual(logger.lines, expected);
     for (const line of logger.lines) assert.ok(!line.includes('sk-test') && !line.includes('letmein'));
   }
@@ -339,7 +350,7 @@ await test('T6b. every OpenAI 4xx is logged with its status and message, never t
 
 await test('T7. env: defaults, environment wins over the file, quotes and comments; config route 404 unless the access code and a key are set', async () => {
   const defaults = loadRedrawEnv({ env: {} });
-  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', timeoutMs: 300000, fake: false });
+  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', timeoutMs: 300000, fake: false, layoutServiceUrl: '', layoutTimeoutMs: 180000 });
   assert.equal(loadRedrawEnv({ env: { REDRAW_TIMEOUT_SECONDS: '10' } }).timeoutMs, 10000);
   const file = '# comment\n\nOPENAI_IMAGE_MODEL=from-file\nREDRAW_COST_LABEL="about $0.05 per image"\nREDRAW_ACCESS_CODE=\'quoted\'\nREDRAW_RATE_LIMIT_PER_HOUR=5\n';
   const merged = loadRedrawEnv({ env: { OPENAI_IMAGE_MODEL: 'from-env' }, envFileText: file });
@@ -373,39 +384,36 @@ await test('T7b. fake mode with no key: config 200, the right code gets the fixt
   await handler.handleConfig(makeReq({ method: 'GET' }), cfg);
   assert.equal(cfg.statusCode, 200);
   assert.deepEqual(cfg.json(), { providerId: 'openai-proxy', costLabel: '' });
-  const res = await post(handler);
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().dataUrl, FAKE_REDRAW_DATA_URL);
-  assert.equal(res.json().model, 'fake');
+  const { res, final } = await runJob(handler);
+  assert.equal(res.statusCode, 202);
+  assert.equal(final.result.dataUrl, FAKE_REDRAW_DATA_URL);
+  assert.equal(final.result.model, 'fake');
   assert.equal((await post(handler, { code: 'wrong' })).statusCode, 401);
   const both = createRedrawHandler({ settings: loadRedrawEnv({ env: { REDRAW_FAKE: '1', REDRAW_ACCESS_CODE: 'letmein', OPENAI_API_KEY: 'sk-test' } }), fetch });
-  assert.equal((await post(both)).json().model, 'fake');
+  assert.equal((await runJob(both)).final.result.model, 'fake');
   assert.equal(calls.length, 0);
 });
 
-await test('T4b. Cancel stops the upstream call: the client closing aborts the OpenAI fetch, with no retry and nothing written', async () => {
+await test('T4b. Cancel stops the upstream call: DELETE on the job aborts the OpenAI fetch, with no retry, and the job is gone', async () => {
   const signals = [];
   const fetch = (url, init) => { signals.push(init.signal); return new Promise(() => {}); };
   // This fake fetch ignores its signal (a real fetch rejects on abort), so the short timeout only
-  // lets handleRedraw() finish; the abort itself is checked before the timer can fire.
+  // lets the job finish; the abort itself is checked before the timer can fire.
   const handler = createRedrawHandler({ settings: KEY_SETTINGS, fetch, timeoutMs: 50 });
-  const res = makeRes();
-  const closeListeners = [];
-  res.on = (event, fn) => { if (event === 'close') closeListeners.push(fn); };
-  const writes = [];
-  res.writeHead = (...args) => { writes.push(['writeHead', ...args]); };
-  res.end = (...args) => { writes.push(['end', ...args]); };
-  const done = handler.handleRedraw(makeReq({ headers: { 'x-redraw-access-code': 'letmein' }, body: UPLOAD_BODY }), res);
+  const created = await post(handler);
+  assert.equal(created.statusCode, 202);
+  const { jobId } = created.json();
   while (signals.length === 0) await new Promise((r) => setTimeout(r, 1));
-  assert.equal(res.writableEnded, false);
-  assert.equal(closeListeners.length, 1);
-  for (const fn of closeListeners) fn();
-  assert.equal(signals[0].aborted, true, 'the upstream signal is aborted as soon as the client closes');
-  await done;
-  await new Promise((r) => setTimeout(r, 20));
+  const del = makeRes();
+  await handler.handleJob(makeReq({ method: 'DELETE', headers: { 'x-redraw-access-code': 'letmein' } }), del, jobId);
+  assert.equal(del.statusCode, 204);
+  assert.equal(signals[0].aborted, true, 'the upstream signal is aborted as soon as the job is deleted');
+  await new Promise((r) => setTimeout(r, 80));
   assert.equal(signals.length, 1, 'fetch was called once, and no second attempt followed');
   assert.equal(signals[0].aborted, true, 'the upstream signal is aborted');
-  assert.deepEqual(writes, [], 'nothing was written to res');
+  const after = makeRes();
+  await handler.handleJob(makeReq({ method: 'GET', headers: { 'x-redraw-access-code': 'letmein' } }), after, jobId);
+  assert.deepEqual([after.statusCode, after.json()], [404, { code: 'not-found' }], 'nothing was written to the job');
 });
 
 // ---- T8-T9. Client module ----------------------------------------------------------------------
@@ -430,26 +438,27 @@ await test('T8. provider selection: config 404 / network error / bad body -> una
   configureRedraw({ provider: createFakeRedrawProvider(), fetch: spy.fetch, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD` });
   assert.deepEqual(await getRedrawAvailability(), { available: true, providerId: 'fake', consent: null });
   const result = await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` });
-  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, providerId: 'fake', model: 'fake', promptVersion: null });
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, providerId: 'fake', model: 'fake', promptVersion: null, layout: null, layoutError: null });
   assert.equal(spy.calls.length, 0);
 });
 
 await test('T8b. the proxy provider posts the upload with the access code and maps server failures to RedrawError codes', async () => {
   const posts = [];
-  const serverReplies = [status(200, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 }), status(401, { code: 'unauthorized', message: 'The access code was not accepted.' }), status(502, { code: 'provider-failed', message: 'safety system' }), new Response('Not Found', { status: 404 }), new Response('<html>', { status: 500 })];
+  const serverReplies = [status(202, { jobId: 'job-1' }), status(200, { stage: 'done', result: { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1, layout: null } }), status(401, { code: 'unauthorized', message: 'The access code was not accepted.' }), status(502, { code: 'provider-failed', message: 'safety system' }), new Response('Not Found', { status: 404 }), new Response('<html>', { status: 500 })];
   const fetch = async (url, init) => {
     if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' });
     posts.push({ url, init });
     const reply = serverReplies.shift();
     return new Response(await reply.text(), { status: reply.status });
   };
-  configureRedraw({ fetch, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD` });
+  configureRedraw({ fetch, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD`, wait: async () => {} });
   setRedrawAccessCode('letmein');
   assert.equal((await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` })).providerId, 'openai-proxy');
   assert.equal(posts[0].url, '/api/redraw');
   assert.equal(posts[0].init.headers['X-Redraw-Access-Code'], 'letmein');
   assert.equal(posts[0].init.headers['Content-Type'], 'application/json');
   assert.deepEqual(JSON.parse(posts[0].init.body), { image: `${PNG_PREFIX}UPLOAD`, style: 'stones' });
+  assert.deepEqual([posts[1].url, posts[1].init.method, posts[1].init.headers['X-Redraw-Access-Code']], ['/api/redraw/job-1', 'GET', 'letmein']);
   for (const [code, detail] of [['unauthorized', 'The access code was not accepted.'], ['provider-failed', 'safety system'], ['not-configured', ''], ['provider-failed', '']]) {
     await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === code && e.detail === detail);
   }
@@ -457,10 +466,10 @@ await test('T8b. the proxy provider posts the upload with the access code and ma
   await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === 'network');
 });
 
-await test('T8c. declined: the proxy maps 422 declined to RedrawError with the detail kept, redrawImage() does not retry it, and app.js builds the D7 message and details line', async () => {
+await test('T8c. declined: the proxy maps a job failed with declined to RedrawError with the detail kept, redrawImage() does not retry it, and app.js builds the D7 message and details line', async () => {
   const MESSAGE = 'Your request was rejected by the safety system. request ID req_abc123';
   let posts = 0;
-  configureRedraw({ fetch: async (url) => { if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' }); posts++; return status(422, { code: 'declined', message: MESSAGE }); }, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD` });
+  configureRedraw({ fetch: async (url, init) => { if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' }); if (init.method === 'POST') { posts++; return status(202, { jobId: 'job-1' }); } return status(200, { stage: 'failed', error: { code: 'declined', message: MESSAGE } }); }, decodeImage: fixtureDecode, encodePng: () => `${PNG_PREFIX}UPLOAD`, wait: async () => {} });
   setRedrawAccessCode('letmein');
   let caught = null;
   await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }).catch((e) => { caught = e; });
@@ -503,7 +512,7 @@ await test('T9. client limits: upload shrunk to 1536 px; opaque-on-white and the
   const ok = await redrawImage({ dataUrl: `${PNG_PREFIX}BIG` });
   assert.deepEqual(encoded, [[1536, 1024]]);
   assert.equal(run.calls[0].pngDataUrl, `${PNG_PREFIX}UPLOAD`);
-  assert.deepEqual(ok, { dataUrl: `${PNG_PREFIX}OPAQUE_ON_WHITE`, providerId: 'seq', model: 'seq-model', promptVersion: 1 });
+  assert.deepEqual(ok, { dataUrl: `${PNG_PREFIX}OPAQUE_ON_WHITE`, providerId: 'seq', model: 'seq-model', promptVersion: 1, layout: null, layoutError: null });
   assert.equal(run.calls.length, 1, 'opaque image on white is valid first time');
 
   const withOutputs = (outputs) => {

@@ -7,6 +7,7 @@ import { labelCatalogColors, FIELD_ON_THRESHOLD } from '../src/image/ColorQuanti
 import { generateLineDesignStonePoints } from '../src/geometry/LineDesignSampler.js';
 import { createGeometryEngine } from '../src/geometry/index.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-017 -- vividness. layer.vividness scales each subject pixel's Lab a* and b* before catalogue
 // matching (decision 1), through labelCatalogColors()' chromaScale; 1 skips the multiply. Four Studio
@@ -33,7 +34,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
 

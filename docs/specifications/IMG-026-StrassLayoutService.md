@@ -30,8 +30,8 @@ The work ships as four milestones, one Claude Code build each:
 | Build | Scope | Phases (plan) |
 | --- | --- | --- |
 | IMG-026A | Layout service package, golden tests, Mac scripts, Dockerfile | 1–2 |
-| IMG-026B | Node job API, layout call, prompt v3 | 3–4 |
-| IMG-026C | SS4, 4 colours, `layer.aiLayout`, engine branch, lightbox rework | 5–6, 8 (engine and UI tests) |
+| IMG-026B | Node job API, layout call, prompt v3, the 4 D2 colours with the S13 legacy pin and the S4 cross-check | 3–4, part of 5 |
+| IMG-026C | SS4, `layer.aiLayout`, engine branch, lightbox rework | 5–6, 8 (engine and UI tests) |
 | IMG-026D | Editing ai-layout stones in Design | 7, 8 (editing tests) |
 
 ## Decisions accepted by Sasha (6 Oct 2026)
@@ -92,7 +92,7 @@ distance − (d₁ + d₂)/2 < 0.1 − 1e-6 mm. On `expected/` the rounded lists
 `prototype/catalogue_v4.json` content: 23 current entries plus the four D2 entries, in that order).
 Its colour rules name specific ids (skin, brown family, Jet, Crystal), so the colour list cannot
 come from the caller. The request carries `colorIds`, the ids the app knows; the service answers
-422 `catalogue-mismatch` when its catalogue has an id the app does not. A Node test (build C)
+422 `catalogue-mismatch` when its catalogue has an id the app does not. A Node test (build B)
 asserts that every `catalogue.json` entry equals the `CrystalColors.js` entry with that id on
 name and on all four colour fields (fill, stroke, shine, accent).
 
@@ -142,7 +142,7 @@ not the repo's `PROMPT_VERSION = 2`, which is the IMG-023 "designer" prompt. App
 stone count; build B renames it to "PROMPT_VERSION 4" and leaves it open.
 
 **S11. The palette line stays generated.** `buildPaletteLine()` (`server/redraw/prompt.mjs`) makes
-the colour list from the catalogue, so once build C adds the D2 colours the list has 27 entries
+the colour list from the catalogue, so once build B adds the D2 colours the list has 27 entries
 with no prompt edit. Appendix A therefore has no colour count in its wording, and the palette
 line sits inside rule 4 instead of at the end. Display names come from the catalogue
 ("Light Colorado Topaz", not the research doc's "Light Colorado").
@@ -164,10 +164,12 @@ SS4 there would change existing monograms and text layouts. Instead:
 
 **S13. Old image layers keep the 23-colour palette.** `imageColorPalette()` (`app.js:749`) builds
 the quantizer palette for every legacy fill mode from all of `STONE_COLORS`. If the D2 colours
-reached it, saved image layers would re-quantize differently and D4 would break. Build C pins the
+reached it, saved image layers would re-quantize differently and D4 would break. Build B pins the
 legacy palette to the 23 pre-v2 ids with a literal array, filtered inside the function body. This
 region of app.js is `new Function()`-evaluated by several test harnesses, so no import may be
-read at load time. Manual pickers, Design and the ai-layout path get all 27 colours.
+read at load time. Manual pickers, Design and the ai-layout path get all 27 colours. The 23 ids are
+also exported as `LEGACY_IMAGE_COLOR_IDS` from `src/renderer/CrystalColors.js` for tests; a test
+asserts the app.js literal equals it.
 
 **S14. Size: enlarge only, aspect locked.** For an ai-layout layer, k = `layer.w / aiLayout.widthMm`.
 The engine places each stone at (k·x, k·y) and keeps its diameter. With k ≥ 1 every gap stays
@@ -298,27 +300,105 @@ activates the venv and runs `uvicorn app:app --host 127.0.0.1 --port 8000 --work
 script uses `#` comments. A `caffeinate -i` wrapper is printed as advice by `start_layout.sh`, not
 run by it.
 
-## Node jobs and prompt (build B)
+## Node jobs, prompt and colours (build B)
 
-- `POST /api/redraw` keeps the access-code and rate-limit checks, starts a job and returns 202
-  `{ jobId }` at once.
-- A job runs OpenAI as today (300 s, one retry), then posts the PNG to
-  `LAYOUT_SERVICE_URL/layout` (new setting, 180 s timeout, no retry), then keeps
-  `{ dataUrl, model, promptVersion, layout }` in memory for 30 min. One layout runs at a time
-  (S7); later jobs wait in order.
-- `GET /api/redraw/:jobId` → `{ stage: 'drawing' | 'placing' | 'done' | 'failed', result?, error? }`.
-  `DELETE /api/redraw/:jobId` cancels the job: it aborts the OpenAI or layout request and drops
-  the job.
-- With no `LAYOUT_SERVICE_URL`, the job fails at `placing` with `layout-unavailable`, and the
-  OpenAI image is still returned in `result` so "Try again" does not pay twice. (The app uses
-  that image only to show it in the AI image view.)
-- `REDRAW_FAKE=1` returns `FAKE_REDRAW_DATA_URL` plus `server/redraw/fixtures/fake-layout.json`
-  (a small valid layout of about 200 stones) without calling OpenAI or the service.
-- `.env.example` gets `LAYOUT_SERVICE_URL=http://127.0.0.1:8000`. Its explanation follows the
-  file's existing comment style; the file is an env template and is not code.
-- `PROMPT_VERSION` becomes 3 with Appendix A (S10, S11).
-- `src/redraw/OpenAiProxyProvider.js` starts the job, polls every 3 s and reports the stage
-  through `onStage`. It resolves with `{ dataUrl, model, promptVersion, layout }`.
+Amended 6 Oct 2026, after build A: the D2 colours, the S13 pin and the S4 cross-check move here
+from build C. Without them every layout call would answer 422 `catalogue-mismatch` (S4), and build
+B could not be checked end to end against the real service.
+
+### Job API
+
+- `POST /api/redraw` keeps the access-code check, the rate limit, the body limit and the style
+  check exactly as today, then starts a job and answers 202 `{ jobId }` at once. `jobId` is
+  `crypto.randomUUID()`. Fake mode also answers 202 with a job.
+- `GET /api/redraw/:jobId` and `DELETE /api/redraw/:jobId` need the same
+  `X-Redraw-Access-Code` header (401 without it) and answer 404 `{ code: 'not-found' }` for an
+  unknown or expired job. They do not count against the rate limit.
+- `GET` answers 200 `{ stage, result?, error? }`:
+  - `stage` is `'drawing'` (OpenAI), `'placing'` (waiting for or running the layout), `'done'`
+    or `'failed'`;
+  - `result` is `{ dataUrl, model, promptVersion, layout }` when done, and
+    `{ dataUrl, model, promptVersion }` when OpenAI succeeded but the layout failed;
+  - `error` is `{ code, message }` when failed.
+- `DELETE` answers 204, aborts the OpenAI or layout request in flight and drops the job.
+- **Orphans.** A job that nobody has polled for 180 s is cancelled as if deleted. The browser
+  polls every 3 s, so this only catches closed tabs, and it replaces today's "abort when the
+  browser disconnects". 180 s, not 30 s, because Chrome wakes timers in a tab hidden for about 5
+  minutes only about once a minute, and a background tab must not lose a paid job.
+- **Lifetime.** A finished or failed job is kept for 30 min after it ends, then dropped. At most
+  20 jobs are kept; when a 21st is created, the oldest finished job is dropped first, and if none
+  is finished the request gets 429 `rate-limited`.
+
+### Inside a job
+
+1. **OpenAI**, exactly as today: same request, same 300 s timeout, same retry and safety-retry
+   rules, same error mapping. The codes become the job's `error.code`: `provider-failed`,
+   `rate-limited`, `declined`, `invalid-output`.
+2. **Layout.** The job posts the PNG bytes to `LAYOUT_SERVICE_URL/layout` as multipart, with
+   `image` (`image/png`) and `options`
+   `{ "colorIds": Object.keys(STONE_COLORS), "targetPitchMm": 2.1 }`.
+   - Layouts run one at a time, in job order (S7).
+   - The timeout is 180 s (`LAYOUT_TIMEOUT_SECONDS`), with no retry.
+   - Failure codes:
+     - `layout-unavailable`: no URL set, or the connection is refused;
+     - `layout-timeout`;
+     - `layout-failed`: any non-200 answer, with the service's own error code and message in
+       `message`.
+   - On any layout failure, `result` still carries the OpenAI image (see the GET shape above).
+3. Settings: `LAYOUT_SERVICE_URL` (default empty, meaning not set) and `LAYOUT_TIMEOUT_SECONDS`
+   (default 180), both read in `server/redraw/env.mjs`. In `.env.example` they are added as two
+   plain `KEY=value` lines with no comment lines (Sasha's no-`#` rule). They are explained in
+   `services/strass-layout/README.md` under "Connecting the app". A missing URL does not turn the
+   redraw routes off.
+4. `REDRAW_FAKE=1` makes no OpenAI call and no layout call. The job goes through all three stages
+   (`drawing` → `placing` → `done`) on the first three polls, then returns
+   `FAKE_REDRAW_DATA_URL` and `server/redraw/fixtures/fake-layout.json`. That fixture is a valid
+   layout of about 200 stones, in the build A response shape, with 0 violations.
+
+### Client
+
+- `src/redraw/OpenAiProxyProvider.js` posts, then polls `GET` every 3 s and reports each new
+  stage through an optional `onStage(stage)` callback. On abort it sends `DELETE` and rethrows
+  the abort.
+- It resolves `{ dataUrl, model, promptVersion, layout, layoutError }`:
+  - with `layout` and `layoutError: null` when the job is done;
+  - with `layout: null` and `layoutError: { code, message }` when OpenAI succeeded but the layout
+    failed.
+- It throws the job's `error.code` only when there is no OpenAI image.
+- `redrawImage()` (`src/redraw/index.js`) passes `layout` and `layoutError` through and forwards
+  `onStage`. The new codes join `REDRAW_ERROR_CODES` and the provider's known-code set. Until
+  build C the app keeps using only `dataUrl`, so the existing AI-stones path works unchanged.
+- Polls are not retried. A failed poll (network error) counts as `network` only after 3 failures
+  in a row.
+
+### Prompt v3
+
+`PROMPT_VERSION` becomes 3 with Appendix A (S10, S11). `FLAT_PROMPT_LINES` and
+`FLAT_PROMPT_VERSION = 1` stay. BACKLOG row 77 is renamed to PROMPT_VERSION 4.
+
+### Colours (D2, S13, S4)
+
+- Append the four D2 entries to `CRYSTAL_COLOR_LIST`, after `light-peach`, with the D2 table's
+  values exactly.
+- Pin `imageColorPalette()` (`app.js:749`) to the 23 pre-v2 ids (S13).
+- Add the S4 cross-check.
+
+### Build B anchors (grepped at `271c853`)
+
+| Anchor | Location |
+| --- | --- |
+| `createRedrawHandler()` / `callOpenAi()` / `handleRedraw()` / fake branch / return | `server/redraw/handler.mjs:69` / `:117` / `:169` / `:188` / `:196` |
+| env `fake` setting | `server/redraw/env.mjs:43` |
+| `PROMPT_LINES` / `PROMPT_VERSION` / `buildRedrawPrompt()` | `server/redraw/prompt.mjs:17` / `:10` / `:41` |
+| redraw routes | `tools/dev-server.mjs:77`–`:78` |
+| `REDRAW_ERROR_CODES` / `redrawImage()` | `src/redraw/index.js:25` / `:145` |
+| `KNOWN_FAILURE_CODES` / `createOpenAiProxyProvider()` | `src/redraw/OpenAiProxyProvider.js:14` / `:23` |
+| `imageColorPalette()` | `app.js:749` |
+| `startImageRedraw()` / its `redrawImage` call (unchanged in B) | `app.js:5676` / `:5692` |
+| last catalogue entry | `src/renderer/CrystalColors.js:155` |
+| tests pinning 23 colours / prompt version 2 | `tools/test-crystal-color-catalog.mjs:91`, `tools/test-img-022-redraw-provider.mjs:171`, `tools/test-img-024-flat-artwork-style.mjs:124` |
+| BACKLOG product-aware prompt row | `docs/BACKLOG.md:77` |
+| `integration` test group | `tools/test-groups.mjs:94` |
 
 ## App (build C)
 
@@ -505,6 +585,31 @@ and `distinct.py`. Every step is a fresh Python process that imports its librari
 StarDist and dlib, loads its model. The service keeps all of that loaded, so these totals are an
 upper bound for it. The Python environment takes 2.8 GB on disk.
 
+### Build A results, 6 Oct 2026
+
+- **Linux** (the audit, newer libraries): `layout_frame()` equals `expected/` on all 12 images.
+- **iMac** (Intel, macOS 13, TensorFlow 2.16.2, numpy 1.26.4): equivalence holds on all 12;
+  results are within S5.2 of `expected/`.
+- **M5 Pro laptop** (macOS 26.6, same pins): equivalence holds on all 12; within S5.2 (stones
+  ±0.08 %, coverage ±0.15 %). The full suite (35 tests) took 795 s, against 2670 s on the iMac.
+
+Live service on the laptop, models already loaded:
+
+| Image | Stones | Total s | Detect s |
+| --- | --- | --- | --- |
+| cat | 2147 | 27.1 | 18.2 |
+| einstein | 3571 | 31.9 | 23.5 |
+| portrait | 3978 | 35.6 | 25.4 |
+
+The laptop is the layout host for now (D5): both servers run there, and the app is opened from
+other machines at `http://<laptop>.local:5173`.
+
+**Open QA item (phase 9).** The face test, unchanged from the prototype, finds a face in `lake`
+and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal rule.
+
+**Open QA item (phase 9).** The 12 test images are 1254 × 1254 px, but the app asks OpenAI for
+`1024x1024`. Detection on 1024 px images must be checked with fresh images.
+
 ## Acceptance figures
 
 **Build A.**
@@ -516,9 +621,14 @@ upper bound for it. The Python environment takes 2.8 GB on disk.
   same bytes.
 - Per-stage times are reported for all 12 images.
 
-**Build B.** With `REDRAW_FAKE=1`, a job goes `drawing` → `placing` → `done` and returns the
-fixture layout. With a fake OpenAI and a fake layout service (both injected), the timeout, cancel
-and failure paths give the stage and error codes listed in the build B section.
+**Build B.**
+
+- With `REDRAW_FAKE=1`, a job goes `drawing` → `placing` → `done` and returns the fixture layout.
+- With a fake OpenAI and a fake layout service (both injected), every timeout, cancel, orphan,
+  expiry and failure path gives the stage and error code listed in the build B section.
+- With a fake OpenAI that returns `N2_cat.png` and the real layout service running, a job returns
+  a layout equal to `POST /layout` on the same bytes.
+- `imageColorPalette()` returns exactly the 23 pre-v2 entries, in catalogue order.
 
 **Build C.**
 
@@ -551,20 +661,27 @@ and failure paths give the stage and error codes listed in the build B section.
 
 **B.**
 
-- `tools/test-img-026-redraw-jobs.mjs` (group `integration`): job stages, cancel, timeouts,
-  layout-unavailable, fake mode, rate limit and access code still enforced on job creation, 30-min
-  expiry with an injected `now`.
+- `tools/test-img-026-redraw-jobs.mjs` (group `integration`):
+  - job stages and every error code;
+  - cancel, orphan cancel, 30-min expiry and the 20-job cap, with an injected `now` and timers;
+  - layout timeout, layout-unavailable and fake mode;
+  - access code on all three routes, and the rate limit on job creation only;
+  - the exact multipart request sent to the layout service;
+  - one layout at a time;
+  - the client provider's polling, `onStage`, DELETE on abort, the 3-failure network rule and
+    the result shapes.
 - Prompt: `PROMPT_VERSION === 3`; the text equals Appendix A with the generated palette line; the
   flat prompt and `FLAT_PROMPT_VERSION === 1` are unchanged.
+- `tools/test-img-026-catalogue.mjs` (group `core`): the S4 cross-check, and the 4 D2 entries'
+  values.
+- Legacy palette pin (S13): `imageColorPalette()` returns exactly the 23 pre-v2 ids in order,
+  through the same app.js extraction `tools/test-img-010-line-design.mjs` uses.
 
 **C.**
 
 - `tools/test-img-026-ai-layout-engine.mjs` (group `core` if it does not import app.js, otherwise
   `integration`): the build C acceptance figures, colour swaps, clamp k < 1 to 1, determinism, and
   the size and colour validation of `validateProject()`.
-- Catalogue cross-check (S4).
-- Legacy palette pin (S13): a fixture whose skin pixels are nearest to `colorado-topaz` still
-  quantizes to a pre-v2 id.
 - `tools/test-img-026-lightbox.mjs` (group `ui`): the hidden, kept and reworked controls for an
   ai-layout layer and for a legacy layer.
 
@@ -577,7 +694,18 @@ and failure paths give the stage and error codes listed in the build B section.
 
 - `tools/test-img-022-redraw-provider.mjs`, `tools/test-img-024-flat-artwork-style.mjs`: the
   prompt text and version, the `/api/redraw` response shape, the redraw button (builds B, C).
-- `tools/test-crystal-color-catalog.mjs:90`–`:91`: asserts 23 colours (build C → 27).
+- `tools/test-crystal-color-catalog.mjs:90`–`:91`: asserts 23 colours (build B → 27); `:158` and
+  `:160` pin the six IMG-016 entries as `slice(17)` and the full id list (build B).
+- `tools/test-img-016-neutral-brown-stones.mjs:183`, `:185`–`:186`, `:219` and `:221`–`:229`: the colour
+  count, the six IMG-016 entries as `slice(17)` and the selector groups (build B); `:35` builds the
+  quantizer stand-in palette from all of `STONE_COLORS` (build B, S13).
+- The quantizer stand-in palette (`const PALETTE = Object.values(STONE_COLORS)...`) in
+  `tools/test-img-012-auto-colour-count.mjs`, `test-img-013-fill-empty-slots.mjs`,
+  `test-img-015-direct-catalogue-colour.mjs`, `test-img-017-vividness.mjs`,
+  `test-img-018-whole-image-mask.mjs`, `test-img-019-subject-mask-resized.mjs`,
+  `test-img-021-rotated-image-stones.mjs`, `test-img-023-ai-stone-transfer.mjs`,
+  `test-img-024-flat-artwork-style.mjs` and `test-img-025-stone-cleanup.mjs`: filtered to
+  `LEGACY_IMAGE_COLOR_IDS` so it stays the palette `imageColorPalette()` returns (build B, S13).
 - `tools/test-stone-size-library.mjs`: the five sizes and the font-config cross-check (build C,
   S12).
 - Every test that evaluates the app.js span from `const DEFAULT_TEXT_FONT_ID=` (`app.js:177`) to
@@ -647,7 +775,7 @@ and failure paths give the stage and error codes listed in the build B section.
 
 This is prompt v2 from the research (Vitalina doc `claude/openai-prompt-v2.md`, 5 Oct 2026) with
 two changes. The colour count is gone from rule 4 and from the final check (S11), and the palette
-line is generated by `buildPaletteLine()`, so it carries all four D2 colours once build C adds
+line is generated by `buildPaletteLine()`, so it carries all four D2 colours once build B adds
 them. Build B makes `buildRedrawPrompt(colors, 'stones')` return `V3_HEAD`, then the palette line,
 then `V3_TAIL`, joined with `\n`. `V3_HEAD` and `V3_TAIL` are exactly the text below, split at the
 `<palette line>` marker.
@@ -695,7 +823,7 @@ Use only the colours below, with exactly these hex values, as flat fills:
 Before finishing, check that: every stone is a separate flat circle; no two stones touch; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used; the background is transparent or pure magenta.
 ```
 
-With the D2 colours added (build C), the generated palette line is exactly:
+With the D2 colours added (build B), the generated palette line is exactly:
 
 ```
 Crystal #f5f5f5, Crystal AB #e9f7ff, Jet #141414, Siam #9b1c1c, Light Siam #d9534f, Rose #ef8fb0, Fuchsia #c2185b, Amethyst #7e3f98, Sapphire #2269d3, Light Sapphire #6fa8dc, Aquamarine #3fc1b0, Emerald #2aa66a, Peridot #b5cc18, Topaz #e08e26, Citrine #f2c94c, Gold #f3bd32, Silver #d8dde4, Hematite #3e3f44, Black Diamond #6b6b72, Grey #9a9ca2, Smoked Topaz #6e4a2e, Light Colorado Topaz #b98a5c, Light Peach #eec6a4, Colorado Topaz #a0602c, Light Smoked Topaz #8a6a4a, Scarlet #d0101e, Hyacinth #e0581c
@@ -705,6 +833,4 @@ This requires the D2 colours to be appended to the end of `CRYSTAL_COLOR_LIST` i
 `light-peach`. Selectors group by `group`, so appending does not change where they appear in the
 pickers.
 
-The research doc's line differs from this one in order and in one name ("Light Colorado"). If
-build B lands before build C, the line has 23 entries until C merges. That is acceptable, because
-the prompt version records the wording, not the catalogue (`server/redraw/prompt.mjs:1`–`:5`).
+The research doc's line differs from this one in order and in one name ("Light Colorado").

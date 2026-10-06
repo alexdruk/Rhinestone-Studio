@@ -6,7 +6,7 @@ import { createImageBuffer, prepareImageField } from '../src/image/index.js';
 import { prepareAutoColorField, chooseAutoColorCount } from '../src/image/AutoColourCount.js';
 import { labelCatalogColors } from '../src/image/ColorQuantize.js';
 import { generateLineDesignStonePoints, LINE_DESIGN_INK_REFERENCE_COLOR_IDS } from '../src/geometry/LineDesignSampler.js';
-import { CRYSTAL_COLORS, STONE_COLORS, listCrystalColorGroups, isValidCrystalColorId, validateCrystalColorCatalog } from '../src/renderer/CrystalColors.js';
+import { CRYSTAL_COLORS, STONE_COLORS, listCrystalColorGroups, isValidCrystalColorId, validateCrystalColorCatalog, LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-016 -- neutral and brown stones. Six entries appended to the crystal-colour catalogue, one
 // derivation rule for their render channels (decision 1), every stone-colour <select> fed from that
@@ -32,7 +32,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const hexToRgb = (hex) => {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -180,9 +180,9 @@ const median = (values) => {
 };
 
 await test('6. decision 1: the six entries are appended after silver with their pinned values, which are the derivation rule applied to fill; the rule\'s constants are the medians over the 15 rule entries', () => {
-  assert.equal(CRYSTAL_COLORS.length, 23);
+  assert.equal(CRYSTAL_COLORS.length, 27);
   assert.equal(CRYSTAL_COLORS[16].id, 'silver');
-  const appended = CRYSTAL_COLORS.slice(17).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
+  const appended = CRYSTAL_COLORS.slice(17, 23).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
   assert.deepEqual(appended, PINNED_NEW_ENTRIES);
   for (const entry of PINNED_NEW_ENTRIES) {
     assert.deepEqual(applyRule(entry.fill), { stroke: entry.stroke, shine: entry.shine, accent: entry.accent }, `${entry.id} follows the rule`);
@@ -216,16 +216,17 @@ await test('7. decision 1: flat catalogue order and selector group order', () =>
   assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [
     'crystal-clear', 'crystal', 'jet', 'siam', 'light-siam', 'rose', 'fuchsia', 'amethyst', 'sapphire',
     'light-sapphire', 'aquamarine', 'emerald', 'peridot', 'topaz', 'citrine', 'gold', 'silver',
-    'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach'
+    'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach',
+    'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth'
   ]);
   assert.deepEqual(listCrystalColorGroups().map((g) => [g.group, g.colors.map((c) => c.id)]), [
     ['Clear & Neutral', ['crystal-clear', 'crystal', 'jet', 'black-diamond', 'grey']],
-    ['Red & Pink', ['siam', 'light-siam', 'rose', 'fuchsia']],
+    ['Red & Pink', ['siam', 'light-siam', 'rose', 'fuchsia', 'scarlet']],
     ['Purple & Blue', ['amethyst', 'sapphire', 'light-sapphire']],
     ['Green & Aqua', ['aquamarine', 'emerald', 'peridot']],
-    ['Yellow & Amber', ['topaz', 'citrine']],
+    ['Yellow & Amber', ['topaz', 'citrine', 'hyacinth']],
     ['Metallic', ['gold', 'silver', 'hematite']],
-    ['Brown & Peach', ['smoked-topaz', 'light-colorado', 'light-peach']]
+    ['Brown & Peach', ['smoked-topaz', 'light-colorado', 'light-peach', 'colorado-topaz', 'light-smoked-topaz']]
   ]);
 });
 

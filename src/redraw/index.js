@@ -5,12 +5,16 @@
  *
  * Swapping in another provider (the planned in-browser Web Worker model) is an edit to
  * selectProvider() below plus that provider's own file. A provider is a plain object:
- *   { id, consent, redraw({ pngDataUrl, accessCode, signal, style }) -> Promise<{ dataUrl, model, promptVersion }> }
+ *   { id, consent, redraw({ pngDataUrl, accessCode, signal, style, onStage }) -> Promise<{ dataUrl, model, promptVersion, layout?, layoutError? }> }
  * where consent is null (nothing leaves the browser) or { recipientName, costLabel, needsAccessCode }.
  * IMG-024: `style` is one of REDRAW_STYLES; a provider that sends no prompt (the fake, a future
  * Worker) ignores it.
  * A provider signals failure by throwing an Error whose `code` is one of REDRAW_ERROR_CODES, and
  * rethrows an AbortError unchanged.
+ * IMG-026 build B: the proxy provider runs a server job (OpenAI, then the layout service) and
+ * resolves `layout` (the layout service's answer) or `layoutError` ({ code, message }) next to the
+ * image; redrawImage() passes both through and forwards `onStage`. A provider without a layout (the
+ * fake, a future Worker) gives layout: null, layoutError: null.
  */
 
 import { decodeDataUrlToBuffer, computeSubjectMask } from '../image/index.js';
@@ -22,7 +26,8 @@ import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiPro
 export { applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, aiStoneMmPerPx } from './RedrawLayerTransform.js';
 
 // IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
-export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined']);
+// IMG-026: the layout-* codes describe a layout failure after a good OpenAI image (layoutError).
+export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined', 'layout-unavailable', 'layout-timeout', 'layout-failed']);
 // IMG-024 (D1): the same value as server/redraw/prompt.mjs's REDRAW_STYLES, restated because src/**
 // never imports server/**; a test keeps the two deepEqual.
 export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
@@ -56,7 +61,9 @@ const DEFAULTS = {
   fetch: (...args) => globalThis.fetch(...args),
   decodeImage: decodeDataUrlToBuffer,
   encodePng: defaultEncodePng,
-  provider: null
+  provider: null,
+  // IMG-026: the proxy provider's wait between polls, (ms, signal) -> Promise; null = real timers.
+  wait: null
 };
 
 let deps = { ...DEFAULTS };
@@ -83,7 +90,7 @@ async function selectProvider() {
     const body = await response.json();
     if (!body || body.providerId !== OPENAI_PROXY_PROVIDER_ID) return null;
     const costLabel = typeof body.costLabel === 'string' ? body.costLabel : '';
-    return createOpenAiProxyProvider({ fetch: deps.fetch, costLabel });
+    return createOpenAiProxyProvider(deps.wait ? { fetch: deps.fetch, costLabel, wait: deps.wait } : { fetch: deps.fetch, costLabel });
   } catch {
     return null;
   }
@@ -139,10 +146,10 @@ function untilAborted(promise, signal) {
 }
 
 /**
- * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat')}} request
- * @returns {Promise<{dataUrl:string, providerId:string, model:string, promptVersion:(number|null)}>}
+ * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat'), onStage?:function(string):void}} request
+ * @returns {Promise<{dataUrl:string, providerId:string, model:string, promptVersion:(number|null), layout:(object|null), layoutError:({code:string,message:string}|null)}>}
  */
-export async function redrawImage({ dataUrl, signal, style = 'stones' } = {}) {
+export async function redrawImage({ dataUrl, signal, style = 'stones', onStage } = {}) {
   if (signal && signal.aborted) throw abortError();
   if (!REDRAW_STYLES.includes(style)) throw new RedrawError('provider-failed', 'Unknown redraw style.');
   const provider = await untilAborted(activeProvider(), signal);
@@ -160,7 +167,7 @@ export async function redrawImage({ dataUrl, signal, style = 'stones' } = {}) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     let result;
     try {
-      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal, style })), signal);
+      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal, style, onStage })), signal);
     } catch (error) {
       if (error && error.name === 'AbortError') throw error;
       const code = error && REDRAW_ERROR_CODES.includes(error.code) ? error.code : 'provider-failed';
@@ -168,7 +175,7 @@ export async function redrawImage({ dataUrl, signal, style = 'stones' } = {}) {
       throw new RedrawError(code, error && typeof error.detail === 'string' ? error.detail : '');
     }
     const usable = result && typeof result.dataUrl === 'string' && await untilAborted(isUsableOutput(result.dataUrl), signal);
-    if (usable) return { dataUrl: result.dataUrl, providerId: provider.id, model: result.model, promptVersion: result.promptVersion };
+    if (usable) return { dataUrl: result.dataUrl, providerId: provider.id, model: result.model, promptVersion: result.promptVersion, layout: result.layout ?? null, layoutError: result.layoutError ?? null };
   }
   throw new RedrawError('invalid-output');
 }

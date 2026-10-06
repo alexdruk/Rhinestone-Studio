@@ -11,6 +11,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 import { PROMPT_VERSION, FLAT_PROMPT_VERSION, PROMPT_VERSIONS, REDRAW_STYLES as SERVER_REDRAW_STYLES, buildRedrawPrompt, buildPaletteLine } from '../server/redraw/prompt.mjs';
 import { loadRedrawEnv } from '../server/redraw/env.mjs';
 import { createRedrawHandler } from '../server/redraw/handler.mjs';
@@ -39,7 +40,7 @@ async function test(name, fn) {
 const repoUrl = new URL('..', import.meta.url);
 const appJs = await readFile(fileURLToPath(new URL('app.js', repoUrl)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('index.html', repoUrl)), 'utf8');
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const { chooseAiStonePalette, weightedLabDistance } = WeightedLabPalette;
 const engine = new GeometryEngine();
 
@@ -87,20 +88,34 @@ async function post(handler, body) {
 }
 const bodyWith = (extra) => JSON.stringify({ image: FAKE_REDRAW_DATA_URL, ...extra });
 
+// IMG-026 build B: the POST answers 202 { jobId }; this posts, then polls the job until it is done or
+// failed and returns its result ({ dataUrl, model, promptVersion }). No layout URL is set, so the
+// job ends with layout-unavailable and the OpenAI image in result.
+async function jobResult(handler, body) {
+  const res = await post(handler, body);
+  assert.equal(res.statusCode, 202);
+  for (let i = 0; i < 5000; i++) {
+    const r = makeRes();
+    await handler.handleJob(Object.assign(makeReq({ headers: { 'x-redraw-access-code': 'letmein' } }), { method: 'GET' }), r, res.json().jobId);
+    const job = r.json();
+    if (job.stage === 'done' || job.stage === 'failed') return job.result;
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  throw new Error('the redraw job did not finish');
+}
+
 // ---- T1. Server style validation and default ----------------------------------------------------
 
-await test('T1. server: no style / stones -> 200 promptVersion 2 with the stones prompt; flat -> 200 promptVersion 1 with the flat prompt; any other value -> 400 with no upstream fetch; fake mode per style', async () => {
+await test('T1. server: no style / stones -> 202 job whose result has promptVersion 3 with the stones prompt; flat -> 202 job whose result has promptVersion 1 with the flat prompt; any other value -> 400 with no upstream fetch; fake mode per style', async () => {
   for (const body of [JSON.stringify({ image: FAKE_REDRAW_DATA_URL }), bodyWith({ style: 'stones' })]) {
     const spy = spyFetch(okImage);
-    const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 2 });
+    const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);
+    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 3 });
     assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt());
   }
   const spy = spyFetch(okImage);
-  const res = await post(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), bodyWith({ style: 'flat' }));
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.json(), { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 }, 'style is not echoed');
+  const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), bodyWith({ style: 'flat' }));
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 }, 'style is not echoed');
   assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt(undefined, 'flat'));
 
   for (const style of [null, 'Flat', '', 1, {}]) {
@@ -112,17 +127,17 @@ await test('T1. server: no style / stones -> 200 promptVersion 2 with the stones
   }
 
   const fake = createRedrawHandler({ settings: FAKE_SETTINGS });
-  assert.equal((await post(fake, bodyWith({ style: 'flat' }))).json().promptVersion, 1);
-  assert.equal((await post(fake, bodyWith({ style: 'stones' }))).json().promptVersion, 2);
-  assert.equal((await post(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).json().promptVersion, 2);
+  assert.equal((await jobResult(fake, bodyWith({ style: 'flat' }))).promptVersion, 1);
+  assert.equal((await jobResult(fake, bodyWith({ style: 'stones' }))).promptVersion, 3);
+  assert.equal((await jobResult(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).promptVersion, 3);
 });
 
 // ---- T2. Flat prompt text and version -----------------------------------------------------------
 
 await test('T2. prompt: versions; the flat prompt is exactly line 1, the palette header and buildPaletteLine(); the stones prompt is unchanged; REDRAW_STYLES agree', () => {
   assert.equal(FLAT_PROMPT_VERSION, 1);
-  assert.equal(PROMPT_VERSION, 2);
-  assert.deepEqual(PROMPT_VERSIONS, { stones: 2, flat: 1 });
+  assert.equal(PROMPT_VERSION, 3);
+  assert.deepEqual(PROMPT_VERSIONS, { stones: 3, flat: 1 });
   assert.deepEqual(buildRedrawPrompt(undefined, 'flat').split('\n'), [FLAT_LINE_1, 'Palette (name and hex):', buildPaletteLine()]);
   assert.equal(buildRedrawPrompt(), buildRedrawPrompt(undefined, 'stones'));
   assert.equal(buildRedrawPrompt(STONE_COLORS), buildRedrawPrompt());
@@ -147,18 +162,19 @@ await test('T3. client: the proxy posts style (stones by default); an unknown st
   const fetch = async (url, init) => {
     requests++;
     if (url === '/api/redraw/config') return status(200, { providerId: 'openai-proxy', costLabel: '' });
+    if (init.method !== 'POST') return status(200, { stage: 'done', result: { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1, layout: null } });
     posts.push(JSON.parse(init.body));
-    return status(200, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 });
+    return status(202, { jobId: 'job-1' });
   };
   // The source is any small image; the output must pass the usability check, so it is a disc on
   // transparent (test-img-022's FAKE_FORMULA shape).
   const disc = { widthPx: 64, heightPx: 64, data: new Uint8ClampedArray(64 * 64 * 4) };
   for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) if (Math.hypot(x + 0.5 - 32, y + 0.5 - 32) <= 24) disc.data.set([20, 20, 20, 255], (y * 64 + x) * 4);
   const decodeImage = (u) => (u === FAKE_REDRAW_DATA_URL ? disc : { widthPx: 4, heightPx: 4, data: new Uint8ClampedArray(64).fill(200) });
-  configureRedraw({ fetch, decodeImage, encodePng: () => `${PNG_PREFIX}UPLOAD` });
+  configureRedraw({ fetch, decodeImage, encodePng: () => `${PNG_PREFIX}UPLOAD`, wait: async () => {} });
   setRedrawAccessCode('letmein');
   const flatResult = await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE`, style: 'flat' });
-  assert.deepEqual(Object.keys(flatResult), ['dataUrl', 'providerId', 'model', 'promptVersion'], 'the resolved value gains no key');
+  assert.deepEqual(Object.keys(flatResult), ['dataUrl', 'providerId', 'model', 'promptVersion', 'layout', 'layoutError'], 'the resolved value gains only the IMG-026 layout keys');
   await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` });
   assert.deepEqual(posts, [{ image: `${PNG_PREFIX}UPLOAD`, style: 'flat' }, { image: `${PNG_PREFIX}UPLOAD`, style: 'stones' }]);
 

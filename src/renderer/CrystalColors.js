@@ -154,10 +154,37 @@ const CRYSTAL_COLOR_LIST = [
   defineColor({
     id: 'light-peach', name: 'Light Peach', group: 'Brown & Peach',
     fill: '#eec6a4', stroke: '#856f5c', shine: '#fcf5f0', accent: '#b7987e'
+  }),
+  // -- IMG-026 (D2): appended after light-peach, same shading rule as the IMG-016 entries. The
+  // layout service's strass_layout/catalogue.json must match these (S4). -----------------------
+  defineColor({
+    id: 'colorado-topaz', name: 'Colorado Topaz', group: 'Brown & Peach',
+    fill: '#a0602c', stroke: '#5a3619', shine: '#efe4db', accent: '#7b4a22'
+  }),
+  defineColor({
+    id: 'light-smoked-topaz', name: 'Light Smoked Topaz', group: 'Brown & Peach',
+    fill: '#8a6a4a', stroke: '#4d3b29', shine: '#ebe6e0', accent: '#6a5239'
+  }),
+  defineColor({
+    id: 'scarlet', name: 'Scarlet', group: 'Red & Pink',
+    fill: '#d0101e', stroke: '#740911', shine: '#f7d6d9', accent: '#a00c17'
+  }),
+  defineColor({
+    id: 'hyacinth', name: 'Hyacinth', group: 'Yellow & Amber',
+    fill: '#e0581c', stroke: '#7d3110', shine: '#fae3d8', accent: '#ac4416'
   })
 ];
 
 export const CRYSTAL_COLORS = CRYSTAL_COLOR_LIST;
+
+// IMG-026 (S13): the 23 pre-v2 ids, in catalogue order, that legacy image fill modes quantise
+// against. app.js's imageColorPalette() restates them as a literal (its region is new Function()-
+// evaluated by test harnesses); tools/test-img-026-catalogue.mjs keeps the two equal.
+export const LEGACY_IMAGE_COLOR_IDS = Object.freeze([
+  'crystal-clear', 'crystal', 'jet', 'siam', 'light-siam', 'rose', 'fuchsia', 'amethyst',
+  'sapphire', 'light-sapphire', 'aquamarine', 'emerald', 'peridot', 'topaz', 'citrine', 'gold',
+  'silver', 'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach'
+]);
 
 /** Id-keyed lookup map — the same shape the pre-RS-1007 `STONE_COLORS` object already had. */
 export const STONE_COLORS = Object.fromEntries(CRYSTAL_COLOR_LIST.map((c) => [c.id, c]));
