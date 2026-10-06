@@ -6,6 +6,7 @@ import { createImageBuffer, prepareImageField } from '../src/image/index.js';
 import { prepareAutoColorField, chooseAutoColorCount } from '../src/image/AutoColourCount.js';
 import { createGeometryEngine } from '../src/geometry/index.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-018 -- whole-image mask. maskMode 'whole' makes every pixel subject, except where the
 // transparent policy removes it (decision 2); Line Design masks by alpha only (decision 3); every
@@ -29,7 +30,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
 

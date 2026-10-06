@@ -6,7 +6,9 @@ export const REDRAW_ENV_DEFAULTS = Object.freeze({
   OPENAI_IMAGE_MODEL: 'gpt-image-2',
   OPENAI_IMAGE_QUALITY: 'high',
   REDRAW_RATE_LIMIT_PER_HOUR: 20,
-  REDRAW_TIMEOUT_SECONDS: 300
+  REDRAW_TIMEOUT_SECONDS: 300,
+  LAYOUT_SERVICE_URL: '',
+  LAYOUT_TIMEOUT_SECONDS: 180
 });
 
 // KEY=value lines; blank lines and # comments skipped; one pair of surrounding quotes removed; no
@@ -32,6 +34,7 @@ export function loadRedrawEnv({ env = process.env, envFileText = '' } = {}) {
   const str = (key) => (typeof get(key) === 'string' ? get(key).trim() : '');
   const limit = Number(str('REDRAW_RATE_LIMIT_PER_HOUR'));
   const timeoutSeconds = Number(str('REDRAW_TIMEOUT_SECONDS'));
+  const layoutTimeoutSeconds = Number(str('LAYOUT_TIMEOUT_SECONDS'));
   return {
     openaiApiKey: str('OPENAI_API_KEY'),
     imageModel: str('OPENAI_IMAGE_MODEL') || REDRAW_ENV_DEFAULTS.OPENAI_IMAGE_MODEL,
@@ -40,7 +43,11 @@ export function loadRedrawEnv({ env = process.env, envFileText = '' } = {}) {
     rateLimitPerHour: Number.isInteger(limit) && limit > 0 ? limit : REDRAW_ENV_DEFAULTS.REDRAW_RATE_LIMIT_PER_HOUR,
     costLabel: str('REDRAW_COST_LABEL'),
     timeoutMs: (Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds : REDRAW_ENV_DEFAULTS.REDRAW_TIMEOUT_SECONDS) * 1000,
-    fake: str('REDRAW_FAKE') === '1'
+    fake: str('REDRAW_FAKE') === '1',
+    // IMG-026: the layout service. An empty URL leaves the redraw routes on; each job then ends with
+    // layout-unavailable and still returns the OpenAI image.
+    layoutServiceUrl: str('LAYOUT_SERVICE_URL') || REDRAW_ENV_DEFAULTS.LAYOUT_SERVICE_URL,
+    layoutTimeoutMs: (Number.isFinite(layoutTimeoutSeconds) && layoutTimeoutSeconds > 0 ? layoutTimeoutSeconds : REDRAW_ENV_DEFAULTS.LAYOUT_TIMEOUT_SECONDS) * 1000
   };
 }
 

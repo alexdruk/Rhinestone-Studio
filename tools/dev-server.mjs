@@ -3,9 +3,10 @@
 // response so a browser never reuses a stale ES module (app.js, src/**) after a pull or checkout.
 // IMG-022: it also serves the optional "Redraw with AI" routes (GET /api/redraw/config, POST
 // /api/redraw; server/redraw/handler.mjs) when REDRAW_ACCESS_CODE is set and either OPENAI_API_KEY
-// or REDRAW_FAKE=1 is set, in the environment or in the repo's .env (see .env.example). Otherwise both
+// or REDRAW_FAKE=1 is set, in the environment or in the repo's .env (see .env.example). Otherwise the
 // routes are 404 and the app works without them: its Redraw button stays hidden. This is a local
-// server, not a production host.
+// server, not a production host. IMG-026: POST /api/redraw starts a job; GET and DELETE
+// /api/redraw/:jobId poll and cancel it. LAYOUT_SERVICE_URL points the jobs at the layout service.
 //
 // Usage: node tools/dev-server.mjs [port]   (default 5173; 0 picks a free port)
 import { createServer } from 'node:http';
@@ -76,6 +77,8 @@ const server = createServer(async (req, res) => {
   const routePath = (req.url || '/').split('?')[0];
   if (routePath === '/api/redraw/config' && req.method === 'GET') return redraw.handleConfig(req, res);
   if (routePath === '/api/redraw' && req.method === 'POST') return redraw.handleRedraw(req, res);
+  const jobMatch = /^\/api\/redraw\/([^/]+)$/.exec(routePath);
+  if (jobMatch && (req.method === 'GET' || req.method === 'DELETE')) return redraw.handleJob(req, res, jobMatch[1]);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed');
   let found;
   try {
@@ -99,4 +102,7 @@ server.listen(requestedPort, () => {
   console.log(redrawStatus.configured
     ? `Redraw with AI is on${redrawSettings.fake ? ' (fake mode, no OpenAI calls)' : ''}.`
     : `Redraw with AI is off: ${redrawStatus.missing.join(' and ')} not set.`);
+  if (redrawStatus.configured && !redrawSettings.fake) {
+    console.log(redrawSettings.layoutServiceUrl ? `Layout service: ${redrawSettings.layoutServiceUrl}` : 'Layout service: not set (LAYOUT_SERVICE_URL), redraws stop after the AI image.');
+  }
 });

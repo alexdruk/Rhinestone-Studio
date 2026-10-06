@@ -9,7 +9,7 @@ import { rgbToLab, cie76Distance } from '../src/image/ColorSpace.js';
 import { createGeometryEngine } from '../src/geometry/index.js';
 import { fieldLabelAt } from '../src/geometry/StoneSampler.js';
 import { LINE_DESIGN_MIN_COLOR_SHARE } from '../src/geometry/LineDesignSampler.js';
-import { STONE_COLORS, CRYSTAL_COLORS } from '../src/renderer/CrystalColors.js';
+import { STONE_COLORS, CRYSTAL_COLORS, LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-015 -- direct catalogue colour. quantizeColors() labels every subject pixel with its nearest
 // catalog colour, drops colours under a 1.2% share, keeps at most colorCount of the rest and
@@ -39,7 +39,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 
 // ---- The spec's fixtures, verbatim --------------------------------------------------------------
 const FIXTURE_SIZE_PX = 60;

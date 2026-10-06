@@ -56,6 +56,9 @@ export const GROUPS = {
     'test-object-dimensions.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-color-catalog.mjs',
+    // IMG-026 build B: the D2 colours, the S4 cross-check with the layout service's catalogue.json
+    // and the S13 legacy palette pin in app.js.
+    'test-img-026-catalogue.mjs',
     'test-image-pipeline.mjs',
     'test-img-001-field.mjs',
     'test-img-002-color-layers.mjs',
@@ -132,6 +135,9 @@ export const GROUPS = {
     // IMG-024: flat artwork redraw style -- server style check, client wire/record, the 'error'
     // palette rule, the WeightedLabPalette.js move and the app.js/index.html wiring.
     'test-img-024-flat-artwork-style.mjs',
+    // IMG-026 build B: redraw jobs -- the job API, the layout-service call, fake mode and the
+    // polling client, with injected fetch, clock and timers.
+    'test-img-026-redraw-jobs.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

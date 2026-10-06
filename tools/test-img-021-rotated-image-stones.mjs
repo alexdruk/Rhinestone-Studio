@@ -8,6 +8,7 @@ import { createGeometryEngine, GeometryEngine } from '../src/geometry/index.js';
 import { combineShapeSources } from '../src/geometry/PathBoolean.js';
 import { prepareImageField } from '../src/image/index.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
@@ -24,7 +25,7 @@ async function test(name, fn) {
 }
 
 const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const engine = createGeometryEngine();
 
 function parseHex(hex) {

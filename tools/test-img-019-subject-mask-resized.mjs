@@ -9,6 +9,7 @@ import { blurMask } from '../src/image/Blur.js';
 import { computeSubjectMask } from '../src/image/SubjectMask.js';
 import { generateLineDesignStonePoints } from '../src/geometry/LineDesignSampler.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 
 // IMG-019 -- subject mask on a resized copy. Above SUBJECT_MASK_RESIZE_TRIGGER_PX on the longer side,
 // prepareImageField()'s 'subject' mask is computed on a box-resized RGBA copy capped at
@@ -32,7 +33,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 
 function ringFixture(side) {
   const widthPx = side, heightPx = side;

@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
+import { LEGACY_IMAGE_COLOR_IDS } from '../src/renderer/CrystalColors.js';
 import { detectAiStones } from '../src/image/index.js';
 import { isJetLikeLab, ellipseRowHalfWidths, AI_STONE_MIN_DOT_STONES, AI_STONE_MIN_COVERAGE } from '../src/image/AiStoneDetect.js';
 import { chooseAiStonePalette, placeAiStones, catalogueLabs, weightedLabDistance } from '../src/geometry/AiStoneSampler.js';
@@ -30,7 +31,7 @@ async function test(name, fn) {
 
 const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
-const PALETTE = Object.values(STONE_COLORS).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
 const engine = new GeometryEngine();
 
 // ---- the synthetic detection fixture (spec: "Synthetic detection fixture") --------------------

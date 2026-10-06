@@ -167,7 +167,9 @@ the quantizer palette for every legacy fill mode from all of `STONE_COLORS`. If 
 reached it, saved image layers would re-quantize differently and D4 would break. Build B pins the
 legacy palette to the 23 pre-v2 ids with a literal array, filtered inside the function body. This
 region of app.js is `new Function()`-evaluated by several test harnesses, so no import may be
-read at load time. Manual pickers, Design and the ai-layout path get all 27 colours.
+read at load time. Manual pickers, Design and the ai-layout path get all 27 colours. The 23 ids are
+also exported as `LEGACY_IMAGE_COLOR_IDS` from `src/renderer/CrystalColors.js` for tests; a test
+asserts the app.js literal equals it.
 
 **S14. Size: enlarge only, aspect locked.** For an ai-layout layer, k = `layer.w / aiLayout.widthMm`.
 The engine places each stone at (k·x, k·y) and keeps its diameter. With k ≥ 1 every gap stays
@@ -691,7 +693,18 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
 - `tools/test-img-022-redraw-provider.mjs`, `tools/test-img-024-flat-artwork-style.mjs`: the
   prompt text and version, the `/api/redraw` response shape, the redraw button (builds B, C).
-- `tools/test-crystal-color-catalog.mjs:90`–`:91`: asserts 23 colours (build B → 27).
+- `tools/test-crystal-color-catalog.mjs:90`–`:91`: asserts 23 colours (build B → 27); `:158` and
+  `:160` pin the six IMG-016 entries as `slice(17)` and the full id list (build B).
+- `tools/test-img-016-neutral-brown-stones.mjs:183`, `:185`–`:186` and `:221`–`:229`: the colour
+  count, the six IMG-016 entries as `slice(17)` and the selector groups (build B); `:35` builds the
+  quantizer stand-in palette from all of `STONE_COLORS` (build B, S13).
+- The quantizer stand-in palette (`const PALETTE = Object.values(STONE_COLORS)...`) in
+  `tools/test-img-012-auto-colour-count.mjs`, `test-img-013-fill-empty-slots.mjs`,
+  `test-img-015-direct-catalogue-colour.mjs`, `test-img-017-vividness.mjs`,
+  `test-img-018-whole-image-mask.mjs`, `test-img-019-subject-mask-resized.mjs`,
+  `test-img-021-rotated-image-stones.mjs`, `test-img-023-ai-stone-transfer.mjs`,
+  `test-img-024-flat-artwork-style.mjs` and `test-img-025-stone-cleanup.mjs`: filtered to
+  `LEGACY_IMAGE_COLOR_IDS` so it stays the palette `imageColorPalette()` returns (build B, S13).
 - `tools/test-stone-size-library.mjs`: the five sizes and the font-config cross-check (build C,
   S12).
 - Every test that evaluates the app.js span from `const DEFAULT_TEXT_FONT_ID=` (`app.js:177`) to
