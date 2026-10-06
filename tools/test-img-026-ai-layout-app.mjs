@@ -199,6 +199,19 @@ await test('4. applyRedraw() without a layout is the IMG-023 path unchanged; res
   assert.deepEqual(restoreOriginal(applyRedraw(noFill, RESULT, { ...OPTS, layout: FAKE_LAYOUT })), noFill, 'no fillMode before means none after');
 });
 
+await test('4b. an ai-layout layer redrawn again without a layout (or flat) loses aiLayout and colorSwaps; Use original still restores the layer from before the first redraw', () => {
+  const first = { ...aiLayer(), colorSwaps: { jet: 'scarlet' } };
+  const again = applyRedraw(first, { ...RESULT, layout: null, layoutError: { code: 'layout-failed', message: 'x' } }, { ...OPTS, layout: null, aiPitchPx: 16 });
+  assert.equal(again.fillMode, 'ai-stones');
+  assert.ok(!('aiLayout' in again) && !('colorSwaps' in again));
+  assert.equal(again.redraw.previousFillMode, 'staggered');
+  assert.deepEqual(restoreOriginal(again), IMAGE_LAYER);
+  const flat = applyRedraw(first, { ...RESULT, layout: FAKE_LAYOUT }, { ...OPTS, layout: FAKE_LAYOUT, style: 'flat' });
+  assert.equal(flat.fillMode, 'staggered');
+  assert.ok(!('aiLayout' in flat) && !('colorSwaps' in flat));
+  assert.deepEqual(restoreOriginal(flat), IMAGE_LAYER);
+});
+
 await test('5. fitAiLayoutCanvas(): the Flat Sheet grows to the box plus 20 mm, rounded up, capped at SHEET_MAX_MM, never shrinks', () => {
   assert.deepEqual(fitAiLayoutCanvas({ canvas: { width: 40, height: 40 }, widthMm: 34.2, heightMm: 33.87, sheetMaxMm: SHEET_MAX_MM }), { width: 55, height: 54 });
   assert.deepEqual(fitAiLayoutCanvas({ canvas: { width: 300, height: 290 }, widthMm: 34.2, heightMm: 33.87, sheetMaxMm: SHEET_MAX_MM }), { width: 300, height: 290 });

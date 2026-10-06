@@ -81,7 +81,7 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // docs/specifications/IMG-026-StrassLayoutService.md, "Engine".
 const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design', 'ai-stones', 'ai-layout']);
 // IMG-026 (C1): the layout service's size ids and their diameters. Hand-matched to
-// src/renderer/StoneSizes.js (src/geometry/** must not import src/renderer/**);
+// StoneSizes.js (the app's stone-size catalogue), which this engine must not import;
 // tools/test-img-026-ai-layout-engine.mjs asserts the two agree.
 const AI_LAYOUT_SIZE_MM = Object.freeze({ ss4: 1.5, ss6: 2.0, ss10: 2.8, ss16: 4.0, ss20: 4.7, ss30: 6.4 });
 // IMG-026 (S3): a pair is a gap violation below this many mm, the service's own rule.

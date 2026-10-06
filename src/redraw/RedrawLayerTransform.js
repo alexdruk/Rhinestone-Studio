@@ -94,7 +94,8 @@ export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, sto
  *   'staggered' and paletteRule 'error'; any other style is 'stones'.
  *   IMG-026 (C1): a stones redraw with a `layout` (the layout service answer) becomes an ai-layout
  *   layer: it stores `aiLayout`, sets `colorSwaps: {}`, and the box is exactly the layout's
- *   widthMm x heightMm, centred where the layer was and never shrunk (S14, S15).
+ *   widthMm x heightMm, centred where the layer was and never shrunk (S14, S15). Any other redraw
+ *   removes `aiLayout` and `colorSwaps`, which belong to the previous AI image.
  */
 export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1, style = 'stones', layout = null }) {
   const isFlat = style === 'flat';
@@ -177,6 +178,12 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
   // IMG-024 (F3): a stones redraw puts back the paletteRule from before the first flat redraw, so
   // its result is the same whichever style came before. It never records previousPaletteRule itself.
   if (!isFlat && 'previousPaletteRule' in base) setOrDelete(out, 'paletteRule', base.previousPaletteRule === null ? undefined : base.previousPaletteRule);
+  // IMG-026 (C1): a redraw that does not produce a layout drops the previous AI image's layout and
+  // colour swaps.
+  if (!isAiLayout) {
+    delete out.aiLayout;
+    delete out.colorSwaps;
+  }
   return out;
 }
 

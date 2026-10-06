@@ -434,7 +434,7 @@ B could not be checked end to end against the real service.
   `stoneSize` and `gap`, because the existing checks and shared controls need them; `applyRedraw`
   keeps the values the layer already has.
 - A layer keeps `aiLayout` when the user switches it to a legacy fill style, so switching back
-  restores the same stones.
+  restores the same stones. A redraw that does not produce a layout removes aiLayout and colorSwaps, because they belong to the previous AI image.
 
 ### Engine
 
