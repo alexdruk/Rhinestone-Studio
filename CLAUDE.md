@@ -205,6 +205,14 @@ does not check, such as Set methods and CSS nesting).
 
 ------------------------------------------------------------------------
 
+# Layout service (IMG-026)
+
+CLAUDE.md says "JavaScript only". D5 makes an exception for this one
+service: Python lives only in `services/strass-layout/`. Nothing in `src/`,
+`app.js` or `server/` imports it, and the app reaches it only over HTTP.
+
+------------------------------------------------------------------------
+
 # UI Principles
 
 Preferred appearance:
