@@ -135,7 +135,7 @@ await test('3. Production Sheet header shows the commercial name alongside mm fo
   });
   const sizeLine = layout.headerLines.find((l) => l.text.startsWith('Stone size:'));
   assert.ok(sizeLine, 'expected a Stone size header line');
-  assert.equal(sizeLine.text, 'Stone size: 1.5 mm, SS6 (2 mm), SS16 (4 mm)');
+  assert.equal(sizeLine.text, 'Stone size: SS4 (1.5 mm), SS6 (2 mm), SS16 (4 mm)');
 });
 
 await test('4. distinctSizesMm remains a plain sorted-ascending mm array (unchanged shape for existing consumers/tests)', () => {

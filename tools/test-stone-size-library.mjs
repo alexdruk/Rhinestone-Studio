@@ -18,6 +18,7 @@ const {
   getStoneSize,
   isValidStoneSizeId,
   listStoneSizes,
+  listAllStoneSizes,
   findStoneSizeByDiameterMm,
   formatStoneSizeLabel,
   validateStoneSizeCatalog,
@@ -109,7 +110,7 @@ await test('6. listStoneSizes() returns every entry, in catalog order, as a defe
 await test('7. findStoneSizeByDiameterMm() matches within tolerance, returns null for custom/legacy values', () => {
   assert.equal(findStoneSizeByDiameterMm(4.0).name, 'SS16');
   assert.equal(findStoneSizeByDiameterMm(4.003).name, 'SS16', 'small float drift must still match');
-  assert.equal(findStoneSizeByDiameterMm(1.5), null, 'a legacy/custom mm value with no catalog match must return null, not the nearest size');
+  assert.equal(findStoneSizeByDiameterMm(1.5).name, 'SS4', 'IMG-026 S12: 1.5 mm is the image-only SS4');
   assert.equal(findStoneSizeByDiameterMm(2.5), null);
   assert.equal(findStoneSizeByDiameterMm(NaN), null);
   assert.equal(findStoneSizeByDiameterMm(undefined), null);
@@ -118,7 +119,7 @@ await test('7. findStoneSizeByDiameterMm() matches within tolerance, returns nul
 await test('8. formatStoneSizeLabel() shows commercial name + mm for a catalog match, plain mm otherwise', () => {
   assert.equal(formatStoneSizeLabel(4.0), 'SS16 (4 mm)');
   assert.equal(formatStoneSizeLabel(2.0), 'SS6 (2 mm)');
-  assert.equal(formatStoneSizeLabel(1.5), '1.5 mm');
+  assert.equal(formatStoneSizeLabel(1.5), 'SS4 (1.5 mm)');
   assert.equal(formatStoneSizeLabel(1.234), '1.23 mm');
 });
 
@@ -183,7 +184,8 @@ await test('11. validateStoneSizeCatalog() validates supportedHeightRangeMm shap
 // offline Python-tooling config, not shipped to the browser app; see FONT-DECISION-001 milestone
 // notes on why a live fetch of tools/ config isn't used here).
 await test('12. every catalog supportedHeightRangeMm exactly matches its tools/font-generator/config/SS*.json source', async () => {
-  for (const s of STONE_SIZES) {
+  for (const s of listAllStoneSizes()) {
+    if (s.imageOnly) continue;
     const configPath = path.join(repoRoot, 'tools/font-generator/config', `${s.name}.json`);
     const config = JSON.parse(await readFile(configPath, 'utf8'));
     assert.deepEqual(

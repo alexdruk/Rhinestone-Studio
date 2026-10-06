@@ -49,6 +49,35 @@ export function fitAiStoneBox({ centerXMm, centerYMm, widthPx, heightPx, aiPitch
   return { x, y, w, h, canvas: outCanvas };
 }
 
+/**
+ * IMG-026 (C1): the Flat Sheet for an ai-layout box. The sheet grows to fit the box plus 20 mm,
+ * rounded up to a whole millimetre and never past `sheetMaxMm`, as fitAiStoneBox() does; it never
+ * shrinks.
+ */
+export function fitAiLayoutCanvas({ canvas, widthMm, heightMm, sheetMaxMm }) {
+  return {
+    width: Math.min(sheetMaxMm, Math.max(canvas.width, Math.ceil(widthMm + 20))),
+    height: Math.min(sheetMaxMm, Math.max(canvas.height, Math.ceil(heightMm + 20)))
+  };
+}
+
+// IMG-026 (C1): the layer's copy of a layout service answer. Of the report it keeps only the keys
+// the app shows; stones keep the service's order.
+const AI_LAYOUT_REPORT_KEYS = ['minGapMm', 'violations', 'coverage', 'face', 'ms'];
+function aiLayoutFromResult(layout) {
+  const report = {};
+  const source = layout.report && typeof layout.report === 'object' ? layout.report : {};
+  for (const key of AI_LAYOUT_REPORT_KEYS) if (key in source) report[key] = source[key];
+  return {
+    version: layout.version,
+    widthMm: layout.widthMm,
+    heightMm: layout.heightMm,
+    stones: layout.stones.map((t) => [...t]),
+    report,
+    editCount: 0
+  };
+}
+
 // IMG-023 (D2): how large the box is relative to the AI's own drawing (1 = one AI stone per real
 // stone). Uses the live box, so a manual resize counts.
 export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, stoneSizeMm, gapMm }) {
@@ -63,8 +92,11 @@ export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, sto
  *   one, the IMG-022 behaviour (160 mm long side, fillMode unchanged) is kept exactly.
  *   IMG-024: style 'flat' ignores aiPitchPx/shrink, takes the IMG-022 sizing and sets fillMode
  *   'staggered' and paletteRule 'error'; any other style is 'stones'.
+ *   IMG-026 (C1): a stones redraw with a `layout` (the layout service answer) becomes an ai-layout
+ *   layer: it stores `aiLayout`, sets `colorSwaps: {}`, and the box is exactly the layout's
+ *   widthMm x heightMm, centred where the layer was and never shrunk (S14, S15).
  */
-export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1, style = 'stones' }) {
+export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1, style = 'stones', layout = null }) {
   const isFlat = style === 'flat';
   const prev = layer.redraw && typeof layer.redraw === 'object' ? layer.redraw : null;
   const base = prev
@@ -96,13 +128,17 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
   // likewise (the paletteRule before the first flat redraw).
   if (prev && 'previousFillMode' in prev) base.previousFillMode = prev.previousFillMode;
   if (prev && 'previousPaletteRule' in prev) base.previousPaletteRule = prev.previousPaletteRule;
-  const isAiStones = !isFlat && finite(aiPitchPx) && aiPitchPx > 0;
-  if ((isAiStones || isFlat) && !('previousFillMode' in base)) base.previousFillMode = layer.fillMode ?? null;
+  const isAiLayout = !isFlat && Boolean(layout) && typeof layout === 'object';
+  const isAiStones = !isFlat && !isAiLayout && finite(aiPitchPx) && aiPitchPx > 0;
+  if ((isAiStones || isAiLayout || isFlat) && !('previousFillMode' in base)) base.previousFillMode = layer.fillMode ?? null;
   if (isFlat && !('previousPaletteRule' in base)) base.previousPaletteRule = layer.paletteRule ?? null;
 
   const cx = layer.x + layer.w / 2, cy = layer.y + layer.h / 2;
   let x, y, w, h;
-  if (isAiStones) {
+  if (isAiLayout) {
+    w = layout.widthMm; h = layout.heightMm;
+    x = cx - w / 2; y = cy - h / 2;
+  } else if (isAiStones) {
     ({ x, y, w, h } = fitAiStoneBox({ centerXMm: cx, centerYMm: cy, widthPx: naturalWidthPx, heightPx: naturalHeightPx, aiPitchPx, stoneSizeMm: layer.stoneSize, gapMm: layer.gap, shrink, canvas }));
   } else {
     const scale = REDRAW_LONG_SIDE_MM / Math.max(naturalWidthPx, naturalHeightPx);
@@ -119,6 +155,7 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
   const out = {
     ...layer,
     ...(isAiStones ? { fillMode: 'ai-stones' } : {}),
+    ...(isAiLayout ? { fillMode: 'ai-layout', aiLayout: aiLayoutFromResult(layout), colorSwaps: {} } : {}),
     ...(isFlat ? { fillMode: 'staggered', paletteRule: 'error' } : {}),
     imageSrc: result.dataUrl,
     imageName: `${base.originalImageName ?? ''}${REDRAW_NAME_SUFFIX}`,
@@ -143,11 +180,16 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
   return out;
 }
 
-/** "Use original": undoes applyRedraw() from the layer's own `redraw` record. */
+/**
+ * "Use original": undoes applyRedraw() from the layer's own `redraw` record. IMG-026 (C1): it also
+ * removes `aiLayout` and `colorSwaps`, which only a redraw writes.
+ */
 export function restoreOriginal(layer) {
   const r = layer.redraw;
   const out = { ...layer };
   delete out.redraw;
+  delete out.aiLayout;
+  delete out.colorSwaps;
   if (!r || typeof r !== 'object') return out;
   setOrDelete(out, 'imageSrc', r.originalImageSrc);
   setOrDelete(out, 'imageName', r.originalImageName);
@@ -156,7 +198,7 @@ export function restoreOriginal(layer) {
   setOrDelete(out, 'h', r.previousH);
   setOrDelete(out, 'naturalWidthPx', r.previousNaturalWidthPx);
   setOrDelete(out, 'naturalHeightPx', r.previousNaturalHeightPx);
-  // IMG-023: only a record written by an AI stones redraw changed fillMode.
+  // IMG-023: only a record written by an AI stones (or IMG-026 ai-layout) redraw changed fillMode.
   if ('previousFillMode' in r) setOrDelete(out, 'fillMode', r.previousFillMode === null ? undefined : r.previousFillMode);
   // IMG-024: only a record written by a flat redraw (or carried from one) changed paletteRule.
   if ('previousPaletteRule' in r) setOrDelete(out, 'paletteRule', r.previousPaletteRule === null ? undefined : r.previousPaletteRule);

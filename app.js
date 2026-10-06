@@ -92,7 +92,7 @@ import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStep
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
@@ -137,7 +137,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -274,7 +274,7 @@ function ensureStoneSizeOption(select,diameterMm){
   const existing=select.querySelector('option[data-custom="1"]');
   if(existing)existing.remove();
   const catalogMatch=findStoneSizeByDiameterMm(diameterMm);
-  if(catalogMatch)return;
+  if(catalogMatch&&!catalogMatch.imageOnly)return;
   const opt=document.createElement('option');
   opt.value=String(diameterMm);opt.dataset.custom='1';
   opt.textContent=`Custom — ${(Math.round(diameterMm*100)/100)} mm`;
@@ -675,7 +675,7 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // #textMode value); every other layer type's stored value already equals the engine's own mode name
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
-const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design','ai-stones']);
+const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design','ai-stones','ai-layout']);
 const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
@@ -1158,7 +1158,15 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
  // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];
+  // IMG-026 (C1): an ai-layout layer is placed from layer.aiLayout and needs no decoded image, so it
+  // branches before the decode below and still shows its stones when the image fails to decode.
+  if(resolveImageFillMode(layer.fillMode)==='ai-layout'){
+    const result=this.permanentEngine.generateImageLayout({mode:'ai-layout',layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,rotationDeg:layer.rotationDeg??0,aiLayout:layer.aiLayout,colorSwaps:layer.colorSwaps??{}});
+    const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));
+    return includeStats?{stones,outlineStats:null,aiLayoutStats:result.aiLayoutStats}:stones;
+  }
+  let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
   const mode=resolveImageFillMode(layer.fillMode);
   // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
   // freeze fallback below.
@@ -1295,6 +1303,17 @@ function validateProject(obj){
     // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
     if(l.type==='image'&&l.redraw!==undefined&&!(l.redraw&&typeof l.redraw==='object'&&!Array.isArray(l.redraw)&&typeof l.redraw.originalImageSrc==='string'&&l.redraw.originalImageSrc.startsWith('data:image/')))throw new Error(`Image layer "${l.id}" has an invalid 'redraw' record: originalImageSrc must be a data:image/ URL.`);
+    // IMG-026 (C1): an ai-layout layer's stone list and colour swaps. Size ids cover all six sizes
+    // (SS4 included), colour ids all of STONE_COLORS. Coordinates outside the box are allowed.
+    if(l.type==='image'&&l.aiLayout!==undefined){
+      const a=l.aiLayout;
+      if(!a||typeof a!=='object'||Array.isArray(a)||a.version!==1)throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': version must be 1.`);
+      if(![a.widthMm,a.heightMm].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': widthMm/heightMm must be positive numbers.`);
+      if(!Array.isArray(a.stones)||a.stones.length>20000)throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': stones must be an array of at most 20000 entries.`);
+      a.stones.forEach((t,i)=>{if(!(Array.isArray(t)&&t.length===4&&typeof t[0]==='number'&&Number.isFinite(t[0])&&typeof t[1]==='number'&&Number.isFinite(t[1])&&isValidStoneSizeId(t[2])&&typeof t[3]==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,t[3])))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout' stone ${i}: expected [x, y, size id, colour id].`)});
+      if(!(Number.isInteger(a.editCount)&&a.editCount>=0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': editCount must be a non-negative integer.`);
+    }
+    if(l.type==='image'&&l.colorSwaps!==undefined&&!(l.colorSwaps&&typeof l.colorSwaps==='object'&&Object.getPrototypeOf(l.colorSwaps)===Object.prototype&&Object.entries(l.colorSwaps).every(([from,to])=>Object.prototype.hasOwnProperty.call(STONE_COLORS,from)&&typeof to==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,to))))throw new Error(`Image layer "${l.id}" has an invalid 'colorSwaps': expected an object of known colour id to known colour id.`);
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
     if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
     if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
@@ -2665,7 +2684,8 @@ function syncSelectedControlsFromLayer(){
   if(showSidesField)el('shapeSides').value=l.sides??6;
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
-  if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
+  // IMG-026 (C1): the ai-layout option is enabled only for a layer that has a layout to place.
+  if(l.type==='image'){el('imageFillMode').querySelector('option[value="ai-layout"]').disabled=!l.aiLayout;el('imageFillMode').value=resolveImageFillMode(l.fillMode)}
   if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';ensureTextModeOptionForLayer(l.textMode);el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
@@ -3483,7 +3503,8 @@ async function resolveLayerShapeSource(layer){
 function resolveImageExportRegions(project){
   const regions=[];
   for(const layer of project.layers){
-    if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
+    // IMG-026 (C1): an ai-layout layer has no traced regions; its stones export as circles.
+    if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0)||layer.fillMode==='ai-layout')continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
     const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
@@ -4975,7 +4996,7 @@ el('stoneSize').addEventListener('input',()=>{
   const l=selectedLayer();
   if(!l||l.type!=='text'||isAuthoredStoneFontId(l.font))return;
   const size=findStoneSizeByDiameterMm(parseFloat(el('stoneSize').value));
-  if(!size)return;
+  if(!size||size.imageOnly)return;
   applyStoneSizeHeightAutoSet(l,size);
 });
 // PERF-005: updateStoneSizeOptionAvailabilityUI()'s per-option-disabled sweep is otherwise only
@@ -5689,23 +5710,26 @@ async function startImageRedraw(){
   setImageRedrawStatus('Redrawing… this can take up to five minutes.');
   syncImageRedrawControls(layer);
   try{
-    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style});
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])}});
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
     const current=project.layers.find(x=>x.id===layerId);
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
-    // IMG-023 (D2(a)): the redrawn image becomes an AI stones layer sized from its own stone pitch; on
-    // a Flat Sheet the sheet grows first (the size then fits without shrinking).
-    const detection=style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
+    // IMG-026 (C1): a stones redraw that came back with a layout becomes an ai-layout layer, its box
+    // exactly the layout's size; on a Flat Sheet the sheet grows first to the box plus 20 mm.
+    const layout=style==='stones'&&result.layout?result.layout:null;
+    // IMG-023 (D2(a)): otherwise the redrawn image becomes an AI stones layer sized from its own stone
+    // pitch; on a Flat Sheet the sheet grows first (the size then fits without shrinking).
+    const detection=layout?null:style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
     const aiPitchPx=detection&&detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
-    const grownCanvas=aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
+    const grownCanvas=layout?(currentObjectTemplate().id==='sheet'?fitAiLayoutCanvas({canvas:project.canvas,widthMm:layout.widthMm,heightMm:layout.heightMm,sheetMaxMm:SHEET_MAX_MM}):null):aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
     commitHistory();
     if(grownCanvas)project.canvas=grownCanvas;
-    const next=applyRedraw(current,result,{canvas:project.canvas,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
+    const next=applyRedraw(current,result,{canvas:project.canvas,layout,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
     syncSelectedControlsFromLayer();
     await updateAll(true);
-    setImageRedrawStatus('Redrawn with AI. Use original to undo this.');
+    setImageRedrawStatus(style==='stones'&&!layout&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
   }catch(error){
     if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
     if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}

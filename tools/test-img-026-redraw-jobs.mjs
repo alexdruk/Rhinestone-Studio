@@ -150,7 +150,7 @@ async function start(handler, opts) {
   return res.json().jobId;
 }
 
-const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 3 };
+const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 };
 
 // ---- Job stages ---------------------------------------------------------------------------------
 

@@ -110,12 +110,12 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
   for (const body of [JSON.stringify({ image: FAKE_REDRAW_DATA_URL }), bodyWith({ style: 'stones' })]) {
     const spy = spyFetch(okImage);
     const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);
-    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 3 });
+    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 });
     assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt());
   }
   const spy = spyFetch(okImage);
   const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), bodyWith({ style: 'flat' }));
-  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 1 }, 'style is not echoed');
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 1 }, 'style is not echoed');
   assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt(undefined, 'flat'));
 
   for (const style of [null, 'Flat', '', 1, {}]) {
@@ -480,7 +480,7 @@ await test('T12. wiring: the Redraw style select, its storage, the run-bound sty
   assert.ok(sync.includes("el('imageRedrawStyleField').hidden=el('imageRedraw').hidden;el('imageRedrawStyle').disabled=busy;"));
   const start = extractFunction('async function startImageRedraw(){');
   assert.ok(start.includes("const style=el('imageRedrawStyle').value==='flat'?'flat':'stones';"));
-  assert.ok(start.includes('redrawImage({dataUrl:source,signal:redrawRun.signal,style})'));
+  assert.ok(start.includes('redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:'));
   assert.ok(start.includes("style==='stones'?aiStoneDetectionFor("));
   assert.ok(start.includes('detection&&detection.ok?'));
   assert.ok(start.includes('now:Date.now,aiPitchPx,shrink,style})'));

@@ -3,7 +3,7 @@
 // See docs/specifications/IMG-022-RedrawProvider.md D4; every variable is listed in .env.example.
 
 export const REDRAW_ENV_DEFAULTS = Object.freeze({
-  OPENAI_IMAGE_MODEL: 'gpt-image-2',
+  OPENAI_IMAGE_MODEL: 'gpt-image-2.5-sunburst',
   OPENAI_IMAGE_QUALITY: 'high',
   REDRAW_RATE_LIMIT_PER_HOUR: 20,
   REDRAW_TIMEOUT_SECONDS: 300,

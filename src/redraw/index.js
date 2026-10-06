@@ -23,7 +23,7 @@ import { decodeDataUrlToBuffer, computeSubjectMask } from '../image/index.js';
 import { resizeImageBuffer, SUBJECT_MASK_RESIZE_TRIGGER_PX, SUBJECT_MASK_MAX_DIMENSION_PX } from '../image/ImageFieldPipeline.js';
 import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiProxyProvider.js';
 
-export { applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, aiStoneMmPerPx } from './RedrawLayerTransform.js';
+export { applyRedraw, restoreOriginal, fitAiStoneBox, fitAiLayoutCanvas, aiStoneEffectiveShrink, aiStoneMmPerPx } from './RedrawLayerTransform.js';
 
 // IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
 // IMG-026: the layout-* codes describe a layout failure after a good OpenAI image (layoutError).
@@ -31,6 +31,9 @@ export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized
 // IMG-024 (D1): the same value as server/redraw/prompt.mjs's REDRAW_STYLES, restated because src/**
 // never imports server/**; a test keeps the two deepEqual.
 export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
+// IMG-026 (C1): the status text for each job stage reported through onStage. Kept here, not in
+// app.js, because app.js never names the image provider.
+export const REDRAW_STAGE_MESSAGES = Object.freeze({ drawing: 'OpenAI is drawing… (up to five minutes)', placing: 'Placing stones…' });
 const REDRAW_CONFIG_ENDPOINT = '/api/redraw/config';
 const REDRAW_MAX_UPLOAD_PX = 1536;
 const REDRAW_MIN_SUBJECT_COVERAGE = 0.01;
