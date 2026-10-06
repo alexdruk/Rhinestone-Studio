@@ -44,8 +44,11 @@ export class StoneLayout {
    *   IMG-025: what the stone clean-up pass changed on a Staggered / AI stones image layout (see
    *   StoneCleanup.js). Same additive precedent as checkFixStats: null/absent whenever clean-up did
    *   not run, and for every layout produced before this field existed.
+   * @param {{stones: number, violations: number, minGapMm: (number|null), k: number}|null} [params.aiLayoutStats]
+   *   IMG-026: what an ai-layout image layout placed (see GeometryEngine._generateAiLayoutStones()).
+   *   Same additive precedent: null/absent for every other layout.
    */
-  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null, cleanupStats = null } = {}) {
+  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null, cleanupStats = null, aiLayoutStats = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {
       throw new TypeError('StoneLayout requires a non-empty layerId.');
     }
@@ -57,6 +60,7 @@ export class StoneLayout {
     this.baseBoundingBoxMm = baseBoundingBoxMm;
     this.checkFixStats = checkFixStats;
     this.cleanupStats = cleanupStats;
+    this.aiLayoutStats = aiLayoutStats;
   }
 
   get count() {
@@ -113,6 +117,9 @@ export class StoneLayout {
     if (this.cleanupStats) {
       json.cleanupStats = { ...this.cleanupStats };
     }
+    if (this.aiLayoutStats) {
+      json.aiLayoutStats = { ...this.aiLayoutStats };
+    }
     if (this.baseBoundingBoxMm) {
       const b = this.baseBoundingBoxMm;
       json.baseBoundingBoxMm = {
@@ -138,7 +145,8 @@ export class StoneLayout {
       outlineStats: value.outlineStats ?? null,
       baseBoundingBoxMm: value.baseBoundingBoxMm ?? null,
       checkFixStats: value.checkFixStats ?? null,
-      cleanupStats: value.cleanupStats ?? null
+      cleanupStats: value.cleanupStats ?? null,
+      aiLayoutStats: value.aiLayoutStats ?? null
     });
   }
 }

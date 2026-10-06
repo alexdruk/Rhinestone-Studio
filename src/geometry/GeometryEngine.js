@@ -76,7 +76,17 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // docs/specifications/IMG-010-LineDesign.md's "Architecture decision" section.
 // IMG-023: 'ai-stones' is an eighth, following the same precedent with its own sampler
 // (AiStoneSampler.js). See docs/specifications/IMG-023-AiStoneTransfer.md D1.
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design', 'ai-stones']);
+// IMG-026 (C1): 'ai-layout' is a ninth. generateImageLayout() hands it to _generateAiLayoutStones()
+// before normalizeImageParams(), so it never reaches the image field or a sampler. See
+// docs/specifications/IMG-026-StrassLayoutService.md, "Engine".
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design', 'ai-stones', 'ai-layout']);
+// IMG-026 (C1): the layout service's size ids and their diameters. Hand-matched to
+// StoneSizes.js (the app's stone-size catalogue), which this engine must not import;
+// tools/test-img-026-ai-layout-engine.mjs asserts the two agree.
+const AI_LAYOUT_SIZE_MM = Object.freeze({ ss4: 1.5, ss6: 2.0, ss10: 2.8, ss16: 4.0, ss20: 4.7, ss30: 6.4 });
+// IMG-026 (S3): a pair is a gap violation below this many mm, the service's own rule.
+const AI_LAYOUT_MIN_GAP_MM = 0.1;
+const AI_LAYOUT_GAP_EPSILON_MM = 1e-6;
 const DEFAULT_MODE = 'outline';
 // IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
 // -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
@@ -1210,6 +1220,7 @@ export class GeometryEngine {
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
+    if (params && params.mode === 'ai-layout') return this._generateAiLayoutStones(params);
     const options = normalizeImageParams(params);
     // IMG-023 (D1): AI stones reads the stones the AI drew and needs no prepared field, so
     // prepareImageField() (a subject-mask pass on every regenerate) is skipped for it.
@@ -1428,6 +1439,44 @@ export class GeometryEngine {
     }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats, cleanupStats });
+  }
+
+  /**
+   * IMG-026 (C1): the stones of an ai-layout image layer, placed from the layout service's list
+   * (`layer.aiLayout`) with no image and no field. k = max(1, widthMm / aiLayout.widthMm) (S14):
+   * each stone goes to (xMm + k*x, yMm + k*y) and keeps its own diameter, so with k >= 1 no gap
+   * shrinks. `colorSwaps` (S17) recolours after placement. Both stones of every pair closer than
+   * 0.1 mm get `metadata.gapViolation`, and each stone carries `metadata.aiIndex`, its index in
+   * `aiLayout.stones`. The IMG-021 rotation is applied last, around the centre of the placed box.
+   *
+   * @param {{layerId:string, xMm?:number, yMm?:number, widthMm:number, rotationDeg?:number,
+   *   aiLayout:{version:1, widthMm:number, heightMm:number, stones:Array}, colorSwaps?:object}} params
+   * @returns {StoneLayout} with `aiLayoutStats: {stones, violations, minGapMm, k}`
+   */
+  _generateAiLayoutStones(params) {
+    const options = normalizeAiLayoutParams(params);
+    const { aiLayout, colorSwaps } = options;
+    const k = Math.max(1, options.widthMm / aiLayout.widthMm);
+    const placed = aiLayout.stones.map(([x, y, sizeId, colorId], aiIndex) => ({
+      xMm: options.xMm + k * x,
+      yMm: options.yMm + k * y,
+      sizeMm: AI_LAYOUT_SIZE_MM[sizeId],
+      color: Object.prototype.hasOwnProperty.call(colorSwaps, colorId) ? colorSwaps[colorId] : colorId,
+      layerId: options.layerId,
+      metadata: { aiIndex }
+    }));
+
+    const { violations, minGapMm } = flagAiLayoutGapViolations(placed);
+
+    const center = { cxMm: options.xMm + k * aiLayout.widthMm / 2, cyMm: options.yMm + k * aiLayout.heightMm / 2 };
+    const stones = rotatePointsAroundCenter(placed, options.rotationDeg, center).map((point) => new Stone(point));
+
+    return new StoneLayout({
+      layerId: options.layerId,
+      sourceMode: 'ai-layout',
+      stones,
+      aiLayoutStats: { stones: stones.length, violations, minGapMm, k }
+    });
   }
 
   /**
@@ -2654,6 +2703,85 @@ function normalizeImageParams(params) {
 
 // IMG-021: the rotation pivot for an image layer's stones and traced regions -- the centre of the
 // unrotated placement box, the same centre app.js's rotatedCornersAABB() rotates the box around.
+// IMG-026 (C1): the small parameter set of _generateAiLayoutStones(). Kept apart from
+// normalizeImageParams() on purpose: an ai-layout layer has no image buffer and no field.
+function normalizeAiLayoutParams(params) {
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine ai-layout requires a non-empty layerId.');
+  }
+  const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
+  const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
+  const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
+  const rotationDeg = assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg');
+
+  const aiLayout = params.aiLayout;
+  if (!aiLayout || typeof aiLayout !== 'object' || Array.isArray(aiLayout)) {
+    throw new TypeError('GeometryEngine ai-layout requires an aiLayout object.');
+  }
+  if (aiLayout.version !== 1) {
+    throw new TypeError(`Unsupported aiLayout version: ${aiLayout.version}. Expected 1.`);
+  }
+  assertPositiveNumber(aiLayout.widthMm, 'aiLayout.widthMm');
+  assertPositiveNumber(aiLayout.heightMm, 'aiLayout.heightMm');
+  if (!Array.isArray(aiLayout.stones)) {
+    throw new TypeError('aiLayout.stones must be an array.');
+  }
+  aiLayout.stones.forEach((entry, i) => {
+    if (!Array.isArray(entry) || entry.length < 4 ||
+      typeof entry[0] !== 'number' || !Number.isFinite(entry[0]) ||
+      typeof entry[1] !== 'number' || !Number.isFinite(entry[1]) ||
+      !Object.prototype.hasOwnProperty.call(AI_LAYOUT_SIZE_MM, entry[2]) ||
+      typeof entry[3] !== 'string' || entry[3].length === 0) {
+      throw new TypeError(`aiLayout.stones[${i}] must be [x, y, size id, colour id].`);
+    }
+  });
+
+  const colorSwaps = params.colorSwaps ?? {};
+  if (!colorSwaps || typeof colorSwaps !== 'object' || Array.isArray(colorSwaps) ||
+    !Object.values(colorSwaps).every((id) => typeof id === 'string' && id.length > 0)) {
+    throw new TypeError('colorSwaps must be an object of colour id to colour id.');
+  }
+
+  return { layerId: params.layerId, xMm, yMm, widthMm, rotationDeg, aiLayout, colorSwaps };
+}
+
+// IMG-026 (C1, S3): sets metadata.gapViolation on both stones of every pair whose gap is below
+// 0.1 mm, with a spatial grid instead of comparing every pair. The cell is the largest diameter
+// plus 1 mm, so every pair closer than 1 mm sits in neighbouring cells: the violation test is
+// exact, and minGapMm is exact whenever it is below 1 mm (null for fewer than two stones).
+function flagAiLayoutGapViolations(stones) {
+  if (stones.length < 2) return { violations: 0, minGapMm: null };
+  let maxSizeMm = 0;
+  for (const s of stones) maxSizeMm = Math.max(maxSizeMm, s.sizeMm);
+  const cellMm = maxSizeMm + 1;
+  const buckets = new Map();
+  let violations = 0;
+  let minGapMm = Infinity;
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellMm);
+    const gy = Math.floor(stone.yMm / cellMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const gapMm = Math.hypot(stone.xMm - other.xMm, stone.yMm - other.yMm) - (stone.sizeMm + other.sizeMm) / 2;
+          if (gapMm < minGapMm) minGapMm = gapMm;
+          if (gapMm < AI_LAYOUT_MIN_GAP_MM - AI_LAYOUT_GAP_EPSILON_MM) {
+            violations++;
+            stone.metadata.gapViolation = true;
+            other.metadata.gapViolation = true;
+          }
+        }
+      }
+    }
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+  return { violations, minGapMm: Number.isFinite(minGapMm) ? minGapMm : null };
+}
+
 function imagePlacementCenter(options) {
   return { cxMm: options.xMm + options.widthMm / 2, cyMm: options.yMm + options.heightMm / 2 };
 }

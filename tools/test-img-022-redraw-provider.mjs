@@ -259,7 +259,7 @@ await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provi
 await test('T5. the outgoing request: images/edits, Bearer key, model/quality/size/background/output_format/n/prompt and a PNG image', async () => {
   let spy = spyFetch(okImage);
   let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2', promptVersion: 3 });
+  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 });
   const { url, init } = spy.calls[0];
   assert.equal(url, OPENAI_IMAGE_EDITS_URL);
   assert.equal(url, 'https://api.openai.com/v1/images/edits');
@@ -267,7 +267,7 @@ await test('T5. the outgoing request: images/edits, Bearer key, model/quality/si
   assert.equal(init.headers.Authorization, 'Bearer sk-test');
   const form = init.body;
   assert.ok(form instanceof FormData);
-  assert.equal(form.get('model'), 'gpt-image-2');
+  assert.equal(form.get('model'), 'gpt-image-2.5-sunburst');
   assert.equal(form.get('quality'), 'high');
   assert.equal(form.get('size'), '1024x1024');
   assert.equal(form.get('background'), 'transparent');
@@ -350,7 +350,7 @@ await test('T6b. every OpenAI 4xx is logged with its status and message, never t
 
 await test('T7. env: defaults, environment wins over the file, quotes and comments; config route 404 unless the access code and a key are set', async () => {
   const defaults = loadRedrawEnv({ env: {} });
-  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', timeoutMs: 300000, fake: false, layoutServiceUrl: '', layoutTimeoutMs: 180000 });
+  assert.deepEqual(defaults, { openaiApiKey: '', imageModel: 'gpt-image-2.5-sunburst', imageQuality: 'high', accessCode: '', rateLimitPerHour: 20, costLabel: '', timeoutMs: 300000, fake: false, layoutServiceUrl: '', layoutTimeoutMs: 180000 });
   assert.equal(loadRedrawEnv({ env: { REDRAW_TIMEOUT_SECONDS: '10' } }).timeoutMs, 10000);
   const file = '# comment\n\nOPENAI_IMAGE_MODEL=from-file\nREDRAW_COST_LABEL="about $0.05 per image"\nREDRAW_ACCESS_CODE=\'quoted\'\nREDRAW_RATE_LIMIT_PER_HOUR=5\n';
   const merged = loadRedrawEnv({ env: { OPENAI_IMAGE_MODEL: 'from-env' }, envFileText: file });

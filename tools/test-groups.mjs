@@ -59,6 +59,9 @@ export const GROUPS = {
     // IMG-026 build B: the D2 colours, the S4 cross-check with the layout service's catalogue.json
     // and the S13 legacy palette pin in app.js.
     'test-img-026-catalogue.mjs',
+    // IMG-026 build C1: the ai-layout engine branch (placement, k clamp, gap flag, colour swaps,
+    // rotation) and the image-only SS4.
+    'test-img-026-ai-layout-engine.mjs',
     'test-image-pipeline.mjs',
     'test-img-001-field.mjs',
     'test-img-002-color-layers.mjs',
@@ -138,6 +141,9 @@ export const GROUPS = {
     // IMG-026 build B: redraw jobs -- the job API, the layout-service call, fake mode and the
     // polling client, with injected fetch, clock and timers.
     'test-img-026-redraw-jobs.mjs',
+    // IMG-026 build C1: validateProject() for ai-layout layers, the redraw paths, the Fill style
+    // option, the exporters with a 1.5 mm stone and byte identity for gallery and legacy image stones.
+    'test-img-026-ai-layout-app.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

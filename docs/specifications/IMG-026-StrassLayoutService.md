@@ -31,7 +31,8 @@ The work ships as four milestones, one Claude Code build each:
 | --- | --- | --- |
 | IMG-026A | Layout service package, golden tests, Mac scripts, Dockerfile | 1–2 |
 | IMG-026B | Node job API, layout call, prompt v3, the 4 D2 colours with the S13 legacy pin and the S4 cross-check | 3–4, part of 5 |
-| IMG-026C | SS4, `layer.aiLayout`, engine branch, lightbox rework | 5–6, 8 (engine and UI tests) |
+| IMG-026C1 | SS4, `layer.aiLayout`, engine branch, gap flag, redraw writes the layout, sunburst default | 5, 8 (engine tests) |
+| IMG-026C2 | Lightbox rework | 6, 8 (UI tests) |
 | IMG-026D | Editing ai-layout stones in Design | 7, 8 (editing tests) |
 
 ## Decisions accepted by Sasha (6 Oct 2026)
@@ -152,11 +153,11 @@ frame sizing (`src/monogram/FrameHierarchy.js:30`), monogram remedies
 (`src/monogram/MonogramGenerator.js:291`), the text height rules and about ten test files. Adding
 SS4 there would change existing monograms and text layouts. Instead:
 
-- `ss4` goes into `STONE_SIZE_LIST` with `diameterMm: 1.5`, `supportedHeightRangeMm: null` and
-  `imageOnly: true`.
-- `listStoneSizes()` keeps returning the five non-image-only sizes, unchanged.
-- A new `listAllStoneSizes()` returns all six. It feeds the Design size picker for ai-layout
-  stones (SS4–SS30) and the Production Sheet size legend.
+- `ss4` is defined with `diameterMm: 1.5`, `supportedHeightRangeMm: null` and `imageOnly: true`.
+- The exported `STONE_SIZES` and `listStoneSizes()` stay exactly the five sizes they are today
+  (`tools/test-stone-size-library.mjs` pins `STONE_SIZES.length` to 5).
+- A new `listAllStoneSizes()` returns all six in ascending diameter, SS4 first. It feeds the Design
+  size picker for ai-layout stones (SS4–SS30) and the Production Sheet size legend.
 - `getStoneSize`, `isValidStoneSizeId` and `findStoneSizeByDiameterMm` cover all six, so
   1.5 mm stones get the "SS4" label everywhere.
 - `tools/test-stone-size-library.mjs` skips its font-config cross-check for `imageOnly` entries.
@@ -367,7 +368,7 @@ B could not be checked end to end against the real service.
 - It throws the job's `error.code` only when there is no OpenAI image.
 - `redrawImage()` (`src/redraw/index.js`) passes `layout` and `layoutError` through and forwards
   `onStage`. The new codes join `REDRAW_ERROR_CODES` and the provider's known-code set. Until
-  build C the app keeps using only `dataUrl`, so the existing AI-stones path works unchanged.
+  build C1 the app keeps using only `dataUrl`, so the existing AI-stones path works unchanged.
 - Polls are not retried. A failed poll (network error) counts as `network` only after 3 failures
   in a row.
 
@@ -400,7 +401,7 @@ B could not be checked end to end against the real service.
 | BACKLOG product-aware prompt row | `docs/BACKLOG.md:77` |
 | `integration` test group | `tools/test-groups.mjs:94` |
 
-## App (build C)
+## App, part 1: data and engine (build C1)
 
 ### Layer data
 
@@ -416,42 +417,108 @@ B could not be checked end to end against the real service.
 "colorSwaps": {}
 ```
 
-`validateProject()` (`app.js:1270`; image checks at `:1296`–`:1300`) rejects an `aiLayout` with
-any of the following:
-
-- `version !== 1`;
-- a `widthMm` or `heightMm` that is not finite and > 0;
-- `stones` that is not an array, or has more than 20,000 entries;
-- a stone that is not `[finite x, finite y, valid size id, known colour id]`;
-- a non-integer `editCount` below 0;
-- a `colorSwaps` with an unknown id on either side.
-
-Out-of-box coordinates are allowed (Design moves can push a stone past the edge). ai-layout image
-layers still carry `threshold`, `blurRadiusPx`, `maxWidthPx`, `maxHeightPx`, because the
-existing checks need them; `applyRedraw` keeps the values the layer already has.
+- `aiLayout` is the build A response, minus `report` keys other than `minGapMm`, `violations`,
+  `coverage`, `face` and `ms`, plus `editCount: 0`. Stones keep the service's order.
+- `validateProject()` (`app.js:1270`; image checks at `:1296`–`:1300`) rejects an `aiLayout` with
+  any of the following:
+  - `version !== 1`;
+  - a `widthMm` or `heightMm` that is not finite and > 0;
+  - `stones` that is not an array, or has more than 20,000 entries;
+  - a stone that is not `[finite x, finite y, valid size id, known colour id]`;
+  - a non-integer `editCount` below 0;
+  - a `colorSwaps` that is not a plain object, or has an unknown id on either side.
+- Size ids are validated with `isValidStoneSizeId()` (all six, S12). Colour ids are validated
+  against `STONE_COLORS` (all 27).
+- Out-of-box coordinates are allowed (Design moves can push a stone past the edge).
+- ai-layout image layers still carry `threshold`, `blurRadiusPx`, `maxWidthPx`, `maxHeightPx`,
+  `stoneSize` and `gap`, because the existing checks and shared controls need them; `applyRedraw`
+  keeps the values the layer already has.
+- A layer keeps `aiLayout` when the user switches it to a legacy fill style, so switching back
+  restores the same stones. A redraw that does not produce a layout removes aiLayout and colorSwaps, because they belong to the previous AI image.
 
 ### Engine
 
-`'ai-layout'` joins `IMAGE_FILL_MODES` (`app.js:678`) and `IMAGE_SAMPLE_MODES`
-(`src/geometry/GeometryEngine.js:79`). `normalizeImageParams()` (`GeometryEngine.js:2530`) builds a
-whitelisted options object with no catch-all spread, so `aiLayout` and `colorSwaps` must be
-forwarded there by hand, as must every app.js call site that builds image params
-(`generateImageStonesLive()` `app.js:1161`). In `generateImageLayout()` (`:1212`), mode
-`'ai-layout'`:
+- `'ai-layout'` joins `IMAGE_FILL_MODES` (`app.js:678`) and `IMAGE_SAMPLE_MODES`
+  (`src/geometry/GeometryEngine.js:79`).
+- **Early branch.** `generateImageLayout()` (`:1212`) hands mode `'ai-layout'` to a new private
+  method of the same engine, `generateAiLayoutStones(params)`, as its very first step, before
+  `normalizeImageParams()`. That method validates its own small parameter set:
+  - `layerId`, `xMm`, `yMm`, `widthMm`, `rotationDeg`, `aiLayout`, `colorSwaps`;
+  - no `imageBuffer` and no field.
 
-1. needs no `imageBuffer` and skips `prepareImageField`, sampling, mixed infill, cleanup and gap
-   fill;
-2. builds one `Stone` per entry at (`xMm` + k·x, `yMm` + k·y) with k from S14, `sizeMm` from the
-   size id, and colour `colorSwaps[c] ?? c`;
-3. applies the existing IMG-021 rotation;
-4. sets `metadata.gapViolation = true` on every stone closer than 0.1 − 1e-6 mm to a neighbour
-   (build D draws it; build C computes it);
-5. is deterministic: the same layer gives the same stones in the same order.
+  This keeps the ai-layout path out of the whitelisted image normaliser (the IMG-009 six-site
+  trap) and still produces every stone inside GeometryEngine.
+- **What the method does:**
+  1. Computes k = max(1, `widthMm` / `aiLayout.widthMm`) (S14).
+  2. Builds one `Stone` per entry in list order:
+     - position (`xMm` + k·x, `yMm` + k·y);
+     - `sizeMm` from the size id;
+     - colour `colorSwaps[c] ?? c`;
+     - `metadata.aiIndex` = the entry's index in `aiLayout.stones`, which build D's edits use.
+  3. Sets `metadata.gapViolation = true` on both stones of every pair whose gap is below
+     0.1 − 1e-6 mm, checked before rotation with a spatial grid (not O(n²)).
+  4. Applies the IMG-021 rotation exactly as the other modes do. `metadata` must survive it.
+  5. Returns a `StoneLayout` with `sourceMode: 'ai-layout'` and
+     `aiLayoutStats: { stones, violations, minGapMm, k }`.
+- It is deterministic: the same layer gives the same stones in the same order. It needs no
+  decoded image, so a project whose image fails to decode still shows its ai-layout stones.
+- **app.js:**
+  - `generateImageStonesLive()` (`app.js:1161`) takes the ai-layout branch before it decodes any
+    buffer, passing `aiLayout`, `colorSwaps`, the box and `rotationDeg`.
+  - `resolveImageExportRegions()` (`app.js:3483`) skips ai-layout layers, so the SVG export has
+    no traced regions for them and their stones export as circles.
 
-`applyRedraw()` (`src/redraw/RedrawLayerTransform.js:67`): when the result has a `layout`, it
-sets `fillMode: 'ai-layout'`, stores `aiLayout` (with `editCount: 0`), sets `colorSwaps: {}`, sizes
-the box to `widthMm × heightMm` centred where the layer was, and records the redraw as today.
-`restoreOriginal()` (`:147`) stays for old layers only.
+### Redraw writes the layout
+
+- **Result with a layout.** In `startImageRedraw()` (`app.js:5676`), a `redrawImage()` result with
+  `layout` takes the v2 path:
+  - `applyRedraw(current, result, {…, layout})` sets `fillMode: 'ai-layout'`, stores `aiLayout`,
+    sets `colorSwaps: {}`, records `previousFillMode` as the AI-stones path does, and sizes the box
+    to exactly `widthMm × heightMm`, centred where the layer was;
+  - on a Flat Sheet the sheet first grows to fit the box plus 20 mm, as IMG-023 does, up to
+    `SHEET_MAX_MM`;
+  - on other products the box is centred and not shrunk (S15).
+- **Result without a layout** (`layoutError` set). The IMG-023 AI-stones path runs unchanged. The
+  status line says: "Placed with the old method: <layoutError.message>".
+- **Stage text.** `startImageRedraw()` passes `onStage` to `redrawImage()`. The status line reads
+  "OpenAI is drawing… (up to five minutes)" for `drawing` and "Placing stones…" for `placing`.
+- **Undo.** `restoreOriginal()` (`src/redraw/RedrawLayerTransform.js:147`) also undoes an
+  ai-layout redraw: it removes `aiLayout` and `colorSwaps` and restores `previousFillMode`. Use
+  original stays visible until C2.
+- **Fill style select.** `imageFillMode` gets an option `ai-layout`, labelled "AI layout - stones
+  placed from the AI redraw". It is enabled only when the selected layer has `aiLayout`, so
+  `syncSelectedControlsFromLayer()` can show it and `writeSelectedControlsToLayer()` never turns an
+  ai-layout layer back into Grid Fill.
+
+### Default model
+
+`REDRAW_ENV_DEFAULTS.OPENAI_IMAGE_MODEL` (`server/redraw/env.mjs:6`) and `.env.example:10` become
+`gpt-image-2.5-sunburst`. `OPENAI_IMAGE_QUALITY` stays `high`.
+
+### Size SS4 (D1, S12)
+
+`src/renderer/StoneSizes.js` as S12 says. Production Sheet, DXF, PNG, SVG and 3D read `sizeMm` and
+need no change. Build C1 must prove that with a 1.5 mm stone in each exporter's existing test
+harness, rather than assume it.
+
+### Build C1 anchors (grepped at `e42bbe5`)
+
+| Anchor | Location |
+| --- | --- |
+| `IMAGE_FILL_MODES` / `generateImageStonesLive()` / `validateProject()` | `app.js:678` / `:1161` / `:1270` |
+| `syncSelectedControlsFromLayer()` / `writeSelectedControlsToLayer()` / its `fillMode` write | `app.js:2625` / `:2789` / `:2857` |
+| `resolveImageExportRegions()` | `app.js:3483` |
+| `startImageRedraw()` / `grownCanvas` / `applyRedraw` call / success status | `app.js:5676` / `:5700` / `:5703` / `:5708` |
+| `SHEET_MAX_MM` | `app.js:101` |
+| `#imageFillMode` | `index.html:1200` |
+| `IMAGE_SAMPLE_MODES` / `generateImageLayout()` / its IMG-021 rotation | `src/geometry/GeometryEngine.js:79` / `:1212` / `:1427` |
+| `Stone` constructor (`metadata`) | `src/geometry/Stone.js:31` |
+| `applyRedraw()` / `restoreOriginal()` | `src/redraw/RedrawLayerTransform.js:67` / `:147` |
+| `STONE_SIZE_LIST` / `STONE_SIZES` / `getStoneSize` / `isValidStoneSizeId` / `findStoneSizeByDiameterMm` | `src/renderer/StoneSizes.js:37` / `:45` / `:53` / `:57` / `:77` |
+| size-count test | `tools/test-stone-size-library.mjs:58` |
+| default model | `server/redraw/env.mjs:6`, `.env.example:10`; tests that read it: `tools/test-img-022-redraw-provider.mjs`, `tools/test-img-024-flat-artwork-style.mjs`, `tools/test-img-026-redraw-jobs.mjs` |
+
+## Lightbox (build C2)
 
 ### Lightbox controls
 
@@ -615,7 +682,7 @@ are lost.
 
 **Model.** Production uses `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` with
 `OPENAI_IMAGE_QUALITY=high`. gpt-image-2 rejected the transparent background on 6 Oct 2026.
-Build C makes sunburst the default in `server/redraw/env.mjs`.
+Build C1 makes sunburst the default in `server/redraw/env.mjs`.
 
 **Open QA item (phase 9).** The face test, unchanged from the prototype, finds a face in `lake`
 and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal rule.
@@ -643,12 +710,20 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   a layout equal to `POST /layout` on the same bytes.
 - `imageColorPalette()` returns exactly the 23 pre-v2 entries, in catalogue order.
 
-**Build C.**
+**Build C1.**
 
-- Loading `N2_cat` `expected/` as an `aiLayout` (cropped as S1) gives 2146 stones.
+- Loading `N2_cat` `expected/` as an `aiLayout` (cropped as S1) gives 2146 stones, 0
+  `gapViolation` flags, and every stone at k = 1 within 1e-9 mm of `xMm + x`, `yMm + y`.
 - Its minimum gap is ≥ 0.100 mm at k = 1, 1.5 and 2, and under rotation 0°, 30° and 90°.
-- Every gallery project gives identical stones before and after the build.
-- Every legacy image fixture gives identical stones (S13).
+- k < 1 is clamped to 1.
+- Moving one stone 0.05 mm from a neighbour flags exactly those two stones.
+- A colour swap changes exactly the stones of that colour.
+- `validateProject()` round-trips an ai-layout layer byte for byte and rejects each listed bad
+  input.
+- Every gallery project and every legacy image fixture gives identical stones.
+- A 1.5 mm stone goes through the Production Sheet (labelled SS4), DXF, SVG and PNG exporters.
+
+**Build C2.** See its own section; the figures are written with its prompt.
 
 **Build D.**
 
@@ -692,11 +767,12 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
 **C.**
 
-- `tools/test-img-026-ai-layout-engine.mjs` (group `core` if it does not import app.js, otherwise
-  `integration`): the build C acceptance figures, colour swaps, clamp k < 1 to 1, determinism, and
-  the size and colour validation of `validateProject()`.
-- `tools/test-img-026-lightbox.mjs` (group `ui`): the hidden, kept and reworked controls for an
-  ai-layout layer and for a legacy layer.
+- C1: `tools/test-img-026-ai-layout-engine.mjs` (group `core`, engine only) with the C1 engine
+  figures. `tools/test-img-026-ai-layout-app.mjs` (group `integration`) covers `validateProject()`,
+  the redraw paths (with layout, without layout, restore), the fill-style option and the exporter
+  checks.
+- C2: `tools/test-img-026-lightbox.mjs` (group `ui`): the hidden, kept and reworked controls for
+  an ai-layout layer and for a legacy layer.
 
 **D.**
 
@@ -719,7 +795,7 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   `test-img-021-rotated-image-stones.mjs`, `test-img-023-ai-stone-transfer.mjs`,
   `test-img-024-flat-artwork-style.mjs` and `test-img-025-stone-cleanup.mjs`: filtered to
   `LEGACY_IMAGE_COLOR_IDS` so it stays the palette `imageColorPalette()` returns (build B, S13).
-- `tools/test-stone-size-library.mjs`: the five sizes and the font-config cross-check (build C,
+- `tools/test-stone-size-library.mjs`: the five sizes and the font-config cross-check (build C1,
   S12).
 - Every test that evaluates the app.js span from `const DEFAULT_TEXT_FONT_ID=` (`app.js:177`) to
   `validateProject()` (S13).
