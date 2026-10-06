@@ -1,0 +1,195 @@
+{
+ "crystal-clear": {
+  "name": "Crystal",
+  "fill": "#f5f5f5",
+  "stroke": "#8a8a8a",
+  "shine": "#ffffff",
+  "accent": "#cfcfcf"
+ },
+ "crystal": {
+  "name": "Crystal AB",
+  "fill": "#e9f7ff",
+  "stroke": "#5e7080",
+  "shine": "#ffffff",
+  "accent": "#92d5ff"
+ },
+ "jet": {
+  "name": "Jet",
+  "fill": "#141414",
+  "stroke": "#d9d9d9",
+  "shine": "#555",
+  "accent": "#000"
+ },
+ "siam": {
+  "name": "Siam",
+  "fill": "#9b1c1c",
+  "stroke": "#4a0d0d",
+  "shine": "#ffd9d9",
+  "accent": "#6e1313"
+ },
+ "light-siam": {
+  "name": "Light Siam",
+  "fill": "#d9534f",
+  "stroke": "#8a2f2c",
+  "shine": "#ffe0dd",
+  "accent": "#b5423e"
+ },
+ "rose": {
+  "name": "Rose",
+  "fill": "#ef8fb0",
+  "stroke": "#8a2c4d",
+  "shine": "#ffe2ed",
+  "accent": "#d75384"
+ },
+ "fuchsia": {
+  "name": "Fuchsia",
+  "fill": "#c2185b",
+  "stroke": "#6e0d33",
+  "shine": "#ffd6ea",
+  "accent": "#9c1249"
+ },
+ "amethyst": {
+  "name": "Amethyst",
+  "fill": "#7e3f98",
+  "stroke": "#4a2260",
+  "shine": "#eaddf7",
+  "accent": "#5c2d72"
+ },
+ "sapphire": {
+  "name": "Sapphire",
+  "fill": "#2269d3",
+  "stroke": "#0f356f",
+  "shine": "#b8d8ff",
+  "accent": "#174ca2"
+ },
+ "light-sapphire": {
+  "name": "Light Sapphire",
+  "fill": "#6fa8dc",
+  "stroke": "#2e5c8a",
+  "shine": "#dbeeff",
+  "accent": "#4a80b5"
+ },
+ "aquamarine": {
+  "name": "Aquamarine",
+  "fill": "#3fc1b0",
+  "stroke": "#1f6e64",
+  "shine": "#d4fff9",
+  "accent": "#2a9d8f"
+ },
+ "emerald": {
+  "name": "Emerald",
+  "fill": "#2aa66a",
+  "stroke": "#0b5633",
+  "shine": "#c7ffdf",
+  "accent": "#16814e"
+ },
+ "peridot": {
+  "name": "Peridot",
+  "fill": "#b5cc18",
+  "stroke": "#6c7d0e",
+  "shine": "#f2ffcf",
+  "accent": "#8a9c14"
+ },
+ "topaz": {
+  "name": "Topaz",
+  "fill": "#e08e26",
+  "stroke": "#8a5210",
+  "shine": "#ffe3b0",
+  "accent": "#b56d1c"
+ },
+ "citrine": {
+  "name": "Citrine",
+  "fill": "#f2c94c",
+  "stroke": "#9c7a10",
+  "shine": "#fff6d1",
+  "accent": "#d1a828"
+ },
+ "gold": {
+  "name": "Gold",
+  "fill": "#f3bd32",
+  "stroke": "#926400",
+  "shine": "#fff1a6",
+  "accent": "#d18a00"
+ },
+ "silver": {
+  "name": "Silver",
+  "fill": "#d8dde4",
+  "stroke": "#737b86",
+  "shine": "#ffffff",
+  "accent": "#a7b0bf"
+ },
+ "hematite": {
+  "name": "Hematite",
+  "fill": "#3e3f44",
+  "stroke": "#232326",
+  "shine": "#dededf",
+  "accent": "#303134"
+ },
+ "black-diamond": {
+  "name": "Black Diamond",
+  "fill": "#6b6b72",
+  "stroke": "#3c3c40",
+  "shine": "#e6e6e7",
+  "accent": "#525258"
+ },
+ "grey": {
+  "name": "Grey",
+  "fill": "#9a9ca2",
+  "stroke": "#56575b",
+  "shine": "#eeeeef",
+  "accent": "#77787d"
+ },
+ "smoked-topaz": {
+  "name": "Smoked Topaz",
+  "fill": "#6e4a2e",
+  "stroke": "#3e291a",
+  "shine": "#e6e0db",
+  "accent": "#553923"
+ },
+ "light-colorado": {
+  "name": "Light Colorado Topaz",
+  "fill": "#b98a5c",
+  "stroke": "#684d34",
+  "shine": "#f3ebe3",
+  "accent": "#8e6a47"
+ },
+ "light-peach": {
+  "name": "Light Peach",
+  "fill": "#eec6a4",
+  "stroke": "#856f5c",
+  "shine": "#fcf5f0",
+  "accent": "#b7987e"
+ },
+ "colorado-topaz": {
+  "name": "Colorado Topaz",
+  "fill": "#a0602c",
+  "stroke": "#5a3619",
+  "shine": "#efe4db",
+  "accent": "#7b4a22",
+  "estimate": true
+ },
+ "light-smoked-topaz": {
+  "name": "Light Smoked Topaz",
+  "fill": "#8a6a4a",
+  "stroke": "#4d3b29",
+  "shine": "#ebe6e0",
+  "accent": "#6a5239",
+  "estimate": true
+ },
+ "scarlet": {
+  "name": "Scarlet",
+  "fill": "#d0101e",
+  "stroke": "#740911",
+  "shine": "#f7d6d9",
+  "accent": "#a00c17",
+  "estimate": true
+ },
+ "hyacinth": {
+  "name": "Hyacinth",
+  "fill": "#e0581c",
+  "stroke": "#7d3110",
+  "shine": "#fae3d8",
+  "accent": "#ac4416",
+  "estimate": true
+ }
+}
