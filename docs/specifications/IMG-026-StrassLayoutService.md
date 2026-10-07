@@ -747,22 +747,175 @@ is not fixed here.
 
 ## Editing in Design (build D)
 
-ai-layout image layers become editable stone by stone in Design. Other image layers stay
-`'ineligible'` as RS-3015 defines them (`src/drawing/DrawingCanvasTool.js:5036`, `:5110`).
+ai-layout image layers become editable stone by stone in Design. `layer.aiLayout.stones` stays the
+only stone list: Design, the Image→Strass lightbox and every exporter read it through the engine,
+so an edit in one shows in all. Other image layers stay `'ineligible'` as RS-3015 defines them.
+Line numbers are those of the anchors table at the end of this section.
 
-- Select one stone by click, many with the Lasso (RS-3013).
-- Delete; move by drag or by arrow keys in 0.1 mm steps; recolour (all 27); resize (SS4–SS30 from
-  `listAllStoneSizes()`).
-- Stamp adds stones to the layer; Eraser removes the stones under the brush.
-- One write path, `editAiLayoutStones(layerId, ops)` in app.js:
-  1. converts mm back to box-relative coordinates, dividing by k;
-  2. writes `layer.aiLayout.stones`;
-  3. increments `editCount`;
-  4. runs inside `commitHistory()` (`app.js:2607`), then `updateAll()` (`:3043`).
-- Stones with `metadata.gapViolation` get a red outline in Design and in the Template view. The
-  stats show the count, and the Production Sheet export warns while it is above 0. Editing is not
-  blocked.
-- An open Image→Strass lightbox redraws after every edit.
+### Stone identity reaches Design
+
+Today `aiIndex` and `gapViolation` are set by the engine and then dropped twice before Design sees
+a stone:
+
+- the ai-layout branch of `generateImageStonesLive()` maps stones to `{x, y, d, color, layerId}`;
+- `engine.generate()` rebuilds every stone as `new Stone({...})` without metadata.
+
+Both keep `metadata` from now on. `layoutStonesForLayer()` adds `aiIndex` and `gapViolation` to
+each stone it hands to Design. Stones of every other layer keep `metadata: {}`, so their layouts and
+JSON exports stay byte-identical. Design always names a stone by `aiIndex`, never by its position
+in a list: a cross-layer dedupe can drop a stone and shift every later one.
+
+### Stone editing mode
+
+- **Enter:** double-click an ai-layout image layer with the Select tool. Its stones become
+  selectable, and the rest of the canvas is dimmed.
+- **Leave:** press Escape (when no pen path is open), click outside the layer, switch to another
+  layer, or leave Design.
+- **Other image layers:** a double-click does nothing new.
+
+Inside the mode, with the Select tool:
+
+| Gesture | Effect |
+| --- | --- |
+| Click a stone | Select it alone. Hit test: the nearest stone centre within its radius plus 4 screen px |
+| Shift-click a stone | Add it to the selection, or remove it |
+| Drag from a selected stone | Move the whole selection; one edit on release |
+| Drag from an unselected stone | Select it alone, then move it |
+| Drag from a gap | Rectangle select: stones whose centre is inside. Shift adds |
+| Lasso | Stones whose centre is inside the lasso. Shift adds |
+| Arrow keys | Move the selection 0.1 mm; with Shift 1 mm. One edit per key press |
+| Delete / Backspace | Delete the selection |
+
+- During a drag, the selected stones are drawn as outlines at their new place. The real stones
+  move only on release.
+- Selected stones get a blue ring.
+- The selection lives in `DrawingCanvasTool.js` as its own state, `{ layerId, indices }`. It is
+  separate from `activeSelection`, whose region and draft consumers do not change.
+- A delete, an undo or a redo clears the selection. A move, recolour or resize keeps it, because
+  `aiIndex` does not change.
+
+### Selection panel
+
+While stones are selected, the Design tool panel (`index.html:650`ff., toggled by
+`updateDrawToolButtons()`) shows:
+
+- `#aiStoneCount`: "N stones selected";
+- `#aiStoneColor`: all 27 colours, filled by `populateStoneColorOptions()`. It shows the shared
+  colour, or a blank "Mixed" entry when the selected stones differ;
+- `#aiStoneSize`: sizes from `listAllStoneSizes()` (SS4–SS30), shared value or "Mixed";
+- `#aiStoneDelete`: deletes the selection.
+
+A change to colour or size is one edit for the whole selection.
+
+### Stamp, Trace and Eraser
+
+`tagMarkTarget()` makes an ai-layout image proxy mark-eligible, with `markStones` proximity
+resolution as MONO-021 gives text (`markProxyContainsPoint()`). Any other image layer stays
+ineligible.
+
+| Tool | On an ai-layout layer |
+| --- | --- |
+| Stamp | Adds one stone at the click |
+| Trace | Adds the spaced placements |
+| Eraser, Stones mode | Deletes stones under the brush, by the same rule `eraseStonesWithinTest()` applies to a path layer |
+| Eraser, Outline mode | Deletes stones whose centre is inside the swept corridor (nothing to cut, as for text) |
+| Paint | Not supported: the layer is not a Paint candidate. Recolour through the selection panel instead |
+
+A Stamp or Trace size that is not a catalogue size snaps to the nearest of `listAllStoneSizes()`.
+The status line names the size used, for example "Stamped SS10 (2.8 mm), the nearest size an AI
+layout uses."
+
+### One write path
+
+`src/redraw/AiLayoutEdit.js` is a new pure module, exported through `src/redraw/index.js`. It holds:
+
+- **`aiLayoutPointFromAbsolute(layer, { xMm, yMm })`.** It returns box coordinates, the inverse of
+  the engine:
+  - k = max(1, `layer.w / aiLayout.widthMm`);
+  - undo the rotation about (`layer.x` + k·widthMm/2, `layer.y` + k·heightMm/2);
+  - subtract `layer.x` and `layer.y`;
+  - divide by k.
+- **`aiLayoutDeltaFromAbsolute(layer, { dxMm, dyMm })`.** The same without the translation.
+- **`applyAiLayoutEdits(layer, ops)`.** It returns `{ aiLayout, colorSwaps }` as new objects, and
+  throws on bad input. The ops:
+
+| op | Fields | Effect |
+| --- | --- | --- |
+| `delete` | `indices` | Removes those stones |
+| `move` | `indices`, `dxMm`, `dyMm` (absolute) | Adds the box delta to each |
+| `recolour` | `indices`, `colorId` | First bakes `colorSwaps` into every stone and empties it, then sets the colour |
+| `resize` | `indices`, `sizeId` | Sets the size id |
+| `add` | `stones: [{ xMm, yMm, sizeId, colorId }]` (absolute) | Appends, in order |
+
+- Coordinates are rounded to 0.001 mm in box space, as the service writes them.
+- `editCount` goes up by 1 per call.
+- A call that would leave more than 20,000 stones throws, and changes nothing.
+- Indices must be integers in range, sizes valid ids, colours known ids.
+
+Recolour bakes the swaps so that what you see is what is stored. After a manual recolour, "Reset
+colours" has nothing left to reset. This is a spec decision made with D.
+
+**app.js** gets `editAiLayoutStones(layerId, ops, statusText)`. It is the only code that writes
+`aiLayout` after a redraw. It:
+
+1. finds the image layer and checks that it is ai-layout;
+2. runs `commitHistory()`;
+3. writes the result of `applyAiLayoutEdits()`;
+4. runs `updateAll(true)`, and refreshes the Design stone group in the same order the path-layer
+   hooks use;
+5. sets the status text.
+
+Every gesture above calls it. Each of `onStampPlace`, `onTracePlace` and `onEraseSweep` gets an
+ai-layout branch before its path and text branches. `deleteCurrentSelection()` and the Design
+keyboard block get a stone-selection branch first. An open Image→Strass lightbox redraws through
+`updateAll()`, as today.
+
+### Gap violations shown
+
+Stones with `metadata.gapViolation` get a red ring:
+
+- in Design, on an overlay drawn with the stone group (the cached sprites stay as they are);
+- in the lightbox's Template and Overlay views, drawn after `renderStoneLayout()`.
+
+`updateProdSheetReadabilityValidation()` adds a warning, never a block: "N stones in AI layouts
+are closer than 0.1 mm to a neighbour. They have a red ring in Design." N counts layout stones
+with `gapViolation`. Editing is never blocked.
+
+### Size lock in Design (S14)
+
+`onShapeResized()` gets an ai-layout branch:
+
+- the edited dimension is the one that differs more from the layer's current value (ties go to
+  width);
+- it goes through `aiLayoutBoxSize()`;
+- the box keeps the reported `left` and `top`.
+
+This closes the gap the C2 report left open.
+
+### Build D anchors (grepped at `1fe28c5`)
+
+| Anchor | Location |
+| --- | --- |
+| `engine.generate()` stone rebuild | `app.js:1100` |
+| ai-layout branch of `generateImageStonesLive()` | `app.js:1165` |
+| `layoutStonesForLayer()` / `getImageLayerStones` wiring | `app.js:1688` / `:2478` |
+| `onStampPlace` / `onTracePlace` / `onEraseSweep` | `app.js:1960` / `:2050` / `:2143` |
+| `onShapeResized` | `app.js:2315` |
+| `commitHistory()` | `app.js:2630` |
+| `nudgeSelection()` | `app.js:3616` |
+| `eraseStonesWithinTest()` | `app.js:4486` |
+| Design keyboard block | `app.js:4873`–`:4942` |
+| `updateProdSheetReadabilityValidation()` | `app.js:5856` |
+| `drawTemplate` in `renderImageStudio()` | `app.js:6887` |
+| `updateDrawToolButtons()` / `deleteCurrentSelection()` | `app.js:7145` / `:7515` |
+| Design tool panel fields | `index.html:650`–`:680` |
+| `NUDGE_STEP_MM` | `src/editing/EditingConstants.js:13` |
+| Image proxy flag | `src/drawing/DrawingCanvasTool.js:814` |
+| `activeSelection` / `markProxyContainsPoint()` / `resolveMarkTargetByBounds()` / `tagMarkTarget()` | `DrawingCanvasTool.js:1316` / `:1671` / `:1687` / `:1791` |
+| `setActiveSelection()` / `rebuildImageStoneGroupForShape()` | `DrawingCanvasTool.js:1982` / `:2693` |
+| Image branch of the reconcile, `tagMarkTarget` for images | `DrawingCanvasTool.js:5018`–`:5043`, `:5036` |
+| `_generateAiLayoutStones()` / `flagAiLayoutGapViolations()` | `src/geometry/GeometryEngine.js:1223` (dispatch) / `:2752` |
+| `Stone` metadata and `toJSON()` | `src/geometry/Stone.js:7`, `:55` |
 
 ## Reference figures
 
@@ -944,9 +1097,33 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
 **Build D.**
 
-- An edit in Design changes the same stones in the Image→Strass view.
-- Undo and redo restore them exactly.
-- Moving a stone into a 0.05 mm gap sets `gapViolation` on both stones.
+- `aiLayoutPointFromAbsolute()` inverts the engine: a point added with `add` at an absolute
+  position comes back from the engine at that position within 1e-3 mm. This holds at k = 1, 1.5
+  and 2, and at rotation 0°, 30° and 90°.
+- `applyAiLayoutEdits()` on N2_cat (cropped as S1):
+  - each op changes exactly the stones it names;
+  - `editCount` goes up by 1 per call;
+  - recolour bakes and empties `colorSwaps`;
+  - a call that would exceed 20,000 stones throws and leaves the layer unchanged;
+  - each bad input throws.
+- An edit made through `editAiLayoutStones()` changes the same stones in the layout that Design and
+  the Image→Strass view read. Undo and redo restore `aiLayout` and `colorSwaps` exactly.
+- Moving a stone into a 0.05 mm gap sets `gapViolation` on both stones. They carry it in
+  `layoutStonesForLayer()`, and the Production Sheet warning counts them.
+- Layout stones of an ai-layout layer carry `aiIndex` and `gapViolation`. Every gallery project and
+  every legacy image mode gives byte-identical stones and JSON export.
+- Design (jsdom with Paper.js, as `test-img-020` runs it):
+  - a double-click enters stone mode only on an ai-layout layer;
+  - click, Shift-click, rectangle and lasso select by `aiIndex`;
+  - a drag commits one `move` edit on release;
+  - Escape leaves the mode;
+  - Stamp, Trace and Eraser on an ai-layout layer reach their hooks with its layer id;
+  - any other image layer still rejects as `'ineligible'`.
+- app.js:
+  - arrow keys move a stone selection 0.1 mm (1 mm with Shift), one history step each;
+  - Delete deletes it;
+  - `onShapeResized()` keeps the S14 lock;
+  - the Stamp size snaps to a catalogue size.
 
 ## Tests the builds must add
 
@@ -994,7 +1171,8 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 **D.**
 
 - `tools/test-img-026-design-editing.mjs` (group `editing`): the build D acceptance figures,
-  Stamp/Eraser on ai-layout layers, and the RS-3015 eligibility of other image layers unchanged.
+  Stamp/Trace/Eraser on ai-layout layers, and the RS-3015 eligibility of other image layers
+  unchanged.
 
 ## Existing tests that grep the text these builds change
 
@@ -1024,6 +1202,14 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   - `tools/test-img-005-check-and-fix.mjs:340`–`:344`;
   - `tools/test-ui-shell-structure.mjs:218`;
   - `tools/test-img-026-ai-layout-app.mjs` (the report keys and the success status text).
+
+  The build's audit must find any others.
+- Build D changes text these files grep:
+  - `tools/test-img-016-neutral-brown-stones.mjs:46` (the pinned stone-colour selects gain
+    `aiStoneColor`);
+  - `tools/test-rs3015-mark-target-eligibility.mjs` (ai-layout images become eligible);
+  - `tools/test-img-020-image-stones-in-design.mjs` and `tools/test-mono-021-mark-hooks.mjs` (the
+    hooks gain an ai-layout branch).
 
   The build's audit must find any others.
 
