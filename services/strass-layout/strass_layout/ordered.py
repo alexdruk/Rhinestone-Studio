@@ -11,6 +11,7 @@ from scipy.spatial import cKDTree
 from skimage.color import deltaE_ciede2000, rgb2lab
 
 from .colour import snap_colours, stone_colours
+from .errors import NoStones
 from .geometry import GAP, SS4, SS6, fill, resolve_idx, subject_mask
 
 CATCH_LAB = np.array([99.0, 0.0, 0.0])
@@ -107,6 +108,8 @@ def ordered_layout(px, det, state):
             C.append(col[i])
             S.append(det[i, 3])
             Mn.append(bool(minor_det[i]))
+    if not P:
+        raise NoStones("No stone survived the ordered layout.")
     P, D, C, S, Mn = np.array(P), np.array(Dl), np.array(C), np.array(S), np.array(Mn)
     my = np.clip((P[:, 1] / s).astype(int), 0, a.shape[0] - 1)
     mx = np.clip((P[:, 0] / s).astype(int), 0, a.shape[1] - 1)

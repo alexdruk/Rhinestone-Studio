@@ -78,7 +78,9 @@ def frst_candidates(px, mind=0.75):
     ys, xs = np.nonzero(pk)
     order = np.argsort(-best[ys, xs])
     ys, xs = ys[order], xs[order]
-    pts = np.array([(y, x, rr[y, x]) for y, x in zip(ys, xs)], float)
+    pts = np.array([(y, x, rr[y, x]) for y, x in zip(ys, xs)], float).reshape(-1, 3)
+    if len(pts) == 0:
+        return pts
     t = cKDTree(pts[:, :2])
     alive = np.ones(len(pts), bool)
     for i in range(len(pts)):
@@ -102,6 +104,8 @@ def _blob_energy(chans, sigmas):
 
 
 def _nms(pts, score, mind):
+    if len(pts) == 0:
+        return pts.reshape(-1, 3), score
     order = np.argsort(-score)
     pts = pts[order]
     score = score[order]
@@ -133,7 +137,7 @@ def blob_candidates(px, rmin=4, rmax=14, mind=0.8, q=0.5):
     s, ys, xs = np.nonzero(pk)
     ok = a[ys, xs] > 0.25
     s, ys, xs = s[ok], ys[ok], xs[ok]
-    pts = np.stack([ys, xs, radii[s]], 1).astype(float)
+    pts = np.stack([ys, xs, radii[s]], 1).astype(float).reshape(-1, 3)
     sc = E[s, ys, xs]
     pts, sc = _nms(pts, sc, mind)
     return pts
@@ -238,8 +242,12 @@ def _refine(G, c, steps=(0.8, 0.9, 1.0, 1.1, 1.2), shifts=(-1, 0, 1)):
 def _fuse(G, a, cands, rmin, rmax, smin, mind=0.8):
     c = cands[(cands[:, 2] >= rmin) & (cands[:, 2] <= rmax)]
     c = c[a[np.clip(c[:, 0].astype(int), 0, a.shape[0] - 1), np.clip(c[:, 1].astype(int), 0, a.shape[1] - 1)] > 0.25]
-    c = _refine(G, c)
+    if len(c) == 0:
+        return np.empty((0, 4))
+    c = _refine(G, c).reshape(-1, 4)
     c = c[c[:, 3] >= smin]
+    if len(c) == 0:
+        return c
     order = np.argsort(-c[:, 3])
     c = c[order]
     t = cKDTree(c[:, :2])

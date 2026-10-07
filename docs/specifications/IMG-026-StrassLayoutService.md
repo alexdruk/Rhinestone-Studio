@@ -680,6 +680,15 @@ image is kept as `tests/fixtures/sunburst_flower.png`; it lays out to 1011 stone
 0 violations, coverage 0.69. Visible weak spot: some dark separator lines between the lower petals
 are lost.
 
+**Second live crash (6 Oct 2026, tulip).** The service answered 500 "too many indices for array:
+array is 1-dimensional, but 2 were indexed". It did not reproduce on the tulip image here (741
+stones, 0 violations), so the cause is inferred: `frst_candidates()` with no peak returns a flat
+empty array and raises exactly that message. Fix (`fix/img-026a-empty-paths`): `frst_candidates`,
+`_nms`, `blob_candidates` and `_fuse` return two-dimensional arrays when empty, `ordered_layout()`
+raises `NoStones` when no stone survives, and any unexpected error is logged with its traceback and
+answered with the package file and line, `... (at detect.py:123)`, so a next failure names its
+place. All 12 reference images stay identical to `expected/`.
+
 **Model.** Production uses `OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst` with
 `OPENAI_IMAGE_QUALITY=high`. gpt-image-2 rejected the transparent background on 6 Oct 2026.
 Build C1 makes sunburst the default in `server/redraw/env.mjs`.
