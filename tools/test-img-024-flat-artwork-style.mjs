@@ -110,7 +110,7 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
   for (const body of [JSON.stringify({ image: FAKE_REDRAW_DATA_URL }), bodyWith({ style: 'stones' })]) {
     const spy = spyFetch(okImage);
     const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);
-    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 });
+    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 4 });
     assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt());
   }
   const spy = spyFetch(okImage);
@@ -128,16 +128,16 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
 
   const fake = createRedrawHandler({ settings: FAKE_SETTINGS });
   assert.equal((await jobResult(fake, bodyWith({ style: 'flat' }))).promptVersion, 1);
-  assert.equal((await jobResult(fake, bodyWith({ style: 'stones' }))).promptVersion, 3);
-  assert.equal((await jobResult(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).promptVersion, 3);
+  assert.equal((await jobResult(fake, bodyWith({ style: 'stones' }))).promptVersion, 4);
+  assert.equal((await jobResult(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).promptVersion, 4);
 });
 
 // ---- T2. Flat prompt text and version -----------------------------------------------------------
 
 await test('T2. prompt: versions; the flat prompt is exactly line 1, the palette header and buildPaletteLine(); the stones prompt is unchanged; REDRAW_STYLES agree', () => {
   assert.equal(FLAT_PROMPT_VERSION, 1);
-  assert.equal(PROMPT_VERSION, 3);
-  assert.deepEqual(PROMPT_VERSIONS, { stones: 3, flat: 1 });
+  assert.equal(PROMPT_VERSION, 4);
+  assert.deepEqual(PROMPT_VERSIONS, { stones: 4, flat: 1 });
   assert.deepEqual(buildRedrawPrompt(undefined, 'flat').split('\n'), [FLAT_LINE_1, 'Palette (name and hex):', buildPaletteLine()]);
   assert.equal(buildRedrawPrompt(), buildRedrawPrompt(undefined, 'stones'));
   assert.equal(buildRedrawPrompt(STONE_COLORS), buildRedrawPrompt());

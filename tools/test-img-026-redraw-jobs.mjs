@@ -150,7 +150,7 @@ async function start(handler, opts) {
   return res.json().jobId;
 }
 
-const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 };
+const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 4 };
 
 // ---- Job stages ---------------------------------------------------------------------------------
 
@@ -489,7 +489,7 @@ await test('12. the rate limit counts job creation only: polls and deletes never
 await test('13. fake mode: 202 with a job, no OpenAI and no layout call; the first three polls see drawing, placing, done with the fake image and fake-layout.json; flat keeps promptVersion 1', async () => {
   const spy = router();
   const { handler } = makeHandler({ fetch: spy.fetch, env: { REDRAW_FAKE: '1', OPENAI_API_KEY: '' } });
-  for (const [body, promptVersion] of [[UPLOAD_BODY, 3], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
+  for (const [body, promptVersion] of [[UPLOAD_BODY, 4], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
     const jobId = await start(handler, { body });
     assert.match(jobId, UUID_PATTERN);
     assert.deepEqual((await poll(handler, jobId)).json(), { stage: 'drawing' });
@@ -711,7 +711,7 @@ await test('22. end to end through the real handler: the provider drives a fake-
   const stages = [];
   const waits = [];
   const result = await createOpenAiProxyProvider({ fetch, wait: recordWait(waits) }).redraw({ pngDataUrl: FAKE_REDRAW_DATA_URL, accessCode: 'letmein', onStage: (s) => stages.push(s) });
-  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 3, layout: FAKE_LAYOUT, layoutError: null });
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 4, layout: FAKE_LAYOUT, layoutError: null });
   assert.deepEqual(stages, ['drawing', 'placing', 'done']);
   assert.equal(waits.length, 3);
 });

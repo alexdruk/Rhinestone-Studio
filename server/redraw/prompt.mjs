@@ -5,17 +5,18 @@
 // docs/specifications/IMG-022-RedrawProvider.md D6 and docs/specifications/IMG-024-FlatArtworkStyle.md D2.
 import { STONE_COLORS } from '../../src/renderer/StoneColors.js';
 
-// IMG-026 (S10, S11): version 3 is the placement-chart prompt of the spec's Appendix A, with the
-// generated palette line inside rule 4. Version 2 was the IMG-023 "designer" prompt; see
+// IMG-026 (S10, S11, build E): version 4 is the placement-chart prompt of the spec's Appendix B, with
+// the generated palette line inside rule 4. Version 3 (Appendix A) lacked the colour ramps and the
+// outline and texture rules; version 2 was the IMG-023 "designer" prompt; see
 // docs/specifications/IMG-026-StrassLayoutService.md.
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 // IMG-024 (D1/D2): 'stones' is the prompt above; 'flat' asks for flat colour regions, no stones.
 export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
 export const FLAT_PROMPT_VERSION = 1;
 export const PROMPT_VERSIONS = Object.freeze({ stones: PROMPT_VERSION, flat: FLAT_PROMPT_VERSION });
 
-const V3_HEAD = [
+const V4_HEAD = [
   'Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.',
   '',
   '1. STONES',
@@ -42,13 +43,23 @@ const V3_HEAD = [
   'Use only the colours below, with exactly these hex values, as flat fills:'
 ].join('\n');
 
-const V3_TAIL = [
+const V4_TAIL = [
   '- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.',
   '- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.',
+  '- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:',
+  '  skin: Light Peach, Light Colorado Topaz, Colorado Topaz, Smoked Topaz, with Crystal only for the brightest highlights;',
+  '  tan or brown fur, wood, earth: Light Peach, Light Colorado Topaz, Light Smoked Topaz, Colorado Topaz, Smoked Topaz;',
+  '  white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Hematite, Jet;',
+  '  greens: Peridot, Emerald; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Gold, Topaz, Hyacinth.',
+  '- Never use Topaz or Hyacinth on skin.',
+  '- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.',
+  '- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.',
   '',
   '5. DESIGN',
   '- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.',
   '- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).',
+  '- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.',
+  '- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.',
   '- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.',
   '- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.',
   '',
@@ -57,7 +68,7 @@ const V3_TAIL = [
   '- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.',
   '- One scale for the whole image, no perspective.',
   '',
-  'Before finishing, check that: every stone is a separate flat circle; no two stones touch; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used; the background is transparent or pure magenta.'
+  'Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.'
 ].join('\n');
 
 const FLAT_PROMPT_LINES = [
@@ -74,5 +85,5 @@ export function buildPaletteLine(colors = STONE_COLORS) {
 // Any style other than 'flat' is the stones prompt; the handler only passes a validated style.
 export function buildRedrawPrompt(colors = STONE_COLORS, style = 'stones') {
   if (style === 'flat') return [...FLAT_PROMPT_LINES, buildPaletteLine(colors)].join('\n');
-  return [V3_HEAD, buildPaletteLine(colors), V3_TAIL].join('\n');
+  return [V4_HEAD, buildPaletteLine(colors), V4_TAIL].join('\n');
 }

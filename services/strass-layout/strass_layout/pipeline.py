@@ -17,13 +17,14 @@ from .imageio import decode_png
 from .models import load_models
 from .ordered import ordered_layout
 from .post import SIZE_KEYS, post_process
+from .rules import DEFAULT
 from .timing import Stopwatch
 
 MIN_STONES = 50
 RESULT_VERSION = 1
 
 
-def layout_frame(png_bytes, target_pitch_mm=2.1, models=None):
+def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     """Run the pipeline on PNG bytes.
 
     Returns {"stones": [{x, y, size, d, color}], "frame": {...}, "stagesMs": {...}, "ms": int}.
@@ -38,9 +39,9 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None):
         raise NoStones("Only %d stones were detected; at least %d are needed." % (len(det), MIN_STONES))
     clock.lap("detect")
     state = FrameState(px.a, det, target_pitch_mm)
-    first = ordered_layout(px, det, state)
+    first = ordered_layout(px, det, state, rules)
     clock.lap("layout")
-    stones, info = post_process(px, det, state, first, models, clock)
+    stones, info = post_process(px, det, state, first, models, clock, rules)
     P = np.array([[q["x"], q["y"]] for q in stones])
     D = np.array([q["d"] for q in stones])
     C = [q["color"] for q in stones]
@@ -117,7 +118,7 @@ def finish_layout(result):
     return {"version": RESULT_VERSION, "widthMm": width, "heightMm": height, "stones": cropped, "report": report}
 
 
-def layout(png_bytes, color_ids=None, target_pitch_mm=2.1, models=None):
+def layout(png_bytes, color_ids=None, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     """PNG bytes in, the finished layout of IMG-026 out (see the spec's Entry point)."""
     check_colour_ids(color_ids)
-    return finish_layout(layout_frame(png_bytes, target_pitch_mm, models))
+    return finish_layout(layout_frame(png_bytes, target_pitch_mm, models, rules))

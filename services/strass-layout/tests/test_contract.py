@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app as service
-from strass_layout import layout
+from strass_layout import DEFAULT, layout
 from strass_layout.colour import CAT_IDS
 from tests import support
 
@@ -69,7 +69,7 @@ class Contract(unittest.TestCase):
             self.assertGreaterEqual(y - d / 2, -EDGE_TOLERANCE_MM)
             self.assertLessEqual(x + d / 2, body["widthMm"] + EDGE_TOLERANCE_MM)
             self.assertLessEqual(y + d / 2, body["heightMm"] + EDGE_TOLERANCE_MM)
-        direct = support.layout_result("logo")
+        direct = support.layout_result("logo", DEFAULT)
         self.assertEqual(body["stones"], direct["stones"])
         self.assertEqual((body["widthMm"], body["heightMm"]), (direct["widthMm"], direct["heightMm"]))
 
