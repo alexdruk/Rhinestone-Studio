@@ -34,6 +34,7 @@ The work ships as four milestones, one Claude Code build each:
 | IMG-026C1 | SS4, `layer.aiLayout`, engine branch, gap flag, redraw writes the layout, sunburst default | 5, 8 (engine tests) |
 | IMG-026C2 | Lightbox rework | 6, 8 (UI tests) |
 | IMG-026D | Editing ai-layout stones in Design | 7, 8 (editing tests) |
+| IMG-026E | Layout quality: outline chains, pupil core, prompt v4 | QA follow-up (7 Oct 2026) |
 
 ## Decisions accepted by Sasha (6 Oct 2026)
 
@@ -921,6 +922,127 @@ This closes the gap the C2 report left open.
 | `_generateAiLayoutStones()` / `flagAiLayoutGapViolations()` | `src/geometry/GeometryEngine.js:1223` (dispatch) / `:2752` |
 | `Stone` metadata and `toJSON()` | `src/geometry/Stone.js:31`, `:52`, `:55` |
 
+## Layout quality (build E)
+
+The first live tests (7 Oct 2026) show that the layout service loses detail the AI drew:
+- outlines turn into dashes;
+- the eyes become one large black stone;
+- skin and fur are blotchy.
+
+A measurement on 18 AI images located each cause. The images are the 12 reference images, the
+sunburst flower fixture, the second tulip, and four new uploads: the man, the bulldog, the
+landscape and the woman.
+
+- **Placement is faithful.** 96–99 % of the stones the detector finds keep their place within a
+  quarter of a stone, and under 2 % of the output stones are invented fill.
+- **Outlines.** The AI draws outlines as chains of small dark stones. The "shadow" rule
+  (`ordered.py:49`–`:53`) and the "interstitial" rule (`:66`–`:76`) drop them as noise. Then
+  `darkdots.clean()` (`post.py:166`) recolours the one- or two-stone fragments that are left.
+- **Eyes.** `find_pupils()` measures the pupil out to the first pixel with lightness above 45
+  (`eyes.py:71`–`:74`). A dark iris counts as pupil, so the pupil stone covers the whole iris and
+  the iris rings sample black.
+- **Colour.**
+  - Our pick is the nearest catalogue colour for 80–93 % of stones. Neither neighbour smoothing nor
+    other matching rules changed the result by more than 2 %.
+  - The AI paints skin and fur in shades that lie between catalogue colours: about 8 ΔE2000 from
+    the nearest one, against about 2 on blacks and whites.
+  - So colour is fixed at the source, by prompt v4 (Appendix B), and not in the service.
+
+### Rules
+
+A new module, `strass_layout/rules.py`, holds a frozen dataclass:
+
+```python
+@dataclass(frozen=True)
+class Rules:
+    pupil_core_only: bool
+    keep_chains: bool
+    chain_dark_l: float = 30.0
+    chain_min_len: int = 3
+    chain_link: float = 1.35
+
+PROTOTYPE = Rules(pupil_core_only=False, keep_chains=False)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True)
+```
+
+- `layout_frame()` and `layout()` gain a keyword argument `rules=DEFAULT`, and pass it to
+  `ordered_layout()`, `post_process()` and `find_pupils()`.
+- The HTTP service always uses `DEFAULT`.
+- No environment variable is read. The only one in the package stays `STRASS_SKIP_EQUIVALENCE`, in
+  `test_equivalence` (S5.1).
+- With `PROTOTYPE`, every function behaves exactly as today.
+
+### Pupil core (`pupil_core_only`)
+
+In `_find_thr()`, the pupil diameter is `De`, the equivalent diameter of the dark blob itself,
+instead of `max(De, Dr)`. `Dr`, the ray march to lightness 45, is not computed. The rest of the eye
+rule is unchanged:
+- the pupil size is snapped to `PUPIL_SIZES`;
+- the catch-light stays;
+- the iris rings and the cleared zone follow from the smaller pupil.
+
+So the iris the AI drew is sampled for the ring colours and is no longer painted black.
+
+### Outline chains (`keep_chains`)
+
+A new module, `strass_layout/chains.py`, holds `chain_mask(det, col, s, rules)`. It returns a
+boolean mask over the detections. A detection is a chain member when all of these hold:
+- its colour (Lab `col`, as `ordered_layout()` computes it) has L < `chain_dark_l`;
+- its diameter is 1.1 mm ≤ d < 2.9 mm;
+- it belongs to a connected group of at least `chain_min_len` such detections;
+- in that group, two detections are linked when their centre distance is at most
+  `chain_link` × (rᵢ + rⱼ).
+
+How the mask is used:
+- `ordered_layout()` computes it after the shadow and interstitial masks. Chain members are taken
+  out of both (`shadow &= ~chain`, `inter &= ~chain`). The tiny and gap-colour rules are unchanged.
+- `post_process()` computes the same mask. A placed stone within 0.5 mm of a chain member joins
+  `genuine_dark` before `darkdots.clean()`, so that rule does not recolour outline fragments.
+
+### Prompt v4
+
+`PROMPT_VERSION` becomes 4. The stones prompt becomes Appendix B: Appendix A plus four colour rules
+and two design rules. The flat prompt and `FLAT_PROMPT_VERSION = 1` do not change. The BACKLOG row
+that reserved "PROMPT_VERSION 4" for the product-aware stone count (`docs/BACKLOG.md:77`) is
+renamed to "PROMPT_VERSION 5".
+
+### Measured on the experiment copy (7 Oct 2026, Linux)
+
+Detection was cached, and the rest of the pipeline ran per variant. All 18 images:
+- 0 gap violations, minimum gap ≥ 0.1000 mm;
+- stone counts +0.0 % to +1.0 %, coverage within ±0.003.
+
+| Image | Stones PROTOTYPE → DEFAULT | Pupils mm PROTOTYPE → DEFAULT | Dark-line coverage |
+| --- | --- | --- | --- |
+| cat | 2146 → 2150 | 6.16 → 5.91 | 0.910 → 0.946 |
+| dog | 1670 → 1672 | 7.00 → 6.66 | 0.969 → 0.964 |
+| einstein | 3574 → 3588 | 6.04 → 5.63 | 0.584 → 0.588 |
+| jesus | 3268 → 3300 | 4.89 → 4.89 | 0.980 → 0.987 |
+| leopard | 2425 → 2430 | 5.35 → 4.71 | 0.971 → 0.986 |
+| woman | 2589 → 2606 | 6.32 → 6.32 | 0.929 → 0.953 |
+| landscape (new) | 4633 → 4679 | — | 0.75 → 0.81 |
+| bulldog (new) | 2421 → 2427 | 6.52 → 5.37 | 0.98 → 0.99 |
+
+- **Dark-line coverage** is the share of the AI's dark pixels (L < 30 on white, alpha > 0.5)
+  covered by a dark output stone (jet, hematite, black-diamond or smoked-topaz) grown by 0.15 of the
+  pitch.
+- **Over the 13 repository images** (the 12 reference images and the flower):
+  - mean dark-line coverage goes from 0.7327 to 0.7385;
+  - the mean share of detected stones dropped goes from 0.0491 to 0.0462.
+
+### Build E anchors (grepped at `e18dbdc`)
+
+| Anchor | Location |
+| --- | --- |
+| `find_pupils()` / `_find_thr()` / ray march / `Dr` | `services/strass-layout/strass_layout/eyes.py:17` / `:26` / `:71` / `:74` |
+| `ordered_layout()` / shadow / interstitial / `use` | `strass_layout/ordered.py:27` / `:53` / `:76` / `:77` |
+| `post_process()` / `find_pupils` call / `genuine_dark` / `darkdots.clean` | `strass_layout/post.py:37` / `:49` / `:161` / `:166` |
+| `layout_frame()` / `layout()` | `strass_layout/pipeline.py:26` / `:120` |
+| Test support calls `layout_frame()` | `services/strass-layout/tests/support.py:36` |
+| `PROMPT_VERSION` / `V3_HEAD` / `V3_TAIL` | `server/redraw/prompt.mjs:11` / `:18` / `:45` |
+| Prompt tests | `tools/test-img-022-redraw-provider.mjs:188`–`:191`, `tools/test-img-024-flat-artwork-style.mjs:139`–`:140` |
+| BACKLOG row | `docs/BACKLOG.md:77` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -1127,6 +1249,30 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   - `onShapeResized()` keeps the S14 lock;
   - the Stamp size snaps to a catalogue size.
 
+**Build E.**
+
+- With `rules=PROTOTYPE`, `layout_frame()` equals today's output on all 12 images. The equivalence
+  test (S5.1) and the golden test (S5.2) run with `PROTOTYPE` and keep their figures.
+- With `rules=DEFAULT`, on the 12 images and `tests/fixtures/sunburst_flower.png`:
+  - 0 violations, and minimum gap ≥ 0.100 mm;
+  - each stone count is at least the `PROTOTYPE` count and at most 2 % above it;
+  - each coverage is within ±0.01 of `PROTOTYPE`;
+  - each pupil diameter in `report.pupilsMm` is at most the `PROTOTYPE` one;
+  - the mean dark-line coverage over the 13 images is above the `PROTOTYPE` mean, and the mean
+    share of dropped detections is below it. Both are as defined in "Layout quality (build E)" and
+    computed by the test.
+- `chain_mask()`:
+  - a line of 5 touching dark 1.5 mm detections is all chain;
+  - 2 such detections are not;
+  - 5 light detections are not;
+  - with `PROTOTYPE` the mask is empty.
+- `find_pupils()` on a synthetic eye (a black disc of radius 8 px inside a dark brown iris of radius
+  16 px, iris lightness 35, with a white highlight): with `pupil_core_only` the diameter is about
+  that of the black disc; with `PROTOTYPE` it is about that of the iris.
+- `POST /layout` uses `DEFAULT`, and `test_contract` compares the HTTP answer with
+  `layout(..., rules=DEFAULT)`.
+- `PROMPT_VERSION === 4`, and the stones prompt equals Appendix B with the generated palette line.
+
 ## Tests the builds must add
 
 **A.**
@@ -1169,6 +1315,12 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   checks.
 - C2: `tools/test-img-026-lightbox.mjs` (group `ui`): the Build C2 acceptance figures, for an
   ai-layout layer and for a legacy layer.
+
+**E.**
+
+- `services/strass-layout/tests/test_rules.py`: the Build E service figures.
+- `tests/support.py` caches frames per (image, rules).
+- `tools/test-img-022-redraw-provider.mjs` T1 reads Appendix B instead of Appendix A.
 
 **D.**
 
@@ -1338,3 +1490,67 @@ This requires the D2 colours to be appended to the end of `CRYSTAL_COLOR_LIST` i
 pickers.
 
 The research doc's line differs from this one in order and in one name ("Light Colorado").
+
+## Appendix B — Redraw prompt v4 (`PROMPT_VERSION = 4`)
+
+Prompt v4 is Appendix A with two blocks added (build E):
+- the four colour rules at the end of section 4;
+- the outline and texture rules in section 5.
+
+The final check is extended to match. Build E makes `buildRedrawPrompt(colors, 'stones')` return
+`V4_HEAD`, then the palette line, then `V4_TAIL`, joined with `\n`. `V4_HEAD` and `V4_TAIL` are
+exactly the text below, split at the `<palette line>` marker. The palette line is the one Appendix
+A shows. `V4_HEAD` equals `V3_HEAD`.
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design. Make the stones large: about 60 stones across the full width of the image.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin: Light Peach, Light Colorado Topaz, Colorado Topaz, Smoked Topaz, with Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Light Peach, Light Colorado Topaz, Light Smoked Topaz, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Hematite, Jet;
+  greens: Peridot, Emerald; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Square image at the highest resolution available.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
