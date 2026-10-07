@@ -821,6 +821,10 @@ ineligible.
 | Eraser, Outline mode | Deletes stones whose centre is inside the swept corridor (nothing to cut, as for text) |
 | Paint | Not supported: the layer is not a Paint candidate. Recolour through the selection panel instead |
 
+While a layer is in stone editing, Stamp, Trace and Eraser act on that layer wherever you click,
+so stones can be added outside the design, for example as a border. The data already allows stones
+outside the box. Outside stone editing, the targets resolve as RS-3015 and MONO-021 say.
+
 A Stamp or Trace size that is not a catalogue size snaps to the nearest of `listAllStoneSizes()`.
 The status line names the size used, for example "Stamped SS10 (2.8 mm), the nearest size an AI
 layout uses."
