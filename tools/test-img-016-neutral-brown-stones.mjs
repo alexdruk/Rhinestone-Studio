@@ -82,9 +82,14 @@ function selectInnerHtml(id) {
 function populatedSelectIds() {
   const ids = [];
   const code = codeLines(appJsWithoutPopulate);
+  const rowsStart = code.indexOf('function renderAiLayoutColourRows(');
+  const rowsEnd = rowsStart === -1 ? -1 : rowsStart + sliceBraceBalanced(code, rowsStart).length;
   for (const m of code.matchAll(/(for\(let (\w+)=0;\2<(\d+);\2\+\+\))?populateStoneColorOptions\(([^)]*)\)/g)) {
     const arg = m[4].trim();
     if (arg === '') { ids.push('stoneColor'); continue; }
+    // IMG-026 (C2): the Colours used rows create their selects at run time, one per colour, so they
+    // are not pinned here; the call is accepted only inside renderAiLayoutColourRows().
+    if (arg === 'pick.id' && m.index > rowsStart && m.index < rowsEnd) continue;
     const literal = /^'(\w+)'$/.exec(arg);
     if (literal) { ids.push(literal[1]); continue; }
     const template = /^`(\w+)\$\{(\w+)\}`$/.exec(arg);

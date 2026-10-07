@@ -477,9 +477,9 @@ await test('T12. wiring: the Redraw style select, its storage, the run-bound sty
   assert.ok(history && !history[1].includes('imageRedrawStyle'));
 
   const sync = extractFunction('function syncImageRedrawControls(l){');
-  assert.ok(sync.includes("el('imageRedrawStyleField').hidden=el('imageRedraw').hidden;el('imageRedrawStyle').disabled=busy;"));
+  assert.ok(!sync.includes('imageRedrawStyleField'), 'IMG-026 C2: the Redraw style field is never shown');
   const start = extractFunction('async function startImageRedraw(){');
-  assert.ok(start.includes("const style=el('imageRedrawStyle').value==='flat'?'flat':'stones';"));
+  assert.ok(start.includes("const style='stones';"));
   assert.ok(start.includes('redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:'));
   assert.ok(start.includes("style==='stones'?aiStoneDetectionFor("));
   assert.ok(start.includes('detection&&detection.ok?'));

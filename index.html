@@ -93,6 +93,9 @@ button.icon-btn[aria-pressed="true"][data-shortcut]::after{background:var(--colo
 .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
 .color-pick-row select{flex:1}
+.ai-colour-row{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.ai-colour-row .ai-colour-name{flex:1;font-size:var(--font-size-sm)}
+.ai-colour-row select{flex:1;min-width:0}
 .color-swatch{width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);border-radius:var(--radius-sm);border:1px solid var(--color-border-strong);box-shadow:inset 0 0 0 1px #fff}
 .status-message{font-size:var(--font-size-sm);color:var(--color-success);margin-top:var(--space-2)}
 
@@ -1182,6 +1185,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                reset logic. -->
           <button id="imageStudioSwitchToSheet" class="btn sm">Switch to Flat Sheet</button>
         </details>
+        <details class="advanced-section" id="imageStudioGroupPosition" open>
+          <summary>Position &amp; size</summary>
+          <div id="imageTracePositionSlot" class="field-slot"></div>
+        </details>
+        <div id="legacyImageControls">
         <details class="advanced-section" id="imageStudioGroupTrace" open>
           <summary>Trace</summary>
           <div id="imageControls">
@@ -1205,10 +1213,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <label class="checkbox-row" title="Fills small holes, fixes single odd-coloured stones and removes stray crumbs"><input type="checkbox" id="imgCleanup"> Clean up stones</label>
           <label class="checkbox-row" title="Turns the outer edge of the design into one row of Jet stones"><input type="checkbox" id="imgJetOutline"> Jet outline</label>
           <p class="hint" id="imgCleanupHint" hidden>Clean-up works with Staggered Fill (one stone size) and AI stones</p>
-        </details>
-        <details class="advanced-section" id="imageStudioGroupPosition" open>
-          <summary>Position &amp; size</summary>
-          <div id="imageTracePositionSlot" class="field-slot"></div>
         </details>
         <details class="advanced-section" id="imageStudioGroupStones" open>
           <summary>Stones</summary>
@@ -1251,6 +1255,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field"><label for="imgBrightnessSteps">Brightness steps</label><select id="imgBrightnessSteps" title="Maps each point's measured brightness to a stone size -- darker areas get larger stones, brighter areas smaller. Off = every stone is this layer's stone size."><option value="0">Off</option></select></div>
           <div class="field"><label for="imgBrightnessThinning">Thinning <span id="imgBrightnessThinningValue" class="hint"></span></label><input id="imgBrightnessThinning" type="range" min="0" max="3" step="0.1" value="0" title="Thins Organic/Edge placement density in brighter areas. 0 = no thinning."></div>
         </details>
+        </div>
+        <details class="advanced-section" id="imageStudioGroupAiColours" open>
+          <summary>Colours used</summary>
+          <div id="aiLayoutColourRows"></div>
+          <button id="aiLayoutColourReset" class="btn sm">Reset colours</button>
+        </details>
         <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
       </div>
       <div id="imageStudioCanvasColumn">
@@ -1258,8 +1268,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <label><input type="radio" name="imageStudioView" value="source">Source</label>
           <!-- IMG-023: shown only for a redrawn layer (app.js renderImageStudio()). -->
           <label id="imageStudioViewAi" hidden><input type="radio" name="imageStudioView" value="ai">AI image</label>
-          <label><input type="radio" name="imageStudioView" value="mask">Mask</label>
-          <label><input type="radio" name="imageStudioView" value="colors">Colours</label>
+          <label id="imageStudioViewMask"><input type="radio" name="imageStudioView" value="mask">Mask</label>
+          <label id="imageStudioViewColors"><input type="radio" name="imageStudioView" value="colors">Colours</label>
           <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
           <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
         </div>
@@ -1273,6 +1283,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <dt>Sizes</dt><dd id="imageStudioStatSizes">—</dd>
           <dt>Colours</dt><dd id="imageStudioStatColors">—</dd>
           <dt>Bounding box</dt><dd id="imageStudioStatBox">—</dd>
+          <dt id="imageStudioStatMinGapLabel" hidden>Min gap</dt><dd id="imageStudioStatMinGap" hidden>—</dd>
+          <dt id="imageStudioStatViolationsLabel" hidden>Gap violations</dt><dd id="imageStudioStatViolations" hidden>—</dd>
+          <dt id="imageStudioStatCoverageLabel" hidden>Coverage</dt><dd id="imageStudioStatCoverage" hidden>—</dd>
+          <dt id="imageStudioStatScaleLabel" hidden>Enlarged</dt><dd id="imageStudioStatScale" hidden>—</dd>
         </dl>
         <p class="hint" id="imageStudioStatCleanup" hidden></p>
       </div>

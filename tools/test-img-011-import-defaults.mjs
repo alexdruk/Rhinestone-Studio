@@ -62,7 +62,7 @@ function buildImageStudioRemoveHandler(source, { selectedLayer, deleteLayer, lig
     return elTarget;
   };
   // eslint-disable-next-line no-new-func
-  new Function('el', 'selectedLayer', 'deleteLayer', 'lightboxes', source)(el, selectedLayer, deleteLayer, lightboxes);
+  new Function('el', 'selectedLayer', 'deleteLayer', 'lightboxes', 'redrawRun', 'runningLayerId', source)(el, selectedLayer, deleteLayer, lightboxes, null, null);
   return elTarget.onclick;
 }
 

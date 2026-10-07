@@ -404,7 +404,7 @@ await test('T9. wiring: index.html controls and AI image view; renderImageStudio
   assert.equal((studio.match(/ctx\.drawImage\(/g) || []).length, 2);
   assert.equal((studio.match(/drawInBox\(/g) || []).length, 3);
   assert.ok(studio.includes("for(const id of['imgColorCount','imgVividness','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7']){el(id).disabled=isAiStones;el(id).title=aiStonesUnusedTitle}"));
-  assert.ok(studio.includes("el('imageStudioViewAi').hidden=!l.redraw;"));
+  assert.ok(studio.includes("el('imageStudioViewAi').hidden=!state.views.ai;"));
 
   const history = /const HISTORY_TRACKED_CONTROL_IDS=\[([^\]]*)\];/.exec(appJs);
   assert.ok(history && history[1].split(',').includes("'imgAiStoneShrink'"));

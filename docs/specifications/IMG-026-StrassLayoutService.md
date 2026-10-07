@@ -185,8 +185,8 @@ product-aware prompt stays in BACKLOG (S10).
 `#legacyImageControls`. `renderImageStudio()` shows it only when the selected image layer's
 `fillMode` is not `'ai-layout'`. The shared Position/Stone/Mixed fields (index.html 1513–1616) are
 moved into the lightbox slots by `app.js:5868`–`:5874` and also serve text and shape layers.
-They are therefore hidden per field, only while an ai-layout image layer is selected and the
-lightbox is open, and never removed. No engine code is deleted.
+They are hidden only through their lightbox container, never by id, and never removed (restated in
+the C2 "Controls" section). No engine code is deleted.
 
 **S17. Colour swaps.** `layer.colorSwaps` is `{ fromId: toId }`. The engine applies it after
 building the stones and after manual edits. The "Colours used" counts are taken after the swaps.
@@ -520,9 +520,189 @@ harness, rather than assume it.
 
 ## Lightbox (build C2)
 
-### Lightbox controls
+For an ai-layout layer, the lightbox shows only four things: the source, the position and size,
+the colours used, and the stats. Everything else is legacy, and it stays for layers that are not
+ai-layout (D4). Line numbers are those of the anchors table at the end of this section.
 
-The lightbox is `index.html:1155`–`:1284`. Of its 35 controls, 8 are kept, 4 reworked and 23
+### Flow
+
+1. **Upload.** The `#importImageFile` handler creates the layer as it does today: staggered, with
+   the legacy fields. If a redraw provider is available, the handler then calls
+   `startImageRedraw()` at once. If availability is not known yet, it first awaits
+   `getRedrawAvailability()`. Consent is asked at the first upload, as today. This is the only path
+   that starts a redraw on its own. The audit must report any other path that creates an image
+   layer.
+2. **Waiting.** The canvas view switches to Source. The status line shows C1's stage texts, Cancel
+   is visible, and the legacy controls are hidden.
+3. **Layout arrives.** The layer is ai-layout, and the view switches to Template. The status line
+   reads "Placed N stones. Gap check: V violations."
+4. **No layout** (`layoutError`). The IMG-023 AI stones path runs, as in C1, with C1's "Placed
+   with the old method: …" text. "Try again" shows.
+5. **Failure, decline, cancel or refused consent.** The layer stays as uploaded, and the status
+   texts are today's. "Try again" shows.
+6. **No provider.** The status line reads "Redraw with AI is not available on this server, so the
+   image was placed with the classic method." The legacy controls show.
+
+`startImageRedraw()` always sends style `'stones'`. `#imageRedrawStyleField` is never shown. The
+flat style stays dormant and tested (D3).
+
+### Who sees what
+
+A pure function, `imageStudioState(layer, { available, runningLayerId, failed })`, lives in the new
+module `src/ui/ImageStudioState.js`. `renderImageStudio()` and `syncImageRedrawControls()` apply
+its result, and do not repeat its rules. Its inputs:
+
+- `runningLayerId` is the layer id of the running redraw, or `null`. app.js keeps it next to
+  `redrawRun`.
+- `failed` is true when this layer's last run in this session failed, was declined, was
+  cancelled, or fell back to the old method. app.js keeps these layer ids in a `Set`. A run that
+  produces a layout removes its layer id from the set.
+
+| Key | Rule |
+| --- | --- |
+| `legacy` (`#legacyImageControls` shown) | there is a layer, its `fillMode` is not `'ai-layout'`, and `runningLayerId` is not this layer |
+| `aiColours`, `aiStats` | `fillMode === 'ai-layout'` |
+| `redrawButton` | `null` when there is no layer, `!available`, or any run is going. Otherwise, for ai-layout: `'Try again'` when `aiLayout.report.coverage < 0.5`, else `null`. For any other layer: `'Try again'` when `failed`, else `'Redraw with AI'` |
+| `useOriginal` | `layer.redraw` exists, `fillMode` is not `'ai-layout'`, and no run is going |
+| `views` | `{ mask, colours }` are false for ai-layout and true otherwise. `ai` is `!!layer.redraw`, as today |
+
+The `'Redraw with AI'` label for other layers lets a layer saved before v2 be upgraded. It is a
+spec decision made with C2.
+
+`#imageRedraw` keeps its id and title; only its text changes. When `redrawButton` is
+`'Try again'` and `aiLayout.editCount > 0`, a click first asks "This discards N manual edits."
+Use the app's existing confirm dialog if one exists; the audit names it. Otherwise use
+`window.confirm`, and report that.
+
+### Controls (index.html)
+
+The new order of the groups:
+
+1. Source
+2. Position & size
+3. `<div id="legacyImageControls">`, holding in their current order: Trace, Stones, Colours,
+   Organic, Edges, Check & fix, Brightness
+4. A new `<details class="advanced-section" id="imageStudioGroupAiColours" open>` with the summary
+   "Colours used", `<div id="aiLayoutColourRows"></div>`, and
+   `<button id="aiLayoutColourReset" class="btn sm">Reset colours</button>`
+
+Group ids do not change. For old layers, the only visible change is that Position & size moves
+up.
+
+The Stones group holds the slots that receive the shared stone and Mixed fields. Because that group
+sits inside the wrapper, those fields are hidden only while they are in the lightbox. They are never
+hidden or removed by id, and in the inspector they behave as today. This replaces S16's "hidden
+per field". The inspector shows the same fields for an ai-layout layer as today; changing that is
+a later build.
+
+### Size (S14)
+
+A pure helper, `aiLayoutBoxSize(aiLayout, request)`, lives in `src/redraw/RedrawLayerTransform.js`.
+`request` is `{ widthMm }` or `{ heightMm }`. It returns `{ w, h }`:
+
+- w = max(`aiLayout.widthMm`, the requested width, or the requested height × widthMm / heightMm);
+- h = w × heightMm / widthMm.
+
+It is applied in three places:
+
+- **W and H fields.** In the image branch of `writeSelectedControlsToLayer()`, for an ai-layout
+  layer, the field whose value differs from `l.w` (or `l.h`) is the one the user edited. The box
+  keeps `x` and `y`. The fields are then synced back, so a value below the minimum snaps back.
+  While an ai-layout layer is selected, `shapeW.min` and `shapeH.min` are the layout size. They are
+  removed for any other layer.
+- **Canvas handles.** Both resize branches at `app.js:4753` change for an ai-layout layer:
+  - e, w and corner handles set the width; n and s handles set the height. The result then goes
+    through the helper.
+  - A corner handle keeps the opposite corner fixed. An edge handle keeps the midpoint of the
+    opposite edge fixed.
+  - The rotated branch keeps its `anchorAbs` and `handleOffset` formula and uses the locked w and
+    h.
+- **Design** (`src/drawing/DrawingCanvasTool.js`). If Design can resize an image layer, report it
+  and do not change it (build D).
+
+### Colours used (S17)
+
+A pure helper, `aiLayoutColourRows(aiLayout, colorSwaps)`, lives in `src/ui/ImageStudioState.js`.
+It returns one `{ fromId, toId, count }` per colour id that appears in `aiLayout.stones`:
+
+- `count` is the number of stones with that original id;
+- `toId` is `colorSwaps[fromId] ?? fromId`;
+- rows are sorted by count, highest first; ties follow `STONE_COLORS` key order.
+
+Each row shows:
+
+- a swatch in `toId`'s `previewColor`;
+- the name of `fromId`;
+- the count;
+- a select of all 27 colours, filled by `populateStoneColorOptions()`, with `toId` as its value.
+
+A change runs `commitHistory()`, sets `colorSwaps[fromId] = toId` (or deletes the key when they are
+equal), then runs `updateAll(true)`. Reset runs `commitHistory()`, sets `colorSwaps = {}`, then
+runs `updateAll(true)`. Neither control joins `HISTORY_TRACKED_CONTROL_IDS`, and
+`writeSelectedControlsToLayer()` reads neither. `renderImageStudio()` rebuilds the rows. Two
+colours swapped to the same target stay two rows.
+
+### Stats
+
+For an ai-layout layer, four rows follow Bounding box. Their `dt` and `dd` are hidden for any other
+layer.
+
+| Row (dd id) | Value |
+| --- | --- |
+| Min gap (`imageStudioStatMinGap`) | `aiLayoutStats.minGapMm`, through `formatLengthDisplay` with 3 decimals |
+| Gap violations (`imageStudioStatViolations`) | `aiLayoutStats.violations`, with class `validation-message` when above 0 |
+| Coverage (`imageStudioStatCoverage`) | `aiLayout.report.coverage` as a whole percent, or "—" when absent |
+| Enlarged (`imageStudioStatScale`) | k as "×1.00" |
+
+`aiLayoutStats` comes from the `generateImageStonesLive(l, { includeStats: true })` call that
+`renderImageStudio()` already makes, so no new call is added. The SS4 count is already in the Sizes
+row, because `formatStoneSizeLabel(1.5)` is "SS4 (1.5 mm)".
+
+### Views
+
+- For an ai-layout layer, the Mask and Colours labels are hidden. If one of them is checked, the
+  view switches to Template.
+- **AI image and Overlay line up with the stones.**
+  - `AI_LAYOUT_REPORT_KEYS` (`RedrawLayerTransform.js:66`) adds `offsetMm` and `mmPerPx`.
+  - A pure helper, `aiLayoutImageBox(layer)`, in the same module returns the AI image's box
+    `{ x, y, w, h }`, with k = max(1, `l.w / aiLayout.widthMm`):
+    - x = `l.x` − k·offX, y = `l.y` − k·offY;
+    - w = k·mmPerPx·`naturalWidthPx`, h = k·mmPerPx·`naturalHeightPx`.
+  - The helper returns `null` when either key is missing (layers made with C1), and those keep
+    today's drawing.
+  - Under rotation the image turns about the layer box's centre, as `drawInBox` does.
+  - `validateProject()` accepts the two keys when present: `offsetMm` must be two finite numbers,
+    and `mmPerPx` a finite number > 0.
+- Source is unchanged.
+
+### Remove and Cancel
+
+- Remove image cancels a running redraw for that layer before it deletes the layer.
+- Cancel is unchanged, and marks the layer `failed`.
+
+### Build C2 anchors (grepped at `0a306e8`)
+
+| Anchor | Location |
+| --- | --- |
+| Lightbox `#lightboxImageTrace` | `index.html:1156`–`:1284` |
+| Source group / redraw row / Trace group / Fill style | `index.html:1161` / `:1170`–`:1175` / `:1185` / `:1200` |
+| Position / Stones (slots) / Colours / Organic / Edges / Check & fix / Brightness | `index.html:1209` / `:1213` / `:1218` / `:1232` / `:1239` / `:1245` / `:1249` |
+| View toggle / stats | `index.html:1257` / `:1269`–`:1278` |
+| Shared position, stone and Mixed fields | `index.html:1511`ff. |
+| `IMAGE_FILL_MODES` / ai-layout branch in `generateImageStonesLive()` / aiLayout checks in `validateProject()` | `app.js:678` / `:1164` / `:1308` |
+| `syncSelectedControlsFromLayer()` / ai-layout option / `writeSelectedControlsToLayer()` / image branch | `app.js:2644` / `:2688` / `:2809` / `:2877` |
+| Canvas resize branches | `app.js:4753`–`:4773` |
+| `HISTORY_TRACKED_CONTROL_IDS` | `app.js:5157` |
+| Upload handler / Remove image | `app.js:5615` / `:5633` |
+| `syncImageRedrawControls()` / `startImageRedraw()` / style read / Use original / `imgColorReset` | `app.js:5667` / `:5697` / `:5708` / `:5745` / `:5768` |
+| `relocateFieldGroups()` / `lightboxes.imagetrace` | `app.js:5901` / `:5925` |
+| `IMAGE_STUDIO_LIVE_GROUP_IDS` / `renderImageStudio()` / view switch / stats / `includeStats` call | `app.js:6700` / `:6713` / `:6842` / `:6866` / `:6878` |
+| `fitAiLayoutCanvas()` / `AI_LAYOUT_REPORT_KEYS` / `applyRedraw()` / `restoreOriginal()` | `src/redraw/RedrawLayerTransform.js:57` / `:66` / `:100` / `:194` |
+| `formatStoneSizeLabel()` | `src/renderer/StoneSizes.js:156` |
+
+### Inventory (written before C2)
+
+The lightbox is `index.html:1156`–`:1284`. Of its 35 controls, 8 are kept, 4 reworked and 23
 hidden.
 
 **Kept**
@@ -542,12 +722,12 @@ hidden.
 
 | Control (id) | v2 behaviour |
 | --- | --- |
-| Redraw with AI (`imageRedraw`) | Hidden; runs on every upload. "Try again" shows only after a failure, a decline, or coverage < 0.5. It asks first when `editCount > 0`: "This discards N manual edits." |
+| Redraw with AI (`imageRedraw`) | Runs on every upload. Hidden for an ai-layout layer, except as "Try again" when coverage < 0.5. "Try again" also shows after a failure, decline, cancel or old-method fallback. A layer that is not ai-layout and has no failure keeps "Redraw with AI", so old layers can be upgraded. It asks first when `editCount > 0`: "This discards N manual edits." |
 | Width / Height (`shapeW`, `shapeH`) | Aspect locked, enlarge only (S14) |
 | Colour 1…8 + Reset (`imgColorPick0`–`7`, `imgColorReset`) | Replaced, for ai-layout layers, by "Colours used": one row per colour (swatch, name, count, replacement select listing all 27), plus Reset; writes `layer.colorSwaps` |
 | Use original (`imageRedrawUseOriginal`) | Hidden for ai-layout layers; the original stays in the Source view |
 
-**Hidden** (inside `#legacyImageControls` or hidden per field, S16)
+**Hidden** (inside `#legacyImageControls`, S16 as restated in "Controls" above)
 
 Redraw style (`imageRedrawStyle`, D3) · Mask (`imgMaskMode`) · Threshold (`imgThreshold`) ·
 Invert (`imgInvert`) · Transparency (`imgTransparent`) · Blur radius (`imgBlurRadius`) · Maximum
@@ -732,7 +912,35 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - Every gallery project and every legacy image fixture gives identical stones.
 - A 1.5 mm stone goes through the Production Sheet (labelled SS4), DXF, SVG and PNG exporters.
 
-**Build C2.** See its own section; the figures are written with its prompt.
+**Build C2.**
+
+- `imageStudioState()` gives the table in "Who sees what" for each of these:
+  - an ai-layout layer with coverage 0.65, and one with 0.4;
+  - a staggered layer with and without `failed`;
+  - an ai-stones layer with a `redraw` record;
+  - the layer whose run is going, and another layer while it runs;
+  - `available: false`;
+  - no layer.
+- `aiLayoutBoxSize()` on N2_cat (cropped as S1, as in C1):
+  - a request of half the width gives exactly the layout size;
+  - a request of twice the width gives a height of twice `heightMm`, within 1e-9;
+  - a height request gives the matching width.
+- `aiLayoutColourRows()` on N2_cat: the counts sum to 2146. After a swap a→b, row a has `toId` b,
+  and the engine's stones of colour b number count(a) + count(b).
+- `aiLayoutImageBox()`: exact boxes at k = 1 and k = 2, and `null` without `offsetMm` or `mmPerPx`.
+- `applyRedraw()` keeps `offsetMm` and `mmPerPx`. `validateProject()` accepts them and rejects a
+  bad `offsetMm` and a non-positive `mmPerPx`.
+- index.html:
+  - `#legacyImageControls` holds exactly the seven legacy group ids, and none of Source,
+    Position & size or `imageStudioGroupAiColours`;
+  - Position & size comes before the wrapper;
+  - `#imageRedrawStyleField` is hidden.
+- app.js:
+  - the upload handler starts the redraw;
+  - Remove aborts a run on its layer;
+  - `startImageRedraw()` sends `'stones'`;
+  - `aiLayoutColourReset` and the colour rows are not in `HISTORY_TRACKED_CONTROL_IDS`;
+  - both canvas resize branches call `aiLayoutBoxSize()`.
 
 **Build D.**
 
@@ -780,8 +988,8 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   figures. `tools/test-img-026-ai-layout-app.mjs` (group `integration`) covers `validateProject()`,
   the redraw paths (with layout, without layout, restore), the fill-style option and the exporter
   checks.
-- C2: `tools/test-img-026-lightbox.mjs` (group `ui`): the hidden, kept and reworked controls for
-  an ai-layout layer and for a legacy layer.
+- C2: `tools/test-img-026-lightbox.mjs` (group `ui`): the Build C2 acceptance figures, for an
+  ai-layout layer and for a legacy layer.
 
 **D.**
 
@@ -808,6 +1016,16 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   S12).
 - Every test that evaluates the app.js span from `const DEFAULT_TEXT_FONT_ID=` (`app.js:177`) to
   `validateProject()` (S13).
+- Build C2 changes text these files grep:
+  - `tools/test-img-022-redraw-provider.mjs:721` (redraw control ids);
+  - `tools/test-img-024-flat-artwork-style.mjs:469` and `:480` (the style field and its sync line);
+  - `tools/test-img-025-stone-cleanup.mjs:523`–`:531` (Trace group and stats markup), `:568`
+    (the cleanup stats line) and `:573`–`:574` (`#imageRedraw` markup);
+  - `tools/test-img-005-check-and-fix.mjs:340`–`:344`;
+  - `tools/test-ui-shell-structure.mjs:218`;
+  - `tools/test-img-026-ai-layout-app.mjs` (the report keys and the success status text).
+
+  The build's audit must find any others.
 
 ## Anchors (grepped at `7a9e482`)
 
