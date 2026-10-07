@@ -44,7 +44,7 @@ const indexHtml = await readFile(fileURLToPath(new URL('../index.html', import.m
 
 // ---- Decision 6: the selector guard ---------------------------------------------------------------
 const STONE_COLOR_SELECT_IDS = [
-  'stoneColor', 'stampColor', 'traceColor', 'paintColor', 'monogramColor', 'monogramFrameColor',
+  'stoneColor', 'stampColor', 'traceColor', 'paintColor', 'aiStoneColor', 'monogramColor', 'monogramFrameColor',
   'imgColorPick0', 'imgColorPick1', 'imgColorPick2', 'imgColorPick3',
   'imgColorPick4', 'imgColorPick5', 'imgColorPick6', 'imgColorPick7'
 ];
@@ -102,7 +102,7 @@ function populatedSelectIds() {
   return ids;
 }
 
-await test('1. rule 1: populateStoneColorOptions() populates exactly the 14 pinned stone-colour <select>s, each once, each present in index.html', () => {
+await test('1. rule 1: populateStoneColorOptions() populates exactly the 15 pinned stone-colour <select>s, each once, each present in index.html', () => {
   const populated = populatedSelectIds();
   assert.deepEqual([...populated].sort(), [...STONE_COLOR_SELECT_IDS].sort());
   const inHtml = selectIdsInIndexHtml();

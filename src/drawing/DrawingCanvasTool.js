@@ -269,6 +269,24 @@ const SHEET_GUIDE_DASH_PX = [5, 4];
 // rather than imported, since app.js has no exports and already imports createDrawingTool from
 // this file (an app.js -> this file import would be circular).
 const ROTATION_SNAP_STEP_DEG = 15;
+// IMG-026 (D): stone editing on an ai-layout image layer. A click picks the stone whose centre is
+// nearest, within its radius plus STONE_HIT_EXTRA_PX screen px. Rings are drawn in screen px
+// (strokeScaling off); the dim covers the rest of the canvas while the mode is on.
+const STONE_HIT_EXTRA_PX = 4;
+const STONE_SELECTED_RING_COLOR = '#1478ff';
+const STONE_GAP_RING_COLOR = '#d92b2b';
+const STONE_RING_WIDTH_PX = 1.5;
+const STONE_EDIT_DIM_COLOR = 'rgba(255,255,255,0.6)';
+
+/**
+ * IMG-026 (D): an image layer whose stones are its `aiLayout` list -- the only image layer Design
+ * edits stone by stone, and the only one Stamp / Trace / Eraser accept.
+ * @param {object} layer
+ * @returns {boolean}
+ */
+function isAiLayoutLayer(layer) {
+  return layer.type === 'image' && layer.fillMode === 'ai-layout' && Boolean(layer.aiLayout);
+}
 
 /**
  * The 8 handle positions (4 corners + 4 edge midpoints) for a bounds Rectangle, in the same
@@ -812,6 +830,8 @@ function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
   if (!item) {
     const rect = buildRectangleProxyItem(layer);
     if (layer.type === 'image') rect.data.isImageProxy = true;
+    // IMG-026 (D): an ai-layout image is stone-editable and a mark target (tagMarkTarget() re-asserts it).
+    if (layer.type === 'image') rect.data.isAiLayoutProxy = isAiLayoutLayer(layer);
     return rect;
   }
 
@@ -1166,7 +1186,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3040: the current sheet's canvas size and guide outlines, from the same template data the
     // 2D canvas draws (app.js's designSheetFraming()). Read on enter() and on every resize(); null
     // (the default) keeps the canvasMm enter() was given and draws no guides.
-    getSheetFraming = () => null
+    getSheetFraming = () => null,
+    // IMG-026 (D): fires once when a stone drag is released after moving, with the dragged stones'
+    // aiIndex values and the absolute displacement in mm.
+    onStonesMoved = () => {},
+    // IMG-026 (D): fires with no arguments when stone editing starts or ends or its selection
+    // changes; app.js reads `stoneSelection` back.
+    onStoneSelectionChanged = () => {}
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -1315,6 +1341,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // whenever activeSelection itself changes; null whenever activeSelection is null.
   let activeSelection = null;
   let activeSelectionItem = null;
+  // IMG-026 (D): stone editing. stoneEditLayerId is the ai-layout image layer being edited (null when
+  // the mode is off); stoneSelection is { layerId, indices } with indices the selected stones'
+  // aiIndex values, ascending, or null. It is separate from activeSelection, whose region and draft
+  // consumers never see it. stoneDragStart/stoneDragApplied/stoneDragPreviewItem live only while
+  // interactionKind === 'stoneDrag'; stoneGestureShift is the Shift state of a 'stoneRect' or
+  // 'stoneLasso' gesture at mousedown.
+  let stoneEditLayerId = null;
+  let stoneSelection = null;
+  let stoneEditDimItem = null;
+  let stoneEditRingItem = null;
+  let stoneDragStart = null;
+  let stoneDragApplied = null;
+  let stoneDragPreviewItem = null;
+  let stoneGestureShift = false;
   // RS-3010 Design Step D: the live resize handles for the current single-shape selection, a
   // small array of throwaway Paper.js Items (same "never routed through board.beginPath()/
   // clearPath()/finalizeShape()" rule marqueeItem already established, since these are UI chrome,
@@ -1668,8 +1708,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // comment). An empty markStones array is a real answer: the text layer has no beads, so nothing
   // is "on the lettering" and the proxy is transparent -- iteration falls through to whatever's
   // beneath, same as a pre-MONO-021 ineligible text proxy.
+  // IMG-026 (D): an ai-layout image proxy resolves by the same bead proximity. Its stones are read
+  // from the layout through getImageLayerStones() at each test rather than cached on the item: a
+  // rotated image proxy is re-materialized on every reconcile, so a cached copy would be lost.
   function markProxyContainsPoint(item, point) {
-    const markStones = item.data.markStones;
+    const markStones = item.data.isAiLayoutProxy ? (getImageLayerStones(item.data.layerId) || []) : item.data.markStones;
     if (!Array.isArray(markStones)) {
       return item.bounds.contains(point);
     }
@@ -1701,9 +1744,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // is an array). onMouseUp's Trace branch reads it to skip the getLayerStoneParams() 'no-stones'
       // gate (that hook is 'path'-only) -- a text proxy only resolves here when the proximity test
       // matched a real bead, so a resolved text target always has base stones by construction.
-      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible, isTextTarget: Array.isArray(shapes[i].item.data.markStones) };
+      // IMG-026 (D): isAiLayoutTarget plays the same role for an ai-layout image proxy, whose stones
+      // are its layout's, so Trace needs no getLayerStoneParams() either.
+      if (contains) {
+        return {
+          layerId: shapes[i].item.data.layerId || null,
+          blockedByIneligible,
+          isTextTarget: Array.isArray(shapes[i].item.data.markStones),
+          isAiLayoutTarget: shapes[i].item.data.isAiLayoutProxy === true
+        };
+      }
     }
-    return { layerId: null, blockedByIneligible, isTextTarget: false };
+    return { layerId: null, blockedByIneligible, isTextTarget: false, isAiLayoutTarget: false };
   }
 
   /**
@@ -1761,9 +1813,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     for (const point of points) {
       const target = resolveMarkTargetByBounds(point);
       if (target.blockedByIneligible) blockedByIneligible = true;
-      if (target.layerId) return { layerId: target.layerId, blockedByIneligible, isTextTarget: target.isTextTarget };
+      if (target.layerId) return { layerId: target.layerId, blockedByIneligible, isTextTarget: target.isTextTarget, isAiLayoutTarget: target.isAiLayoutTarget };
     }
-    return { layerId: null, blockedByIneligible, isTextTarget: false };
+    return { layerId: null, blockedByIneligible, isTextTarget: false, isAiLayoutTarget: false };
   }
 
   /**
@@ -1785,13 +1837,22 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * stay ineligible. Pass the raw project.layers `layer` object; the one exception is
    * duplicateShapeForLayer(), which has no layer object and inherits the source proxy's own flag
    * instead -- it passes `{ id, markEligible }` explicitly.
+   *
+   * IMG-026 (D): an ai-layout 'image' layer is eligible too, resolved by proximity to its stones
+   * (markProxyContainsPoint()). Every other image layer stays ineligible. The image proxy's
+   * isAiLayoutProxy flag is re-asserted here, so a fill-style change with an unchanged box (no
+   * re-materialize) still flips it.
    * @param {paper.Item} item
    * @param {{id:string, type?:string, markEligible?:boolean}} layer
    */
   function tagMarkTarget(item, layer) {
     item.data.layerId = layer.id;
-    item.data.markEligible =
-      typeof layer.markEligible === 'boolean' ? layer.markEligible : (layer.type === 'path' || layer.type === 'text');
+    if (typeof layer.markEligible === 'boolean') {
+      item.data.markEligible = layer.markEligible;
+      return;
+    }
+    if (layer.type === 'image') item.data.isAiLayoutProxy = isAiLayoutLayer(layer);
+    item.data.markEligible = layer.type === 'path' || layer.type === 'text' || item.data.isAiLayoutProxy === true;
   }
 
   /**
@@ -1942,6 +2003,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const layerId = shape && shape.item.data.layerId;
       if (layerId) layerIds.push(layerId);
     }
+    // IMG-026 (D): selecting anything that leaves out the edited layer ends stone editing.
+    if (stoneEditLayerId && !layerIds.includes(stoneEditLayerId)) exitStoneEdit();
     onSelectionChanged(layerIds);
   }
 
@@ -2055,7 +2118,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   function updateRotateHandleItem() {
     for (const item of rotateHandleItems) item.remove();
     rotateHandleItems = [];
-    if (mode !== 'select' || selectedIds.size !== 1) return;
+    // IMG-026 (D): no handles while stone editing is on -- Select acts on the stones.
+    if (mode !== 'select' || selectedIds.size !== 1 || stoneEditLayerId) return;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return;
     // RS-3012 Step 4: a circle proxy never gets a rotate handle drawn -- mirrors hitTestRotateHandle()'s
@@ -2092,7 +2156,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     updateRotateHandleItem();
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
-    if (mode !== 'select' || selectedIds.size !== 1) return;
+    if (mode !== 'select' || selectedIds.size !== 1 || stoneEditLayerId) return;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return;
     // RS-3012 Step 3: mirrors hitTestResizeHandle()'s own guard -- a text proxy never gets resize
@@ -2378,6 +2442,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 13: mirrors removeStampGhostItem() just above -- an Eraser ghost interrupted by
     // Escape/mode-switch/exit must not linger on the canvas either.
     removeEraserGhostItem();
+    // IMG-026 (D): an interrupted stone drag leaves no outlines behind.
+    removeStoneDragPreview();
   }
 
   /**
@@ -2687,8 +2753,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * proximity and change RS-3015's 'ineligible' reporting for the mark tools. While this shape's
    * own resize is in progress it returns and leaves the hidden group as it is: the layout still
    * holds the pre-drag stones, and the reconcile after the drop rebuilds from the regenerated one.
+   * IMG-026 (D): an ai-layout proxy still never gets markStones; markProxyContainsPoint() reads its
+   * stones through getImageLayerStones(). A stone flagged gapViolation (closer than 0.1 mm to a
+   * neighbour) gets a red ring, added to the same group after the sprites, so the cached sprites are
+   * unchanged and the rings move and hide with the group. Only ai-layout stones carry the flag. When
+   * this layer is being stone edited, the overlay is redrawn so the new group sits above the dim.
    * @param {string} shapeId
-   * @param {{x:number,y:number,d:number,color:string}[]} [stones]
+   * @param {{x:number,y:number,d:number,color:string,gapViolation?:boolean}[]} [stones]
    */
   function rebuildImageStoneGroupForShape(shapeId, stones) {
     const shape = board.getShape(shapeId);
@@ -2700,6 +2771,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const list = stones || getImageLayerStones(shape.item.data.layerId) || [];
     const group = installStoneGroupForShape(shape, list);
     group.data.layoutSignature = layoutStoneSignature(list);
+    for (const stone of list) {
+      if (stone.gapViolation !== true) continue;
+      const ring = buildStoneRing(stone, STONE_GAP_RING_COLOR);
+      ring.data.isGapRing = true;
+      group.addChild(ring);
+    }
+    if (stoneEditLayerId && stoneEditLayerId === shape.item.data.layerId) refreshStoneEditOverlay();
   }
 
   /**
@@ -2794,6 +2872,234 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     interactionKind = 'moveRegion';
     dragStart = point;
     return true;
+  }
+
+  /**
+   * IMG-026 (D): the edited layer's stones, from the layout through getImageLayerStones() --
+   * `{x, y, d, color, aiIndex, gapViolation}` each. Design never builds a stone itself.
+   * @returns {object[]}
+   */
+  function stoneEditStones() {
+    return stoneEditLayerId ? getImageLayerStones(stoneEditLayerId) || [] : [];
+  }
+
+  /**
+   * IMG-026 (D): the aiIndex of the stone whose centre is nearest `point`, among those within their
+   * own radius plus STONE_HIT_EXTRA_PX screen px of it, or null.
+   * @param {paper.Point} point
+   * @returns {number|null}
+   */
+  function hitTestStone(point) {
+    const extraMm = STONE_HIT_EXTRA_PX / paper.view.zoom;
+    let best = null;
+    let bestDistance = Infinity;
+    for (const stone of stoneEditStones()) {
+      const distance = Math.hypot(point.x - stone.x, point.y - stone.y);
+      if (distance <= stone.d / 2 + extraMm && distance < bestDistance) {
+        best = stone.aiIndex;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * IMG-026 (D): the aiIndex of every edited stone whose centre passes `inside`.
+   * @param {function(number, number): boolean} inside
+   * @returns {number[]}
+   */
+  function stonesWhere(inside) {
+    return stoneEditStones().filter((stone) => inside(stone.x, stone.y)).map((stone) => stone.aiIndex);
+  }
+
+  /**
+   * IMG-026 (D): the one place stoneSelection is reassigned. An empty list clears it. Redraws the
+   * rings and notifies app.js.
+   * @param {number[]} indices aiIndex values
+   */
+  function setStoneSelection(indices) {
+    const unique = [...new Set(indices)].sort((a, b) => a - b);
+    stoneSelection = stoneEditLayerId && unique.length ? { layerId: stoneEditLayerId, indices: unique } : null;
+    refreshStoneEditOverlay();
+    onStoneSelectionChanged();
+  }
+
+  /** IMG-026 (D): the selected aiIndex values, or an empty list. */
+  function selectedStoneIndices() {
+    return stoneSelection ? stoneSelection.indices : [];
+  }
+
+  /**
+   * IMG-026 (D): the outline drawn for a stone -- a selection ring, a gap-violation ring or a drag
+   * preview. Stroke width is in screen px.
+   * @param {{x:number, y:number, d:number}} stone
+   * @param {string} color
+   * @returns {paper.Path}
+   */
+  function buildStoneRing(stone, color) {
+    const ring = new paper.Path.Circle(new paper.Point(stone.x, stone.y), stone.d / 2);
+    ring.strokeColor = color;
+    ring.strokeWidth = STONE_RING_WIDTH_PX;
+    ring.strokeScaling = false;
+    ring.fillColor = null;
+    // Locked items are skipped by paper.project.hitTest(), so a ring never masks a shape in
+    // hitTestShapeId()'s stroke fallback.
+    ring.locked = true;
+    return ring;
+  }
+
+  /**
+   * IMG-026 (D): rebuilds the stone-editing chrome: the dim over the whole canvas, then the edited
+   * layer's stone group raised above it, then a blue ring per selected stone. Removes it all when the
+   * mode is off and puts the stone group back directly below its proxy.
+   */
+  function refreshStoneEditOverlay() {
+    if (stoneEditDimItem) {
+      stoneEditDimItem.remove();
+      stoneEditDimItem = null;
+    }
+    if (stoneEditRingItem) {
+      stoneEditRingItem.remove();
+      stoneEditRingItem = null;
+    }
+    if (!stoneEditLayerId) return;
+    const shape = findShapeByLayerId(stoneEditLayerId);
+    if (!shape) return;
+    const extent = GRID_EXTENT_MARGIN_MM;
+    stoneEditDimItem = new paper.Path.Rectangle(
+      new paper.Rectangle(-extent, -extent, canvasMm.width + 2 * extent, canvasMm.height + 2 * extent)
+    );
+    stoneEditDimItem.fillColor = STONE_EDIT_DIM_COLOR;
+    stoneEditDimItem.locked = true;
+    stoneEditDimItem.data.isStoneEditDim = true;
+    const group = stoneGroups.get(shape.id);
+    if (group) group.insertAbove(stoneEditDimItem);
+    const picked = new Set(selectedStoneIndices());
+    stoneEditRingItem = new paper.Group(
+      stoneEditStones().filter((stone) => picked.has(stone.aiIndex)).map((stone) => buildStoneRing(stone, STONE_SELECTED_RING_COLOR))
+    );
+    stoneEditRingItem.data.isStoneSelectionRings = true;
+  }
+
+  /**
+   * IMG-026 (D): starts stone editing on an ai-layout image layer. Clears any region or draft
+   * selection and hides the layer's resize and rotate handles.
+   * @param {string} layerId
+   * @returns {boolean} whether the mode started
+   */
+  function enterStoneEdit(layerId) {
+    const shape = findShapeByLayerId(layerId);
+    if (!shape || shape.item.data.isAiLayoutProxy !== true) return false;
+    stoneEditLayerId = layerId;
+    stoneSelection = null;
+    if (activeSelection) setActiveSelection(null);
+    updateResizeHandles();
+    refreshStoneEditOverlay();
+    onStoneSelectionChanged();
+    return true;
+  }
+
+  /** IMG-026 (D): ends stone editing, if on, and puts the edited stone group back in its z-order. */
+  function exitStoneEdit() {
+    if (!stoneEditLayerId) return;
+    const shape = findShapeByLayerId(stoneEditLayerId);
+    removeStoneDragPreview();
+    if (interactionKind === 'stoneDrag' || interactionKind === 'stoneRect' || interactionKind === 'stoneLasso') interactionKind = null;
+    stoneEditLayerId = null;
+    stoneSelection = null;
+    refreshStoneEditOverlay();
+    const group = shape && stoneGroups.get(shape.id);
+    if (group) group.insertBelow(shape.item);
+    updateResizeHandles();
+    onStoneSelectionChanged();
+  }
+
+  /** IMG-026 (D): removes the outlines a stone drag draws at the stones' new place. */
+  function removeStoneDragPreview() {
+    if (stoneDragPreviewItem) {
+      stoneDragPreviewItem.remove();
+      stoneDragPreviewItem = null;
+    }
+    stoneDragStart = null;
+    stoneDragApplied = null;
+  }
+
+  /**
+   * IMG-026 (D): onMouseDown for the Select and Lasso tools while stone editing is on. With Select,
+   * a stone under the pointer is picked (Shift toggles it; otherwise a drag from it moves the
+   * selection, after selecting it alone when it was not selected) and a gap inside the layer starts
+   * a rectangle selection. With Lasso, every press starts a stone lasso. A Select press outside the
+   * layer ends the mode and returns false, so the press goes on to the ordinary Select handling.
+   * @param {paper.ToolEvent} event
+   * @returns {boolean} whether the press was handled here
+   */
+  function startStoneGesture(event) {
+    const point = event.point;
+    const shift = Boolean(event.modifiers && event.modifiers.shift);
+    const shape = findShapeByLayerId(stoneEditLayerId);
+    if (!shape) {
+      exitStoneEdit();
+      return false;
+    }
+    stoneGestureShift = shift;
+    if (mode === 'lasso') {
+      interactionKind = 'stoneLasso';
+      lassoPoints = [point];
+      lassoItem = new paper.Path({
+        strokeColor: STROKE_COLOR,
+        strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
+        dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+      });
+      lassoItem.add(point);
+      return true;
+    }
+    const hit = hitTestStone(point);
+    if (hit !== null) {
+      const current = selectedStoneIndices();
+      if (shift) {
+        setStoneSelection(current.includes(hit) ? current.filter((i) => i !== hit) : [...current, hit]);
+        interactionKind = null;
+        return true;
+      }
+      if (!current.includes(hit)) setStoneSelection([hit]);
+      interactionKind = 'stoneDrag';
+      stoneDragStart = point;
+      stoneDragApplied = new paper.Point(0, 0);
+      return true;
+    }
+    if (!shape.item.contains(point)) {
+      exitStoneEdit();
+      return false;
+    }
+    interactionKind = 'stoneRect';
+    dragStart = point;
+    return true;
+  }
+
+  /**
+   * IMG-026 (D): a click (no drag) that ended a stone rectangle or lasso: the stone under it
+   * replaces the selection (Shift toggles it), and an empty click clears the selection unless Shift
+   * is held.
+   * @param {paper.Point} point
+   */
+  function stoneClick(point) {
+    const hit = hitTestStone(point);
+    const current = selectedStoneIndices();
+    if (hit === null) {
+      if (!stoneGestureShift) setStoneSelection([]);
+      return;
+    }
+    if (stoneGestureShift) setStoneSelection(current.includes(hit) ? current.filter((i) => i !== hit) : [...current, hit]);
+    else setStoneSelection([hit]);
+  }
+
+  /**
+   * IMG-026 (D): the stones an area gesture enclosed become the selection, or are added to it when
+   * Shift was held at mousedown.
+   * @param {number[]} indices
+   */
+  function selectStonesInArea(indices) {
+    setStoneSelection(stoneGestureShift ? [...selectedStoneIndices(), ...indices] : indices);
   }
 
   function attachTool() {
@@ -2970,6 +3276,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // below. Select's own version of this same check lives INSIDE the mode === 'select' branch
       // just below, AFTER its resize-handle check -- see that call site's own comment for why the
       // ordering there differs (RS-3013 Step 2 fix: Design Step D's "handle must win" invariant).
+      // IMG-026 (D): while stone editing is on, Select and Lasso act on the edited layer's stones
+      // first -- before the handles, regions and shapes below (startStoneGesture()).
+      if (stoneEditLayerId && (mode === 'select' || mode === 'lasso') && startStoneGesture(event)) {
+        return;
+      }
       if (mode === 'lasso' && tryStartRegionMove(event.point)) {
         return;
       }
@@ -3359,6 +3670,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         updateResizeHandles();
         return;
       }
+      if (interactionKind === 'stoneDrag') {
+        // IMG-026 (D): the selected stones are drawn as outlines at their new place; the real stones
+        // move only on release (one edit).
+        if (!stoneDragPreviewItem) {
+          const picked = new Set(selectedStoneIndices());
+          stoneDragPreviewItem = new paper.Group(
+            stoneEditStones().filter((stone) => picked.has(stone.aiIndex)).map((stone) => buildStoneRing(stone, STONE_SELECTED_RING_COLOR))
+          );
+        }
+        const total = event.point.subtract(stoneDragStart);
+        stoneDragPreviewItem.translate(total.subtract(stoneDragApplied));
+        stoneDragApplied = total;
+        return;
+      }
       if (interactionKind === 'moveRegion') {
         // RS-3013 Step 2: live preview only -- translates the persistent selection-outline overlay
         // directly by this frame's own incremental delta, same "translate the live Paper.js item,
@@ -3518,7 +3843,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         marqueeItem.strokeWidth = MARQUEE_STROKE_WIDTH_PX / paper.view.zoom;
         return;
       }
-      if (interactionKind === 'selectRect') {
+      // IMG-026 (D): a stone rectangle draws the same dashed preview.
+      if (interactionKind === 'selectRect' || interactionKind === 'stoneRect') {
         // RS-3013 Step 1: marqueeItem's own twin, same discard-and-recreate-per-frame pattern, but
         // dashed/unfilled (STROKE_COLOR/PAINT_LASSO_DASH_PX, matching Lasso's own dashed preview
         // below) rather than marquee's solid semi-transparent fill -- this gesture resolves to a
@@ -3547,7 +3873,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         }
         return;
       }
-      if (interactionKind === 'lasso') {
+      // IMG-026 (D): a stone lasso samples the same way.
+      if (interactionKind === 'lasso' || interactionKind === 'stoneLasso') {
         // RS-3013 Step 1: same point-sampling/rebuild pattern as Paint's own branch just above,
         // reusing the identical PAINT_MIN_SAMPLE_DISTANCE_PX throttle (not a second constant).
         const lastPoint = lassoPoints[lassoPoints.length - 1];
@@ -3634,6 +3961,50 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       if (panning) {
         panning = false;
         updateCursor();
+        return;
+      }
+      if (interactionKind === 'stoneDrag') {
+        // IMG-026 (D): one move edit for the whole selection on release; a click with no drag only
+        // kept the selection mousedown made. The selection survives (aiIndex does not change).
+        const dxMm = event.point.x - stoneDragStart.x;
+        const dyMm = event.point.y - stoneDragStart.y;
+        removeStoneDragPreview();
+        interactionKind = null;
+        if ((dxMm !== 0 || dyMm !== 0) && stoneSelection) onStonesMoved(stoneSelection.layerId, [...stoneSelection.indices], dxMm, dyMm);
+        return;
+      }
+      if (interactionKind === 'stoneRect') {
+        // IMG-026 (D): stones whose centre is inside the rectangle; a rectangle no bigger than
+        // MIN_BOX_DIM_MM is a click (stoneClick()).
+        const b = selectRectItem && selectRectItem.bounds.width > MIN_BOX_DIM_MM && selectRectItem.bounds.height > MIN_BOX_DIM_MM
+          ? selectRectItem.bounds.clone()
+          : null;
+        if (selectRectItem) {
+          selectRectItem.remove();
+          selectRectItem = null;
+        }
+        interactionKind = null;
+        if (b) selectStonesInArea(stonesWhere((x, y) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom));
+        else stoneClick(event.point);
+        return;
+      }
+      if (interactionKind === 'stoneLasso') {
+        // IMG-026 (D): stones whose centre is inside the lasso; a lasso no bigger than MIN_BOX_DIM_MM
+        // is a click, as Lasso's own branch below decides.
+        const lassoBounds = lassoItem ? lassoItem.bounds : null;
+        if (lassoItem) {
+          lassoItem.remove();
+          lassoItem = null;
+        }
+        const points = lassoPoints;
+        lassoPoints = [];
+        interactionKind = null;
+        if (!lassoBounds || lassoBounds.width <= MIN_BOX_DIM_MM || lassoBounds.height <= MIN_BOX_DIM_MM) {
+          stoneClick(event.point);
+          return;
+        }
+        const polygon = new paper.Path({ segments: points, closed: true, insert: false });
+        selectStonesInArea(stonesWhere((x, y) => polygon.contains(new paper.Point(x, y))));
         return;
       }
       if (interactionKind === 'move') {
@@ -4042,7 +4413,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // null here means 'no-stones' ONLY for a path target. A text target resolved by bead
         // proximity always has base stones -- app.js's onTracePlace does its own frozen-box
         // conversion and needs no styleParams.
-        if (!styleParams && !traceTarget.isTextTarget) {
+        // IMG-026 (D): an ai-layout image target likewise needs no styleParams.
+        if (!styleParams && !traceTarget.isTextTarget && !traceTarget.isAiLayoutTarget) {
           onTraceRejected('no-stones', layerId);
           return;
         }
@@ -4261,6 +4633,59 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     get activeSelection() {
       return activeSelection;
     },
+    /**
+     * IMG-026 (D): the stone selection, `{ layerId, indices }` (indices are aiIndex values,
+     * ascending) or null. A copy -- app.js passes it to editAiLayoutStones().
+     */
+    get stoneSelection() {
+      return stoneSelection ? { layerId: stoneSelection.layerId, indices: [...stoneSelection.indices] } : null;
+    },
+    /** IMG-026 (D): the ai-layout image layer being stone edited, or null. */
+    get stoneEditLayerId() {
+      return stoneEditLayerId;
+    },
+    /**
+     * IMG-026 (D): app.js's canvas dblclick listener. With the Select tool, a double-click on an
+     * ai-layout image layer starts stone editing on it. Any other layer, tool or an open Pen path:
+     * nothing new.
+     * @param {MouseEvent} event
+     * @returns {boolean} whether stone editing started
+     */
+    handleDoubleClick(event) {
+      if (!board.active || mode !== 'select' || interactionKind === 'pen' || interactionKind === 'polygon') return false;
+      const point = paper.view.getEventPoint(event);
+      const hitId = hitTestShapeId(point);
+      const shape = hitId && board.getShape(hitId);
+      if (!shape || shape.item.data.isAiLayoutProxy !== true) return false;
+      if (stoneEditLayerId === shape.item.data.layerId) return true;
+      if (stoneEditLayerId) exitStoneEdit();
+      return enterStoneEdit(shape.item.data.layerId);
+    },
+    /** IMG-026 (D): ends stone editing (app.js: another layer picked outside the canvas). */
+    exitStoneEdit() {
+      exitStoneEdit();
+    },
+    /** IMG-026 (D): clears the stone selection and keeps the mode (after a delete, undo or redo). */
+    clearStoneSelection() {
+      if (stoneSelection) setStoneSelection([]);
+    },
+    /**
+     * IMG-026 (D): QA-only, read-only -- the stone editing state as drawn: the edited layer, the
+     * selection, whether the dim is up and sits below the edited stone group, and the centres of the
+     * blue selection rings.
+     */
+    get debugStoneEdit() {
+      const shape = stoneEditLayerId ? findShapeByLayerId(stoneEditLayerId) : null;
+      const group = shape ? stoneGroups.get(shape.id) : null;
+      return {
+        layerId: stoneEditLayerId,
+        indices: selectedStoneIndices().slice(),
+        dimmed: Boolean(stoneEditDimItem),
+        groupAboveDim: Boolean(stoneEditDimItem && group && group.isAbove(stoneEditDimItem)),
+        selectionRings: stoneEditRingItem ? stoneEditRingItem.children.map((c) => ({ x: c.position.x, y: c.position.y })) : [],
+        dragPreview: stoneDragPreviewItem ? stoneDragPreviewItem.children.map((c) => ({ x: c.position.x, y: c.position.y })) : null
+      };
+    },
     get zoom() {
       return board.zoom;
     },
@@ -4294,6 +4719,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // activeSelectionItem, so there is nothing for that function's own `.remove()` to double-remove.
       activeSelection = null;
       activeSelectionItem = null;
+      // IMG-026 (D): stone editing never survives into a new Design session.
+      stoneEditLayerId = null;
+      stoneSelection = null;
+      stoneEditDimItem = null;
+      stoneEditRingItem = null;
       resetInProgressDrawing();
       if (!isSetUp) {
         paper.setup(canvasEl);
@@ -4474,6 +4904,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // deliberately leaves activeSelection/activeSelectionItem alone (see its own doc comment), so
       // exiting Design must clear them explicitly, same as it already does for selectedIds.
       if (activeSelection) setActiveSelection(null);
+      // IMG-026 (D): leaving Design ends stone editing; removeChildren() below discards its items.
+      stoneEditLayerId = null;
+      stoneSelection = null;
+      stoneEditDimItem = null;
+      stoneEditRingItem = null;
       resetInProgressDrawing();
       spaceHeld = false;
       panning = false;
@@ -4521,7 +4956,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      */
     cancelPath() {
       const wasIdle = interactionKind === null;
+      // IMG-026 (D): Escape ends stone editing, unless a Pen path (or polygon) is open -- then it
+      // only cancels that, as before.
+      const pathOpen = interactionKind === 'pen' || interactionKind === 'polygon';
       resetInProgressDrawing();
+      if (stoneEditLayerId && !pathOpen) {
+        exitStoneEdit();
+        return;
+      }
       if (wasIdle && CLICK_TO_PLACE_MODES.has(mode)) {
         mode = 'select';
         updateResizeHandles();
@@ -4626,6 +5068,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * @param {string} layerId
      */
     selectShapeForLayer(layerId) {
+      // IMG-026 (D): switching to another layer ends stone editing.
+      if (stoneEditLayerId && stoneEditLayerId !== layerId) exitStoneEdit();
       const shape = findShapeByLayerId(layerId);
       if (!shape) return;
       selectedIds = selectOnly(shape.id);
@@ -5137,6 +5581,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
       }
 
+      // IMG-026 (D): stone editing ends when its layer is gone or no longer ai-layout (an undo, a
+      // fill-style change); otherwise its rings follow the regenerated stones. A forced rebuild is
+      // app.js's signal that project.layers changed from outside Design (undo, redo, a layer delete,
+      // a monogram generate), so the selection's aiIndex values may name other stones: it is cleared.
+      if (stoneEditLayerId) {
+        const stoneShape = findShapeByLayerId(stoneEditLayerId);
+        if (!stoneShape || stoneShape.item.data.isAiLayoutProxy !== true) exitStoneEdit();
+        else if (forceStoneRebuild && stoneSelection) setStoneSelection([]);
+        else refreshStoneEditOverlay();
+      }
+
       applySelectionVisuals();
       updateResizeHandles();
     },
@@ -5155,12 +5610,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const shape = findShapeByLayerId(layerId);
       if (!shape) return null;
       const group = stoneGroups.get(shape.id);
+      // IMG-026 (D): the gap rings an ai-layout group carries are reported apart from the sprites.
+      const sprites = group ? group.children.filter((c) => !c.data.isGapRing) : [];
+      const gapRings = group ? group.children.filter((c) => c.data.isGapRing) : [];
       return {
-        stoneGroupCount: group ? group.children.length : 0,
+        stoneGroupCount: sprites.length,
         groupId: group ? group.id : null,
         groupVisible: group ? group.visible : false,
-        stones: group ? group.children.map((c) => ({ x: c.position.x, y: c.position.y, color: c.data.color })) : [],
-        markStones: Array.isArray(shape.item.data.markStones) ? shape.item.data.markStones.map((s) => ({ ...s })) : null
+        stones: sprites.map((c) => ({ x: c.position.x, y: c.position.y, color: c.data.color })),
+        markStones: Array.isArray(shape.item.data.markStones) ? shape.item.data.markStones.map((s) => ({ ...s })) : null,
+        gapRings: gapRings.map((c) => ({ x: c.position.x, y: c.position.y, d: c.bounds.width }))
       };
     },
 

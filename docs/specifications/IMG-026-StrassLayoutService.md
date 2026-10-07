@@ -915,7 +915,7 @@ This closes the gap the C2 report left open.
 | `setActiveSelection()` / `rebuildImageStoneGroupForShape()` | `DrawingCanvasTool.js:1982` / `:2693` |
 | Image branch of the reconcile, `tagMarkTarget` for images | `DrawingCanvasTool.js:5018`–`:5043`, `:5036` |
 | `_generateAiLayoutStones()` / `flagAiLayoutGapViolations()` | `src/geometry/GeometryEngine.js:1223` (dispatch) / `:2752` |
-| `Stone` metadata and `toJSON()` | `src/geometry/Stone.js:7`, `:55` |
+| `Stone` metadata and `toJSON()` | `src/geometry/Stone.js:31`, `:52`, `:55` |
 
 ## Reference figures
 
@@ -1097,9 +1097,7 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
 **Build D.**
 
-- `aiLayoutPointFromAbsolute()` inverts the engine: a point added with `add` at an absolute
-  position comes back from the engine at that position within 1e-3 mm. This holds at k = 1, 1.5
-  and 2, and at rotation 0°, 30° and 90°.
+- aiLayoutPointFromAbsolute() inverts the engine within 1e-9 mm before rounding, at k = 1, 1.5 and 2 and rotation 0°, 30° and 90°. A stone added with `add` comes back from the engine within k·0.0005·√2 mm of where it was placed, the bound of the 0.001 mm rounding.
 - `applyAiLayoutEdits()` on N2_cat (cropped as S1):
   - each op changes exactly the stones it names;
   - `editCount` goes up by 1 per call;
@@ -1205,7 +1203,7 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
   The build's audit must find any others.
 - Build D changes text these files grep:
-  - `tools/test-img-016-neutral-brown-stones.mjs:46` (the pinned stone-colour selects gain
+  - `tools/test-img-016-neutral-brown-stones.mjs:47` (the pinned stone-colour selects gain
     `aiStoneColor`);
   - `tools/test-rs3015-mark-target-eligibility.mjs` (ai-layout images become eligible);
   - `tools/test-img-020-image-stones-in-design.mjs` and `tools/test-mono-021-mark-hooks.mjs` (the

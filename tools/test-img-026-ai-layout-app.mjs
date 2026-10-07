@@ -308,7 +308,7 @@ await test('8. generateImageStonesLive(): the ai-layout branch needs no decode a
   const l = { ...aiLayer(), rotationDeg: 30, w: FAKE_LAYOUT.widthMm * 1.5, colorSwaps: { jet: 'scarlet' } };
   const expected = engine.generateImageLayout({ mode: 'ai-layout', layerId: l.id, xMm: l.x, yMm: l.y, widthMm: l.w, rotationDeg: 30, aiLayout: l.aiLayout, colorSwaps: l.colorSwaps });
   const stones = await live(l);
-  assert.deepEqual(stones, expected.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId })));
+  assert.deepEqual(stones, expected.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId, metadata: s.metadata })));
   assert.ok(stones.some((s) => s.color === 'scarlet') && !stones.some((s) => s.color === 'jet'));
   const withStats = await live(l, { includeStats: true });
   assert.deepEqual(withStats.aiLayoutStats, expected.aiLayoutStats);
