@@ -24,6 +24,8 @@ import { resizeImageBuffer, SUBJECT_MASK_RESIZE_TRIGGER_PX, SUBJECT_MASK_MAX_DIM
 import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiProxyProvider.js';
 
 export { applyRedraw, restoreOriginal, fitAiStoneBox, fitAiLayoutCanvas, aiStoneEffectiveShrink, aiStoneMmPerPx, aiLayoutBoxSize, aiLayoutImageBox } from './RedrawLayerTransform.js';
+// IMG-026 (D): the pure edits behind app.js's editAiLayoutStones().
+export { aiLayoutPointFromAbsolute, aiLayoutDeltaFromAbsolute, applyAiLayoutEdits, AI_LAYOUT_MAX_STONES } from './AiLayoutEdit.js';
 
 // IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
 // IMG-026: the layout-* codes describe a layout failure after a good OpenAI image (layoutError).

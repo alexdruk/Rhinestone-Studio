@@ -92,7 +92,7 @@ import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStep
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, listAllStoneSizes, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
@@ -107,6 +107,8 @@ import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileT
 // names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
 // docs/specifications/RS-1009-AlignmentSnapping.md.
 import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection, selectMany, computeTextPlacementOffsetMm, computeTextLayerPositionForTargetCenterMm } from './src/editing/index.js';
+// IMG-026 (D): the arrow-key steps for a stone selection on an ai-layout layer in Design.
+import { AI_STONE_NUDGE_STEP_MM, AI_STONE_NUDGE_STEP_LARGE_MM } from './src/editing/index.js';
 // UI-001 (Complete Application Redesign): src/ui/** is a new, pure, DOM-only module -- a generic
 // Lightbox/dialog controller (open/close, focus trap, Escape, backdrop click). It has no knowledge
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
@@ -137,7 +139,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -1097,7 +1099,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // ({layerId,layer,error}, in project.layers order) for updateAll()'s status line. Stones are appended
  // one-by-one, not spread: a large layer's array overflows the JS call stack as call arguments.
  // recoverStaleAuthoredScales() stays outside the per-layer try (see its own comment).
- async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];const failures=[];for(const l of project.layers){if(!l.visible)continue;try{if(l.type==='text')for(const s of await this.generateTextStonesLive(l,project))raw.push(s);if(SHAPE_LAYER_TYPES.has(l.type))for(const s of await this.generateShapeStonesLive(l))raw.push(s);if(l.type==='svg')for(const s of await this.generateSvgStonesLive(l))raw.push(s);if(l.type==='image')for(const s of await this.generateImageStonesLive(l))raw.push(s);if(l.type==='path')for(const s of await this.generatePathStonesLive(l))raw.push(s);}catch(error){console.error(`Layer ${l.id} generation failed`,error);failures.push({layerId:l.id,layer:l,error})}}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return{layout:new StoneLayout({layerId:'project',stones}),failures}}
+ async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];const failures=[];for(const l of project.layers){if(!l.visible)continue;try{if(l.type==='text')for(const s of await this.generateTextStonesLive(l,project))raw.push(s);if(SHAPE_LAYER_TYPES.has(l.type))for(const s of await this.generateShapeStonesLive(l))raw.push(s);if(l.type==='svg')for(const s of await this.generateSvgStonesLive(l))raw.push(s);if(l.type==='image')for(const s of await this.generateImageStonesLive(l))raw.push(s);if(l.type==='path')for(const s of await this.generatePathStonesLive(l))raw.push(s);}catch(error){console.error(`Layer ${l.id} generation failed`,error);failures.push({layerId:l.id,layer:l,error})}}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId,metadata:s.metadata}));return{layout:new StoneLayout({layerId:'project',stones}),failures}}
  // Stone Size overlap guard: the same per-type Live dispatch generate() uses just above, factored
  // out (not shared with generate() itself, to avoid touching that method's tested source shape) so
  // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
@@ -1163,7 +1165,8 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // branches before the decode below and still shows its stones when the image fails to decode.
   if(resolveImageFillMode(layer.fillMode)==='ai-layout'){
     const result=this.permanentEngine.generateImageLayout({mode:'ai-layout',layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,rotationDeg:layer.rotationDeg??0,aiLayout:layer.aiLayout,colorSwaps:layer.colorSwaps??{}});
-    const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));
+    // IMG-026 (D): metadata carries aiIndex and gapViolation on to engine.generate() and Design.
+    const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId,metadata:s.metadata}));
     return includeStats?{stones,outlineStats:null,aiLayoutStats:result.aiLayoutStats}:stones;
   }
   let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
@@ -1685,7 +1688,8 @@ function isPointInActiveSelection(pointAbsoluteMm,selection){
 // "never touches project state" doc comment on the old commit()/DrawingBoard.js.
 // IMG-020: one layerId's stones from the `layout` global, in DrawingCanvasTool.js's {x,y,d,color}
 // shape -- the single filter behind both the getTextLayerStones and getImageLayerStones hooks.
-function layoutStonesForLayer(layerId){return layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))}
+// IMG-026 (D): an ai-layout stone also carries aiIndex and gapViolation; every other stone does not.
+function layoutStonesForLayer(layerId){return layout.stones.filter(s=>s.layerId===layerId).map(s=>{const o={x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color};if(s.metadata&&Number.isInteger(s.metadata.aiIndex)){o.aiIndex=s.metadata.aiIndex;o.gapViolation=s.metadata.gapViolation===true}return o})}
 // RS-3040: the sheet Design fits and outlines, and its guides, from the same project.canvas,
 // getSafeAreaRectMm() and getPlateDesignTargetGuide() calls drawLayout() makes for the 2D canvas.
 function designSheetFraming(){const t=currentObjectTemplate(),W=project.canvas.width,H=project.canvas.height;const guides=[];if(t.preview.kind==='plate'){const g=getPlateDesignTargetGuide(project.plate.designTarget,project.plate,W,H);if(g.kind==='annulus'){guides.push({role:'plateOuter',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.outerRadiusMm,dashed:false,label:g.label},{role:'plateInner',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.innerRadiusMm,dashed:false,label:g.label})}else{guides.push({role:'plateTarget',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.radiusMm,dashed:false,label:g.label});if(g.transitionRadiusMm!=null)guides.push({role:'plateTransition',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.transitionRadiusMm,dashed:true,label:g.label})}}else{guides.push({role:'sheet',kind:'rect',xMm:0,yMm:0,widthMm:W,heightMm:H,dashed:false});if(showSafeArea){const r=getSafeAreaRectMm(t,W,H);guides.push({role:'safeArea',kind:'rect',xMm:r.xMm,yMm:r.yMm,widthMm:r.widthMm,heightMm:r.heightMm,dashed:true})}}return{canvasMm:{width:W,height:H},guides}}
@@ -1963,6 +1967,14 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // 'path' nor 'text' -- after RS-3015 the resolver skips ineligible proxies, so this is now only
     // the narrow race where the layer was deleted or changed type between resolution and here.
     if(!layerId){el('status').textContent='Stamp: nothing here to place a stone on.';return;}
+    // IMG-026 (D): an ai-layout image gets one stone added to its layout at the click, at the nearest
+    // catalogue size.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const size=nearestAiLayoutStoneSize(stampSettings.sizeMm);
+      await editAiLayoutStones(aiTarget.id,[{op:'add',stones:[{xMm,yMm,sizeId:size.id,colorId:stampSettings.color}]}],`Stamped ${aiLayoutMarkSizeText(size,stampSettings.sizeMm,aiTarget)}`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer){
       const owner=project.layers.find(l=>l.id===layerId);
@@ -2056,6 +2068,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // only as a defensive guard against the narrow race where the layer was deleted between
     // resolution and here.
     if(!placements.length)return;
+    // IMG-026 (D): an ai-layout image gets the spaced placements added to its layout, in order, at
+    // the nearest catalogue size.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const size=nearestAiLayoutStoneSize(traceSettings.sizeMm);
+      const n=placements.length;
+      const skipped=droppedCount>0?` (${droppedCount} outside selection, skipped)`:'';
+      await editAiLayoutStones(aiTarget.id,[{op:'add',stones:placements.map(p=>({xMm:p.xMm,yMm:p.yMm,sizeId:size.id,colorId:traceSettings.color}))}],`Traced ${n} stone${n===1?'':'s'}${skipped} at ${aiLayoutMarkSizeText(size,traceSettings.sizeMm,aiTarget)}`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
     let naturalPoints;
@@ -2147,6 +2169,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // with an empty sweep). `if(!targetLayer)` stays as a defensive race guard (the layer was
     // deleted or changed type between resolution and here).
     if(!daubsAbsoluteMm.length)return;
+    // IMG-026 (D): an ai-layout image loses the stones whose centre is under the sweep -- in Stones
+    // mode within the brush radius of a daub (eraseStonesWithinTest()'s rule), in Outline mode inside
+    // the swept corridor (nothing to cut, as for text). Stones are named by aiIndex.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const rMm=eraserSettings.radiusMm;
+      const withinSweep=mode==='outline'
+        ?(xMm,yMm)=>isPointInsidePolygons({xMm,yMm},corridorPolygonsAbsoluteMm||[])
+        :(xMm,yMm)=>daubsAbsoluteMm.some(d=>{const dx=xMm-d.xMm,dy=yMm-d.yMm;return dx*dx+dy*dy<=rMm*rMm;});
+      const indices=layoutStonesForLayer(aiTarget.id).filter(s=>withinSweep(s.x,s.y)).map(s=>s.aiIndex);
+      if(!indices.length){el('status').textContent=`Nothing to erase on ${layerLabel(aiTarget)}.`;return;}
+      await editAiLayoutStones(aiTarget.id,[{op:'delete',indices}],`Erased ${indices.length} stone${indices.length===1?'':'s'} on ${layerLabel(aiTarget)}.`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
     if(targetLayer.type==='text'){
@@ -2326,6 +2362,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // own Math.max(2,...) radius floor (see the drag.kind==='resize' l.type==='circle' branch); cx/cy
     // stay untouched.
     if(l.type==='circle'){l.r=Math.max(2,boundsMm.width/2);updateAll(true);return}
+    // IMG-026 (D, S14): an ai-layout image keeps the layout's aspect and never shrinks below it. The
+    // edited dimension is the one that differs more from the layer's (ties go to width); the box
+    // keeps the reported left and top.
+    if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const byWidth=Math.abs(boundsMm.width-l.w)>=Math.abs(boundsMm.height-l.h);const box=aiLayoutBoxSize(l.aiLayout,byWidth?{widthMm:boundsMm.width}:{heightMm:boundsMm.height});l.x=boundsMm.left;l.y=boundsMm.top;l.w=box.w;l.h=box.h;updateAll(true);return}
     l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
     updateAll(true);
   },
@@ -2335,6 +2375,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // contract). rotationDeg arrives already normalized into [0,360) (see that file's own onMouseUp
   // 'rotate' branch), the same convention #rotationDeg/#shapeRotationDeg's own writeSelectedControlsToLayer()
   // normalization already establishes for the main canvas's rotate handle.
+  // IMG-026 (D): a stone drag in Design released after moving -- one move edit for the selection.
+  onStonesMoved:(layerId,indices,dxMm,dyMm)=>{
+    editAiLayoutStones(layerId,[{op:'move',indices,dxMm,dyMm}],`Moved ${indices.length} stone${indices.length===1?'':'s'}.`);
+  },
+  // IMG-026 (D): stone editing started, ended or changed its selection -- the panel follows.
+  onStoneSelectionChanged:()=>updateDrawToolButtons(),
   onShapeRotated:(layerId,rotationDeg)=>{
     const l=project.layers.find(x=>x.id===layerId);
     if(!l)return;
@@ -4483,6 +4529,35 @@ function deleteRegionFromPathLayer(layerId,regionId){
 // Returns null and mutates nothing when withinTest matches no stone at all (the no-op guard the
 // original branch already had); otherwise commits history, mutates targetLayer, refreshes the canvas,
 // and returns {removedCount} so each caller can word its own status message.
+// IMG-026 (D): the stone selection panel's size list -- every catalogue size an AI layout uses
+// (listAllStoneSizes(), SS4-SS30), valued by size id.
+function populateAiStoneSizeOptions(){el('aiStoneSize').innerHTML=listAllStoneSizes().map(s=>`<option value="${s.id}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+// IMG-026 (D): an ai-layout image layer by id, or null -- the layers Design edits stone by stone.
+function aiLayoutLayerById(layerId){return project.layers.find(l=>l.id===layerId&&l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout)||null}
+// IMG-026 (D): the only code that writes layer.aiLayout after a redraw. Every Design gesture on an
+// ai-layout layer (drag, arrow keys, Delete, the selection panel, Stamp, Trace, Eraser) comes here.
+// applyAiLayoutEdits() runs first: it is pure and throws on bad input, so a refused edit makes no
+// history step and changes nothing. Then one commitHistory(), the write, updateAll() and the Design
+// stone group refresh in the order the path-layer hooks use. A delete clears the stone selection,
+// because aiIndex values after it name other stones; a move, recolour or resize keeps it.
+async function editAiLayoutStones(layerId,ops,statusText){
+  const l=aiLayoutLayerById(layerId);
+  if(!l)return false;
+  let result;
+  try{result=applyAiLayoutEdits(l,ops)}catch(error){el('status').textContent=`Edit not applied: ${error.message}`;return false}
+  commitHistory();
+  l.aiLayout=result.aiLayout;l.colorSwaps=result.colorSwaps;
+  if(ops.some(o=>o.op==='delete'))drawingTool.clearStoneSelection();
+  drawingTool.refreshStoneGroupForLayer(l.id);
+  await updateAll(true);
+  if(statusText)el('status').textContent=statusText;
+  return true;
+}
+// IMG-026 (D): an ai-layout layer holds catalogue sizes only, so a Stamp or Trace size snaps to the
+// nearest of listAllStoneSizes() (SS4-SS30).
+function nearestAiLayoutStoneSize(sizeMm){let best=null;for(const s of listAllStoneSizes())if(!best||Math.abs(s.diameterMm-sizeMm)<Math.abs(best.diameterMm-sizeMm))best=s;return best}
+// IMG-026 (D): names the size a Stamp or Trace used on an ai-layout layer, and says when it was snapped.
+function aiLayoutMarkSizeText(size,sizeMm,targetLayer){const label=formatStoneSizeLabel(size.diameterMm);return findStoneSizeByDiameterMm(sizeMm)?`${label} on ${layerLabel(targetLayer)}.`:`${label}, the nearest size an AI layout uses.`}
 async function eraseStonesWithinTest(targetLayer,withinTest){
   const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
   const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
@@ -4885,6 +4960,17 @@ window.addEventListener('keydown',e=>{
   // the current drawn-shape selection instead of just being blocked, so it must not fall through
   // to the project.layers deleteLayer() path below.
   if(drawingTool.isActive){
+    // IMG-026 (D): a stone selection takes the arrow keys first -- one move edit per key press,
+    // AI_STONE_NUDGE_STEP_MM (Shift: AI_STONE_NUDGE_STEP_LARGE_MM). Delete/Backspace reach it through
+    // deleteCurrentSelection() just below.
+    const stoneSel=drawingTool.stoneSelection;
+    if(stoneSel&&ARROW_KEY_DELTAS[e.key]){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
+      e.preventDefault();
+      const step=e.shiftKey?AI_STONE_NUDGE_STEP_LARGE_MM:AI_STONE_NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];
+      editAiLayoutStones(stoneSel.layerId,[{op:'move',indices:stoneSel.indices,dxMm:ux*step,dyMm:uy*step}],`Moved ${stoneSel.indices.length} stone${stoneSel.indices.length===1?'':'s'}.`);
+      return;
+    }
     if(e.key==='Delete'||e.key==='Backspace'){
       const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
@@ -5217,7 +5303,8 @@ el('fontLibraryList').addEventListener('change',e=>{const styleSel=e.target.clos
 // Browse Fonts panel) -- a second, independent listener on the same 'change' event
 // HISTORY_TRACKED_CONTROL_IDS already listens to above, not a replacement for it.
 el('font').addEventListener('change',()=>recordRecentFont(el('font').value));
-el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
+// IMG-026 (D): picking another layer here also ends stone editing, as a Layers-list click does.
+el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);if(drawingTool.stoneEditLayerId&&drawingTool.stoneEditLayerId!==selectedLayerId)drawingTool.exitStoneEdit();syncSelectedControlsFromLayer();updateAll(true)});
 // RS-1004: switching the object template is one discrete, undoable action (matching addCircle/
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
@@ -5265,6 +5352,8 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   if(action==='duplicate'){if(drawingTool.activeSelection)drawingTool.clearActiveSelection();duplicateLayer(id);return}
   if(action==='delete'){if(drawingTool.activeSelection&&drawingTool.activeSelection.layerId===id)drawingTool.clearActiveSelection();deleteLayer(id);return}
   if(drawingTool.activeSelection)drawingTool.clearActiveSelection();
+  // IMG-026 (D): picking another layer in the list ends stone editing on the current one.
+  if(drawingTool.stoneEditLayerId&&drawingTool.stoneEditLayerId!==id)drawingTool.exitStoneEdit();
   // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
   // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
   // one layer, preserving pre-existing single-selection behavior.
@@ -5866,6 +5955,13 @@ function updateProdSheetReadabilityValidation(){
   // signal today (repro: import an image on a 200x200 Flat Sheet, then shrink the sheet to
   // 150x150). Warn-only, same as the readability check above -- appended, never replacing it.
   if(layout){
+    // IMG-026 (D): ai-layout stones closer than 0.1 mm to a neighbour (the engine's gapViolation).
+    // Warn-only, like the checks around it: editing and export are never blocked.
+    const gapViolationCount=layout.stones.filter(s=>s.metadata&&s.metadata.gapViolation===true).length;
+    if(gapViolationCount>0){
+      const gapMessage=`${gapViolationCount} stones in AI layouts are closer than 0.1 mm to a neighbour. They have a red ring in Design.`;
+      message=message?`${message} ${gapMessage}`:gapMessage;
+    }
     const outsideCount=countStonesOutsideProductionArea(layout,project.canvas.width,project.canvas.height);
     if(outsideCount>0){
       const w=formatLengthDisplay(project.canvas.width,project.units,1);
@@ -6786,6 +6882,15 @@ function renderAiLayoutColourRows(l){
     pick.onchange=()=>{const target=selectedLayer();if(!target||target.id!==l.id)return;commitHistory();if(!target.colorSwaps)target.colorSwaps={};if(pick.value===row.fromId)delete target.colorSwaps[row.fromId];else target.colorSwaps[row.fromId]=pick.value;updateAll(true)};
   }
 }
+// IMG-026 (D): a red ring on every stone flagged metadata.gapViolation, in the canvas transform `t`
+// renderStoneLayout() used, at the drawn stone radius.
+function drawGapViolationRings(ctx,stones,t,lineWidthPx){
+  const flagged=stones.filter(s=>s.metadata&&s.metadata.gapViolation===true);
+  if(!flagged.length)return;
+  ctx.save();ctx.strokeStyle='#d92b2b';ctx.lineWidth=lineWidthPx;
+  for(const s of flagged){ctx.beginPath();ctx.arc(t.ox+s.xMm*t.s,t.oy+s.yMm*t.s,Math.max(2,s.sizeMm*t.s/2),0,Math.PI*2);ctx.stroke()}
+  ctx.restore();
+}
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -6884,7 +6989,9 @@ async function renderImageStudio(){
     scratch.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
     drawInBox(scratch);
   };
-  const drawTemplate=()=>renderStoneLayout(ctx,templateLayout,t);
+  // IMG-026 (D): Template and Overlay ring the ai-layout stones flagged gapViolation in red, after
+  // renderStoneLayout(); no other layer's stones carry the flag.
+  const drawTemplate=()=>{renderStoneLayout(ctx,templateLayout,t);drawGapViolationRings(ctx,stones,t,1.5*dpr)};
   // IMG-002: re-quantized fresh from l's own current (already-committed) params -- see
   // computeImageColorField()'s own doc comment for why this isn't cached between renders. Drives
   // both the "Colours" canvas view below and the Colours group's per-row swatch/share/select.
@@ -7218,6 +7325,24 @@ function updateDrawToolButtons(){
   el('paintColorField').style.display=showPaintStyle?'':'none';
   el('paintColor').style.display=showPaintStyle?'':'none';
   if(showPaintStyle){setLengthField('paintSizeMm',paintSettings.sizeMm);setLengthField('paintGapMm',paintSettings.gapMm);el('paintColor').value=paintSettings.color}
+  // IMG-026 (D): the stone selection panel, shown while Design has stones of an ai-layout layer
+  // selected. syncAiStonePanel() fills it from the layer's own layout.
+  const stoneSel=active?drawingTool.stoneSelection:null;
+  for(const id of['aiStoneCount','aiStoneColorField','aiStoneColor','aiStoneSizeField','aiStoneSize','aiStoneDelete'])el(id).style.display=stoneSel?'':'none';
+  if(stoneSel)syncAiStonePanel(stoneSel);
+}
+// IMG-026 (D): shows the selection's count, and its colour and size when every selected stone shares
+// one. Otherwise the select is left blank (no option chosen), titled "Mixed". The colour is the one
+// drawn, colorSwaps applied.
+function syncAiStonePanel(stoneSel){
+  const l=aiLayoutLayerById(stoneSel.layerId);
+  if(!l)return;
+  const n=stoneSel.indices.length;
+  el('aiStoneCount').textContent=`${n} stone${n===1?'':'s'} selected`;
+  const swaps=l.colorSwaps||{};
+  const colours=new Set(),sizes=new Set();
+  for(const i of stoneSel.indices){const t=l.aiLayout.stones[i];if(!t)continue;colours.add(Object.prototype.hasOwnProperty.call(swaps,t[3])?swaps[t[3]]:t[3]);sizes.add(t[2])}
+  for(const[id,values]of[['aiStoneColor',colours],['aiStoneSize',sizes]]){const mixed=values.size!==1;el(id).value=mixed?'':[...values][0];if(mixed)el(id).selectedIndex=-1;el(id).title=mixed?'Mixed':''}
 }
 // RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
 // stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
@@ -7371,6 +7496,21 @@ el('paintGapMm').oninput=()=>{
 el('paintColor').oninput=()=>{
   paintSettings.color=el('paintColor').value;
 };
+// IMG-026 (D): the stone selection panel. A colour or size change is one edit for the whole
+// selection; neither select is a history-tracked control, and writeSelectedControlsToLayer() reads
+// neither. Choosing the blank "Mixed" state is not possible, so a change always carries a value.
+el('aiStoneColor').onchange=()=>{
+  const sel=drawingTool.stoneSelection;const colorId=el('aiStoneColor').value;
+  if(!sel||!colorId)return;
+  editAiLayoutStones(sel.layerId,[{op:'recolour',indices:sel.indices,colorId}],`Recoloured ${sel.indices.length} stone${sel.indices.length===1?'':'s'} ${STONE_COLORS[colorId]?.name||colorId}.`);
+};
+el('aiStoneSize').onchange=()=>{
+  const sel=drawingTool.stoneSelection;const sizeId=el('aiStoneSize').value;
+  if(!sel||!sizeId)return;
+  const size=listAllStoneSizes().find(s=>s.id===sizeId);
+  editAiLayoutStones(sel.layerId,[{op:'resize',indices:sel.indices,sizeId}],`Resized ${sel.indices.length} stone${sel.indices.length===1?'':'s'} to ${size?formatStoneSizeLabel(size.diameterMm):sizeId}.`);
+};
+el('aiStoneDelete').onclick=()=>deleteCurrentSelection();
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
 // existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
@@ -7463,9 +7603,12 @@ layoutCanvas.addEventListener('wheel',e=>{if(!drawingTool.isActive)return;drawin
 // RS-3011 Step 9 follow-up: double-click finishes an in-progress Pen path as an open shape, an
 // alternative to clicking back on the first anchor (which closes it). hasInProgressPen already
 // folds in the interactionKind==='pen' check, so this doesn't duplicate it.
+// IMG-026 (D): otherwise, with the Select tool, a double-click on an ai-layout image layer starts
+// stone editing on it (drawingTool.handleDoubleClick()); on anything else it does nothing new.
 layoutCanvas.addEventListener('dblclick',e=>{
-  if(!drawingTool.isActive||!drawingTool.hasInProgressPen)return;
-  drawingTool.finishOpenPenPath();
+  if(!drawingTool.isActive)return;
+  if(drawingTool.hasInProgressPen){drawingTool.finishOpenPenPath();return}
+  drawingTool.handleDoubleClick(e);
 });
 
 // ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
@@ -7513,6 +7656,13 @@ el('actionDuplicate').onclick=()=>{
 // this never needs to reason about multiple targets. Clears the selection afterward either way --
 // nothing is left "selected" once its contents are gone, same as the region branch above.
 async function deleteCurrentSelection(){
+  // IMG-026 (D): a stone selection on an ai-layout layer goes first -- one delete edit.
+  const stoneSel=drawingTool.stoneSelection;
+  if(stoneSel){
+    const n=stoneSel.indices.length;
+    await editAiLayoutStones(stoneSel.layerId,[{op:'delete',indices:stoneSel.indices}],`Deleted ${n} stone${n===1?'':'s'}.`);
+    return;
+  }
   const selection=drawingTool.activeSelection;
   if(selection&&selection.kind==='region'){
     deleteRegionFromPathLayer(selection.layerId,selection.regionId);
@@ -7864,7 +8014,7 @@ async function applyUnitsChange(newUnits){
 el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
 el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
 
-populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor');for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();populateAiStoneSizeOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)

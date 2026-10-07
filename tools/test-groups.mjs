@@ -400,6 +400,9 @@ export const GROUPS = {
     'test-rs3015-mark-target-eligibility.mjs',
     'test-mono-021-mark-hooks.mjs',
     'test-img-020-image-stones-in-design.mjs',
+    // IMG-026 build D: editing ai-layout stones in Design -- the one write path, stone mode, the mark
+    // tools on ai-layout layers, gap rings and the Production Sheet warning.
+    'test-img-026-design-editing.mjs',
     'test-rs-3040-design-framing.mjs',
     // PERF-005 (MAINT-004 registration): app.js's live-editing UI responsiveness -- the
     // stone-size-picker overlap-capability re-sweep call-count fix.
