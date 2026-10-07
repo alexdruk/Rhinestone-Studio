@@ -92,7 +92,7 @@ import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStep
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, listAllStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, listAllStoneSizes, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
@@ -8014,7 +8014,7 @@ async function applyUnitsChange(newUnits){
 el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
 el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
 
-populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor');for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateAiStoneSizeOptions();populateMixedSizeSelectOptions();
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor');for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();populateAiStoneSizeOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)
