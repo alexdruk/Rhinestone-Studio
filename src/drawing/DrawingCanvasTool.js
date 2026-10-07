@@ -1773,7 +1773,19 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * @returns {string|null}
    */
   function resolveStampTargetLayerId(point) {
-    return resolveTargetLayerIdByBounds(point);
+    return stoneEditLayerId || resolveTargetLayerIdByBounds(point);
+  }
+
+  /**
+   * IMG-026 (D): while stone editing is on, Stamp, Trace and Eraser act on the edited layer wherever
+   * the point is, so stones can be added outside the design (a border, say). The activeSelection
+   * test still applies at each call site. null when stone editing is off, so the caller resolves as
+   * RS-3015 and MONO-021 say.
+   * @returns {{layerId: string, blockedByIneligible: boolean, isTextTarget: boolean, isAiLayoutTarget: boolean}|null}
+   */
+  function stoneEditMarkTarget() {
+    if (!stoneEditLayerId) return null;
+    return { layerId: stoneEditLayerId, blockedByIneligible: false, isTextTarget: false, isAiLayoutTarget: true };
   }
 
   /**
@@ -1787,6 +1799,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
    */
   function resolveTraceTarget(points) {
+    const editTarget = stoneEditMarkTarget();
+    if (editTarget) return editTarget;
     const tempPath = new paper.Path({ segments: points });
     const target = resolveMarkTargetByBounds(tempPath.bounds.center);
     tempPath.remove();
@@ -1809,6 +1823,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
    */
   function resolveEraserTarget(points) {
+    const editTarget = stoneEditMarkTarget();
+    if (editTarget) return editTarget;
     let blockedByIneligible = false;
     for (const point of points) {
       const target = resolveMarkTargetByBounds(point);
@@ -2197,7 +2213,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     removeStampGhostItem();
     const layerId = resolveStampTargetLayerId(point);
     const styleParams = layerId ? getLayerStoneParams(layerId) : null;
-    if (!styleParams) return;
+    // IMG-026 (D): the layer in stone editing shows the ghost too, wherever the pointer is.
+    if (!styleParams && !(layerId && layerId === stoneEditLayerId)) return;
     stampGhostItem = new paper.Path.Circle({
       center: point,
       radius: stampSizeMm / 2,
@@ -3232,7 +3249,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // byte-identical to before, since Stamp -- unlike Trace/Eraser -- has always called
         // onStampPlace for the null case (its ghost-preview architecture needs the always-call
         // contract). A resolved layerId is handed straight through as before.
-        const stampTarget = resolveMarkTargetByBounds(event.point);
+        const stampTarget = stoneEditMarkTarget() || resolveMarkTargetByBounds(event.point);
         if (!stampTarget.layerId && stampTarget.blockedByIneligible) {
           onStampRejected('ineligible');
           return;

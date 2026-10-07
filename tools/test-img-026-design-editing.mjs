@@ -794,6 +794,34 @@ await test('22. Design: Stamp, Trace and Eraser on an ai-layout layer reach thei
   assert.ok(events[2][2] > 0, 'trace placements');
 });
 
+await test('23. Design: in stone editing, Stamp, Trace and Eraser act on that layer far outside its box; after Escape the Stamp click resolves null again', () => {
+  const far = { x: 5, y: 5 };
+  assert.ok(far.x < AI.x - 20 && far.y <= AI.y, 'the point is far outside the layer box');
+  assert.ok(dblclickAt(centre.x, centre.y));
+  assert.equal(tool.stoneEditLayerId, 'I');
+  events.length = 0;
+  tool.setMode('stamp');
+  assert.equal(tool.stoneEditLayerId, 'I', 'switching to Stamp keeps stone editing');
+  emit('mousemove', far.x, far.y);
+  assert.equal(paper.project.getItems({ match: (item) => item.data && item.data.isStampGhost === true }).length, 1, 'the Stamp ghost shows outside the box');
+  click(far.x, far.y);
+  tool.setMode('trace');
+  drag([{ x: far.x - 3, y: far.y + 3 }, { x: far.x, y: far.y + 3 }, { x: far.x + 3, y: far.y + 3 }, { x: far.x + 6, y: far.y + 3 }]);
+  tool.setMode('eraser');
+  drag([{ x: far.x, y: far.y }, { x: far.x + 2, y: far.y }]);
+  assert.equal(tool.stoneEditLayerId, 'I');
+  assert.deepEqual(events, [['stamp', 'I'], ['trace', 'I', events[1][2]], ['erase', 'I', 'stones']]);
+  assert.ok(events[1][2] > 0, 'trace placements');
+
+  tool.setMode('stamp');
+  tool.cancelPath();
+  assert.equal(tool.stoneEditLayerId, null, 'Escape leaves stone editing');
+  events.length = 0;
+  click(far.x, far.y);
+  assert.deepEqual(events, [['stamp', null]]);
+  tool.setMode('select');
+});
+
 await test('Registered in tools/test-groups.mjs (editing)', () => {
   assertTestRegistered({ filename: 'test-img-026-design-editing.mjs', group: 'editing', includedInDefault: true });
 });
