@@ -434,6 +434,8 @@ export const GROUPS = {
     'test-txt-103-text-sizing-consistency.mjs',
     'test-s200-app-integration.mjs',
     'test-rs2012-text-gap-mixed-size-ux.mjs',
+    // IMG-026 build C2: the Image -> Strass lightbox for ai-layout layers.
+    'test-img-026-lightbox.mjs',
   ],
   history: [
     'test-history-manager.mjs',

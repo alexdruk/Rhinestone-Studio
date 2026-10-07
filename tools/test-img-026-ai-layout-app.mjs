@@ -157,7 +157,7 @@ await test('3. applyRedraw() with a layout: fillMode ai-layout, aiLayout with th
   assert.equal(next.aiLayout.heightMm, FAKE_LAYOUT.heightMm);
   assert.deepEqual(next.aiLayout.stones, FAKE_LAYOUT.stones);
   assert.notEqual(next.aiLayout.stones[0], FAKE_LAYOUT.stones[0], 'stones are copied, not shared with the answer');
-  const kept = ['minGapMm', 'violations', 'coverage', 'face', 'ms'].filter((k) => k in FAKE_LAYOUT.report);
+  const kept = ['minGapMm', 'violations', 'coverage', 'face', 'ms', 'offsetMm', 'mmPerPx'].filter((k) => k in FAKE_LAYOUT.report);
   assert.deepEqual(next.aiLayout.report, Object.fromEntries(kept.map((k) => [k, FAKE_LAYOUT.report[k]])));
   assert.ok(Object.keys(FAKE_LAYOUT.report).length > kept.length, 'the fixture has report keys to drop');
   assert.equal(next.aiLayout.editCount, 0);
@@ -254,10 +254,13 @@ function buildStartImageRedraw({ result, template = 'sheet', canvas = { width: 4
     setRedrawAccessCode: () => {},
     redrawErrorMessage: (e) => `error: ${e.message}`,
     redrawErrorDetail: () => '',
-    syncImageRedrawControlsForSelection: () => {}
+    syncImageRedrawControlsForSelection: () => {},
+    setImageStudioView: () => {},
+    renderImageStudio: () => {},
+    redrawFailedLayerIds: new Set()
   };
   const names = Object.keys(deps);
-  const run = new Function(...names, `let redrawRun=null,redrawConsentResolve=null,redrawConsentGiven=true;\n${extractFunction('async function startImageRedraw(){')}\nreturn startImageRedraw;`)(...names.map((n) => deps[n]));
+  const run = new Function(...names, `let redrawRun=null,redrawConsentResolve=null,redrawConsentGiven=true,runningLayerId=null;\n${extractFunction('async function startImageRedraw(){')}\nreturn startImageRedraw;`)(...names.map((n) => deps[n]));
   return { run, state };
 }
 
@@ -265,7 +268,7 @@ await test('6. startImageRedraw() with a layout: stage texts, the Flat Sheet gro
   const { run, state } = buildStartImageRedraw({ result: { ...RESULT, layout: FAKE_LAYOUT, layoutError: null } });
   await run();
   assert.equal(typeof state.redrawRequests[0].onStage, 'function');
-  assert.deepEqual(state.statuses, ['Redrawing… this can take up to five minutes.', 'OpenAI is drawing… (up to five minutes)', 'Placing stones…', 'Redrawn with AI. Use original to undo this.']);
+  assert.deepEqual(state.statuses, ['Redrawing… this can take up to five minutes.', 'OpenAI is drawing… (up to five minutes)', 'Placing stones…', 'Placed 193 stones. Gap check: 0 violations.']);
   assert.deepEqual(REDRAW_STAGE_MESSAGES, { drawing: 'OpenAI is drawing… (up to five minutes)', placing: 'Placing stones…' });
   assert.deepEqual(state.project.canvas, fitAiLayoutCanvas({ canvas: { width: 40, height: 40 }, widthMm: FAKE_LAYOUT.widthMm, heightMm: FAKE_LAYOUT.heightMm, sheetMaxMm: SHEET_MAX_MM }));
   assert.equal(state.commits, 1);
@@ -295,8 +298,8 @@ await test('7. startImageRedraw() without a layout: the IMG-023 path runs and th
 
   const flat = buildStartImageRedraw({ result: { ...RESULT, layout: FAKE_LAYOUT, layoutError: null }, style: 'flat' });
   await flat.run();
-  assert.equal(flat.state.project.layers[0].fillMode, 'staggered', 'a flat redraw keeps the IMG-024 path');
-  assert.equal(flat.state.statuses.at(-1), 'Redrawn with AI. Use original to undo this.');
+  assert.equal(flat.state.redrawRequests[0].style, 'stones', 'C2: the Redraw style select is no longer read');
+  assert.equal(flat.state.project.layers[0].fillMode, 'ai-layout');
 });
 
 // ---- live branch, export regions, Fill style ------------------------------------------------------

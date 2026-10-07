@@ -112,7 +112,7 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
-import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
+import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows } from './src/ui/index.js';
 import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
@@ -137,7 +137,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -1312,6 +1312,10 @@ function validateProject(obj){
       if(!Array.isArray(a.stones)||a.stones.length>20000)throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': stones must be an array of at most 20000 entries.`);
       a.stones.forEach((t,i)=>{if(!(Array.isArray(t)&&t.length===4&&typeof t[0]==='number'&&Number.isFinite(t[0])&&typeof t[1]==='number'&&Number.isFinite(t[1])&&isValidStoneSizeId(t[2])&&typeof t[3]==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,t[3])))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout' stone ${i}: expected [x, y, size id, colour id].`)});
       if(!(Number.isInteger(a.editCount)&&a.editCount>=0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': editCount must be a non-negative integer.`);
+      // IMG-026 (C2): offsetMm and mmPerPx are optional (layers made with C1 have neither).
+      const r=a.report&&typeof a.report==='object'?a.report:{};
+      if(r.offsetMm!==undefined&&!(Array.isArray(r.offsetMm)&&r.offsetMm.length===2&&r.offsetMm.every(n=>typeof n==='number'&&Number.isFinite(n))))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': report.offsetMm must be two finite numbers.`);
+      if(r.mmPerPx!==undefined&&!(typeof r.mmPerPx==='number'&&Number.isFinite(r.mmPerPx)&&r.mmPerPx>0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': report.mmPerPx must be a positive number.`);
     }
     if(l.type==='image'&&l.colorSwaps!==undefined&&!(l.colorSwaps&&typeof l.colorSwaps==='object'&&Object.getPrototypeOf(l.colorSwaps)===Object.prototype&&Object.entries(l.colorSwaps).every(([from,to])=>Object.prototype.hasOwnProperty.call(STONE_COLORS,from)&&typeof to==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,to))))throw new Error(`Image layer "${l.id}" has an invalid 'colorSwaps': expected an object of known colour id to known colour id.`);
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
@@ -2686,6 +2690,8 @@ function syncSelectedControlsFromLayer(){
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   // IMG-026 (C1): the ai-layout option is enabled only for a layer that has a layout to place.
   if(l.type==='image'){el('imageFillMode').querySelector('option[value="ai-layout"]').disabled=!l.aiLayout;el('imageFillMode').value=resolveImageFillMode(l.fillMode)}
+  // IMG-026 (C2, S14): while an ai-layout layer is selected, W and H cannot go below the layout size.
+  if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){el('shapeW').min=String(formatLengthDisplay(l.aiLayout.widthMm,project.units));el('shapeH').min=String(formatLengthDisplay(l.aiLayout.heightMm,project.units))}else{el('shapeW').removeAttribute('min');el('shapeH').removeAttribute('min')}
   if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';ensureTextModeOptionForLayer(l.textMode);el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
@@ -2806,6 +2812,18 @@ function aiStoneShrinkHintText(l){
   if(!detection.ok)return 'No AI stones were found in this image. AI stones works on images redrawn with AI.';
   return aiStoneEffectiveShrink({w:l.w,h:l.h,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx:detection.pitchPx,stoneSizeMm:l.stoneSize,gapMm:l.gap})<0.8-1e-9?'This design is smaller than the AI drew it, so fine lines may break.':'';
 }
+// IMG-026 (C2, S14): an ai-layout layer's W and H fields keep the layout's aspect and never go below
+// its size. The field whose shown value differs from the layer is the one the user edited; the other
+// field follows at once, and both snap back on 'change' (the shapeW/shapeH listener below).
+function writeAiLayoutBoxFromFields(l){
+  const shown=mm=>formatLengthDisplay(mm,project.units),fw=readLengthField('shapeW'),fh=readLengthField('shapeH');
+  const wEdited=parseFloat(el('shapeW').value)!==shown(l.w)&&Number.isFinite(fw);
+  const hEdited=!wEdited&&parseFloat(el('shapeH').value)!==shown(l.h)&&Number.isFinite(fh);
+  const box=aiLayoutBoxSize(l.aiLayout,wEdited?{widthMm:fw}:hEdited?{heightMm:fh}:{widthMm:l.w});
+  l.w=box.w;l.h=box.h;
+  if(wEdited)setLengthField('shapeH',l.h);
+  if(hEdited)setLengthField('shapeW',l.w);
+}
 function writeSelectedControlsToLayer(){
   const regionSelection=drawingTool.activeSelection;
   if(regionSelection&&regionSelection.kind==='region'){
@@ -2874,7 +2892,7 @@ function writeSelectedControlsToLayer(){
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.maskMode=resolveImageMaskMode(el('imgMaskMode').value);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value);
+}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;if(l.fillMode==='ai-layout'&&l.aiLayout)writeAiLayoutBoxFromFields(l);else{l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10)}l.maskMode=resolveImageMaskMode(el('imgMaskMode').value);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value);
   // IMG-003: seed/spread, resolved the same permissive way every other optional image param is.
   l.seed=resolveImageSeed(parseIntOr(el('imgSeed').value,1));l.spread=resolveImageSpread(parseFloat(el('imgSpread').value));l.edgeWidthMm=resolveImageEdgeWidth(readLengthField('imgEdgeWidth'));l.edgeThinning=resolveImageEdgeThinning(parseFloat(el('imgEdgeThinning').value));l.brightnessThinning=resolveImageBrightnessThinning(parseFloat(el('imgBrightnessThinning').value));
   // IMG-002: colorCount first (colorMap's own write below depends on the NEW colorCount, not
@@ -4753,7 +4771,12 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;
+      // IMG-026 (C2, S14): an ai-layout image keeps its aspect and never shrinks below the layout. n/s set
+      // the height, every other handle the width; a corner keeps the opposite corner, an edge the
+      // midpoint of the opposite edge.
+      if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const hd=drag.handle,b=drag.b0,box=aiLayoutBoxSize(l.aiLayout,hd==='n'||hd==='s'?{heightMm:Math.abs(y1-y0)}:{widthMm:Math.abs(x1-x0)});l.w=box.w;l.h=box.h;l.x=hd.includes('w')?b.x2-box.w:hd.includes('e')?b.x:b.x+b.width/2-box.w/2;l.y=hd.includes('n')?b.y2-box.h:hd.includes('s')?b.y:b.y+b.height/2-box.h/2}
+      else{l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}
     else if(XYWH_SHAPE_TYPES.has(l.type)){
       // RS-3030: rotated resize -- drag the handle along the shape's own LOCAL (rotated) axes, per
       // the Illustrator/Figma convention, keeping the opposite corner/edge (anchorAbs, fixed at
@@ -4765,6 +4788,8 @@ layoutCanvas.addEventListener('pointermove',e=>{
       let newW=drag.b0.width,newH=drag.b0.height;
       if(off.x!==0)newW=Math.max(2,Math.abs(local.x));
       if(off.y!==0)newH=Math.max(2,Math.abs(local.y));
+      // IMG-026 (C2, S14): an ai-layout image takes the locked box; the anchor formula below is unchanged.
+      if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const box=aiLayoutBoxSize(l.aiLayout,off.x!==0?{widthMm:Math.abs(local.x)}:{heightMm:Math.abs(local.y)});newW=box.w;newH=box.h}
       // New center sits newW/2,newH/2 (signed by the dragged handle's own unit offset) away from the
       // anchor in local space; rotate that offset forward back into absolute space and add to the
       // anchor's fixed absolute position to get the new absolute center.
@@ -5156,6 +5181,9 @@ el('autoFit').addEventListener('input',()=>{
 });
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning','imgAiStoneShrink','imgCleanup','imgJetOutline'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
+// IMG-026 (C2, S14): a finished W or H edit of an ai-layout layer shows the locked box, so a value below
+// the layout size snaps back.
+for(const id of['shapeW','shapeH'])el(id).addEventListener('change',()=>{const l=selectedLayer();if(l&&l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){setLengthField('shapeW',l.w);setLengthField('shapeH',l.h)}});
 // IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
 // #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
 // fire together, no drag in between, so there's nothing to freeze) -- freezes Auto's resolved count
@@ -5628,9 +5656,13 @@ el('importImageFile').addEventListener('change',async e=>{
     syncSelectedControlsFromLayer();
     await updateAll(true);
     el('status').textContent=`Imported ${file.name}`;
+    // IMG-026 (C2): every upload starts the redraw at once; without a provider the classic placement stays.
+    if(redrawAvailability===null){redrawAvailabilityRequested=true;redrawAvailability=await getRedrawAvailability()}
+    if(redrawAvailability.available)startImageRedraw();
+    else setImageRedrawStatus('Redraw with AI is not available on this server, so the image was placed with the classic method.');
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
-el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;deleteLayer(selectedLayer().id);if(!lightboxes.imagetrace.isOpen)lightboxes.imagetrace.open()};
+el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;if(redrawRun&&runningLayerId===selectedLayer().id)redrawRun.abort();deleteLayer(selectedLayer().id);if(!lightboxes.imagetrace.isOpen)lightboxes.imagetrace.open()};
 // IMG-022: Redraw with AI (docs/specifications/IMG-022-RedrawProvider.md D8, D9, D11). All provider
 // work goes through src/redraw/index.js; this code owns only the consent dialog, the remembered
 // access code, the history step and the Studio's buttons. syncImageRedrawControls() is called from
@@ -5642,6 +5674,12 @@ const REDRAW_STYLE_STORAGE_KEY='rhinestoneStudio.redrawStyle';
 function loadRedrawStyle(){try{return localStorage.getItem(REDRAW_STYLE_STORAGE_KEY)==='flat'?'flat':'stones'}catch{return'stones'}}
 function saveRedrawStyle(style){try{localStorage.setItem(REDRAW_STYLE_STORAGE_KEY,style)}catch{}}
 let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
+// IMG-026 (C2): the layer of the running redraw, and the layers whose last run in this session failed,
+// was declined or cancelled, or fell back to the old method. See imageStudioState().
+let runningLayerId=null;
+const redrawFailedLayerIds=new Set();
+function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id)})}
+function setImageStudioView(value){const input=el('imageStudioView').querySelector(`input[value="${value}"]`);if(input)input.checked=true}
 const REDRAW_ERROR_MESSAGES={
   'not-configured':'AI redraw is not set up on this server.',
   'unauthorized':'The access code was not accepted. Enter it again to continue.',
@@ -5666,12 +5704,11 @@ function redrawErrorMessage(error){
 }
 function syncImageRedrawControls(l){
   if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
-  const busy=redrawRun!==null;
-  el('imageRedraw').hidden=!(redrawAvailability&&redrawAvailability.available&&l);
-  el('imageRedrawStyleField').hidden=el('imageRedraw').hidden;el('imageRedrawStyle').disabled=busy;
+  const busy=redrawRun!==null,state=imageStudioStateFor(l);
+  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawButton;
   el('imageRedraw').disabled=busy;
   el('imageRedrawCancel').hidden=!busy;
-  el('imageRedrawUseOriginal').hidden=!(l&&l.redraw);
+  el('imageRedrawUseOriginal').hidden=!state.useOriginal;
   el('imageRedrawUseOriginal').disabled=busy;
 }
 const redrawConsentLightbox=new Lightbox('lightboxRedrawConsent',{onClose(){if(redrawConsentResolve){const resolve=redrawConsentResolve;redrawConsentResolve=null;resolve(false)}}});
@@ -5699,16 +5736,20 @@ async function startImageRedraw(){
   if(redrawConsentResolve!==null)return;
   if(redrawRun||!redrawAvailability||!redrawAvailability.available)return;
   if(selectedLayer().type!=='image')return;
-  if(redrawAvailability.consent&&!redrawConsentGiven&&!(await askRedrawConsent(redrawAvailability.consent))){setImageRedrawStatus('Redraw cancelled.');return}
+  if(redrawAvailability.consent&&!redrawConsentGiven&&!(await askRedrawConsent(redrawAvailability.consent))){redrawFailedLayerIds.add(selectedLayer().id);setImageRedrawStatus('Redraw cancelled.');syncImageRedrawControlsForSelection();return}
   const layer=selectedLayer();
   if(!layer||layer.type!=='image'||redrawRun)return;
   // The request is bound to this layer and the source it started from (a re-redraw always starts
   // from the original image); a result that no longer matches is dropped, not applied.
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
-  const style=el('imageRedrawStyle').value==='flat'?'flat':'stones';
+  // IMG-026 (C2, D3): always the stone picture; the flat style stays dormant.
+  const style='stones';
   redrawRun=new AbortController();
+  runningLayerId=layerId;
   setImageRedrawStatus('Redrawing… this can take up to five minutes.');
+  setImageStudioView('source');
   syncImageRedrawControls(layer);
+  renderImageStudio();
   try{
     const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])}});
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
@@ -5727,19 +5768,25 @@ async function startImageRedraw(){
     const next=applyRedraw(current,result,{canvas:project.canvas,layout,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
+    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('template')}else redrawFailedLayerIds.add(layerId);
     syncSelectedControlsFromLayer();
     await updateAll(true);
-    setImageRedrawStatus(style==='stones'&&!layout&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
+    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style==='stones'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
   }catch(error){
     if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
     if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
+    redrawFailedLayerIds.add(layerId);
     setImageRedrawStatus(redrawErrorMessage(error),redrawErrorDetail(error));
   }finally{
     redrawRun=null;
+    runningLayerId=null;
     syncImageRedrawControlsForSelection();
+    renderImageStudio();
   }
 }
-el('imageRedraw').onclick=()=>{startImageRedraw()};
+// IMG-026 (C2): "Try again" first asks before it discards manual edits to the layout. The app has no
+// confirm dialog of its own, so this is window.confirm.
+el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0;if(imageStudioStateFor(l&&l.type==='image'?l:null).redrawButton==='Try again'&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
 el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');
 el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
 el('imageRedrawUseOriginal').onclick=async()=>{
@@ -5766,6 +5813,8 @@ el('imageStudioSwitchToSheet').onclick=()=>{el('objectType').value='sheet';el('o
 // (correctly, per its own IMG-002 comment) reads every already-synced row's still-showing-the-old-
 // override <select> value straight back into l.colorMap, undoing this reset before it ever renders.
 el('imgColorReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image')return;commitHistory();l.colorMap={};updateAll(true)};
+// IMG-026 (C2, S17): Reset colours clears the ai-layout colour swaps, as its own history step.
+el('aiLayoutColourReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image'||l.fillMode!=='ai-layout')return;commitHistory();l.colorSwaps={};updateAll(true)};
 // IMG-003: re-rolls the Organic placement without touching any other param -- a discrete action that
 // commits its own history entry, the same reason #imgColorReset does above, rather than the generic
 // HISTORY_TRACKED_CONTROL_IDS input/change session coalescing.
@@ -6710,6 +6759,33 @@ function letterboxToBoxAspect(img,boxW,boxH){
   out.getContext('2d').drawImage(img,(out.width-w)/2,(out.height-h)/2,w,h);
   return out;
 }
+// IMG-026 (C2): applies imageStudioState() to the lightbox groups, the four ai-layout stats rows and
+// the Mask/Colours views; a hidden view that was checked falls back to Template.
+const AI_LAYOUT_STAT_IDS=['imageStudioStatMinGap','imageStudioStatViolations','imageStudioStatCoverage','imageStudioStatScale'];
+function applyImageStudioState(state){
+  el('legacyImageControls').hidden=!state.legacy;
+  el('imageStudioGroupAiColours').hidden=!state.aiColours;
+  for(const id of AI_LAYOUT_STAT_IDS){el(id).hidden=!state.aiStats;el(`${id}Label`).hidden=!state.aiStats}
+  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;
+  const view=el('imageStudioView').querySelector('input:checked')?.value;
+  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours))setImageStudioView('template');
+}
+// IMG-026 (C2, S17): the "Colours used" rows of an ai-layout layer, rebuilt on every render. A change
+// writes layer.colorSwaps as its own history step; neither control is in HISTORY_TRACKED_CONTROL_IDS.
+function renderAiLayoutColourRows(l){
+  const host=el('aiLayoutColourRows');host.textContent='';
+  if(!l||l.fillMode!=='ai-layout'||!l.aiLayout)return;
+  for(const row of aiLayoutColourRows(l.aiLayout,l.colorSwaps)){
+    const item=document.createElement('div');item.className='ai-colour-row';
+    const swatch=document.createElement('span');swatch.className='color-swatch';swatch.style.background=STONE_COLORS[row.toId]?.previewColor||'#ffffff';
+    const name=document.createElement('span');name.className='ai-colour-name';name.textContent=STONE_COLORS[row.fromId]?.name||row.fromId;
+    const count=document.createElement('span');count.className='hint';count.textContent=String(row.count);
+    const pick=document.createElement('select');pick.id=`aiLayoutColourPick-${row.fromId}`;
+    item.append(swatch,name,count,pick);host.appendChild(item);
+    populateStoneColorOptions(pick.id);pick.value=row.toId;
+    pick.onchange=()=>{const target=selectedLayer();if(!target||target.id!==l.id)return;commitHistory();if(!target.colorSwaps)target.colorSwaps={};if(pick.value===row.fromId)delete target.colorSwaps[row.fromId];else target.colorSwaps[row.fromId]=pick.value;updateAll(true)};
+  }
+}
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -6727,12 +6803,15 @@ async function renderImageStudio(){
     for(const id of['imageStudioStatImage','imageStudioStatCount','imageStudioStatSizes','imageStudioStatColors','imageStudioStatBox'])el(id).textContent='—';
     for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=true;
     el('imageStudioRemove').disabled=true;
+    applyImageStudioState(imageStudioStateFor(null));renderAiLayoutColourRows(null);
     syncImageRedrawControls(null);
     return;
   }
   el('imageStudioEmpty').hidden=true;
   for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=false;
   el('imageStudioRemove').disabled=false;
+  const state=imageStudioStateFor(l);
+  applyImageStudioState(state);renderAiLayoutColourRows(l);
   syncImageRedrawControls(l);
   el('imageStudioFileName').textContent=l.imageName||'';
   // IMG-003/IMG-004: Organic's and Edge's shared Poisson-disk controls (seed/shuffle/spread) only
@@ -6760,7 +6839,7 @@ async function renderImageStudio(){
   el('imgJetOutline').disabled=!cleanupEligible||l.cleanup!==true;
   el('imgCleanupHint').hidden=cleanupEligible;
   // IMG-023 (D8): the AI image view exists only for a redrawn layer.
-  el('imageStudioViewAi').hidden=!l.redraw;
+  el('imageStudioViewAi').hidden=!state.views.ai;
   el('imgSeed').value=resolveImageSeed(l.seed);
   el('imgSpread').value=resolveImageSpread(l.spread);
   el('imgSpreadValue').textContent=String(resolveImageSpread(l.spread));
@@ -6791,8 +6870,11 @@ async function renderImageStudio(){
     if(img.complete&&img.naturalWidth){resolve(img);return}
     img.onload=()=>resolve(img);img.onerror=()=>resolve(img);
   });
-  const drawInBox=src=>{if(!studioRotationDeg){ctx.drawImage(src,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);return}ctx.save();ctx.translate(t.ox+(l.x+l.w/2)*t.s,t.oy+(l.y+l.h/2)*t.s);ctx.rotate(studioRotationDeg*Math.PI/180);ctx.drawImage(src,-l.w*t.s/2,-l.h*t.s/2,l.w*t.s,l.h*t.s);ctx.restore()};
-  const paintSource=img=>drawInBox(img);
+  // IMG-026 (C2): `b` is the box to draw into (the layer box unless given); under rotation it still
+  // turns about the layer box's centre, so an ai-layout AI image (aiLayoutImageBox()) stays under its stones.
+  const drawInBox=(src,b=l)=>{if(!studioRotationDeg){ctx.drawImage(src,t.ox+b.x*t.s,t.oy+b.y*t.s,b.w*t.s,b.h*t.s);return}ctx.save();ctx.translate(t.ox+(l.x+l.w/2)*t.s,t.oy+(l.y+l.h/2)*t.s);ctx.rotate(studioRotationDeg*Math.PI/180);ctx.drawImage(src,(b.x-l.x-l.w/2)*t.s,(b.y-l.y-l.h/2)*t.s,b.w*t.s,b.h*t.s);ctx.restore()};
+  const paintSource=(img,b)=>drawInBox(img,b);
+  const aiImageBox=mode==='ai-layout'?aiLayoutImageBox(l)||undefined:undefined;
   const drawMask=async()=>{
     let buffer=imageBufferCache.get(l.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(l.imageSrc);imageBufferCache.set(l.imageSrc,buffer)}
@@ -6849,7 +6931,7 @@ async function renderImageStudio(){
   }else if(view==='ai'){
     const img=await drawSource();
     if(token!==imageStudioRenderToken)return;
-    paintSource(img);
+    paintSource(img,aiImageBox);
   }else if(view==='mask'){
     await drawMask();
     if(token!==imageStudioRenderToken)return;
@@ -6860,7 +6942,7 @@ async function renderImageStudio(){
   }else{
     const img=await drawSource();
     if(token!==imageStudioRenderToken)return;
-    ctx.globalAlpha=.35;paintSource(img);ctx.globalAlpha=1;
+    ctx.globalAlpha=.35;paintSource(img,aiImageBox);ctx.globalAlpha=1;
     drawTemplate();
   }
   el('imageStudioStatImage').textContent=`${l.imageName||''} — ${l.naturalWidthPx}×${l.naturalHeightPx}px`;
@@ -6887,6 +6969,17 @@ async function renderImageStudio(){
   // IMG-025 (D9): one line under the stats, hidden when clean-up did not run.
   const cleanupText=imageCleanupStatsText(checkFixResult.cleanupStats);
   el('imageStudioStatCleanup').textContent=cleanupText;el('imageStudioStatCleanup').hidden=!cleanupText;
+  // IMG-026 (C2): the ai-layout rows, from the same includeStats call. .validation-message needs
+  // .visible to show (index.html), so both are toggled.
+  const aiStats=state.aiStats?checkFixResult.aiLayoutStats:null;
+  if(aiStats){
+    el('imageStudioStatMinGap').textContent=typeof aiStats.minGapMm==='number'?`${formatLengthDisplay(aiStats.minGapMm,project.units,3)} ${unitSuffix(project.units)}`:'—';
+    el('imageStudioStatViolations').textContent=String(aiStats.violations);
+    for(const cls of['validation-message','visible'])el('imageStudioStatViolations').classList.toggle(cls,aiStats.violations>0);
+    const coverage=l.aiLayout.report?l.aiLayout.report.coverage:undefined;
+    el('imageStudioStatCoverage').textContent=typeof coverage==='number'?`${Math.round(coverage*100)}%`:'—';
+    el('imageStudioStatScale').textContent=`×${aiStats.k.toFixed(2)}`;
+  }
 }
 // IMG-025 (D9, audit note A7): the studio's clean-up stats line; '' when clean-up did not run.
 function imageCleanupStatsText(stats){

@@ -23,7 +23,7 @@ import { decodeDataUrlToBuffer, computeSubjectMask } from '../image/index.js';
 import { resizeImageBuffer, SUBJECT_MASK_RESIZE_TRIGGER_PX, SUBJECT_MASK_MAX_DIMENSION_PX } from '../image/ImageFieldPipeline.js';
 import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiProxyProvider.js';
 
-export { applyRedraw, restoreOriginal, fitAiStoneBox, fitAiLayoutCanvas, aiStoneEffectiveShrink, aiStoneMmPerPx } from './RedrawLayerTransform.js';
+export { applyRedraw, restoreOriginal, fitAiStoneBox, fitAiLayoutCanvas, aiStoneEffectiveShrink, aiStoneMmPerPx, aiLayoutBoxSize, aiLayoutImageBox } from './RedrawLayerTransform.js';
 
 // IMG-023: 'declined' is OpenAI's safety-system refusal (never retried here; the server retries once).
 // IMG-026: the layout-* codes describe a layout failure after a good OpenAI image (layoutError).

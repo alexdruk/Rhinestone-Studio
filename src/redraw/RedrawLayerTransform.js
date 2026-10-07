@@ -62,12 +62,13 @@ export function fitAiLayoutCanvas({ canvas, widthMm, heightMm, sheetMaxMm }) {
 }
 
 // IMG-026 (C1): the layer's copy of a layout service answer. Of the report it keeps only the keys
-// the app shows; stones keep the service's order.
-const AI_LAYOUT_REPORT_KEYS = ['minGapMm', 'violations', 'coverage', 'face', 'ms'];
+// the app shows; stones keep the service's order. C2: offsetMm and mmPerPx place the AI image
+// under the stones (aiLayoutImageBox() below).
+const AI_LAYOUT_REPORT_KEYS = ['minGapMm', 'violations', 'coverage', 'face', 'ms', 'offsetMm', 'mmPerPx'];
 function aiLayoutFromResult(layout) {
   const report = {};
   const source = layout.report && typeof layout.report === 'object' ? layout.report : {};
-  for (const key of AI_LAYOUT_REPORT_KEYS) if (key in source) report[key] = source[key];
+  for (const key of AI_LAYOUT_REPORT_KEYS) if (key in source) report[key] = Array.isArray(source[key]) ? [...source[key]] : source[key];
   return {
     version: layout.version,
     widthMm: layout.widthMm,
@@ -75,6 +76,44 @@ function aiLayoutFromResult(layout) {
     stones: layout.stones.map((t) => [...t]),
     report,
     editCount: 0
+  };
+}
+
+/**
+ * IMG-026 (C2, S14): the box of an ai-layout layer for a requested width or height. Enlarge only,
+ * aspect locked: w = max(widthMm, requested width, or requested height x widthMm / heightMm), and
+ * h = w x heightMm / widthMm. A request that is not a finite number gives the layout size.
+ * @param {{widthMm:number, heightMm:number}} aiLayout
+ * @param {{widthMm?:number, heightMm?:number}} request
+ * @returns {{w:number, h:number}}
+ */
+export function aiLayoutBoxSize(aiLayout, request) {
+  const { widthMm, heightMm } = aiLayout;
+  let asked = widthMm;
+  if (request && finite(request.widthMm)) asked = request.widthMm;
+  else if (request && finite(request.heightMm)) asked = request.heightMm * widthMm / heightMm;
+  const w = Math.max(widthMm, asked);
+  return { w, h: heightMm * (w / widthMm) };
+}
+
+/**
+ * IMG-026 (C2): the AI image's box, so it lines up with the stones. With k = max(1, w / widthMm),
+ * the image's top-left sits k x offsetMm before the layer box and it spans k x mmPerPx per pixel.
+ * Null when the layer's report has no offsetMm or mmPerPx (layers made with C1).
+ * @param {object} layer an image layer with `aiLayout`
+ * @returns {{x:number, y:number, w:number, h:number}|null}
+ */
+export function aiLayoutImageBox(layer) {
+  const a = layer && layer.aiLayout;
+  const report = a && a.report;
+  if (!report || !Array.isArray(report.offsetMm) || !finite(report.mmPerPx)) return null;
+  const k = Math.max(1, layer.w / a.widthMm);
+  const [offX, offY] = report.offsetMm;
+  return {
+    x: layer.x - k * offX,
+    y: layer.y - k * offY,
+    w: k * report.mmPerPx * layer.naturalWidthPx,
+    h: k * report.mmPerPx * layer.naturalHeightPx
   };
 }
 
