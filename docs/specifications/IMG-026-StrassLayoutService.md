@@ -97,6 +97,7 @@ come from the caller. The request carries `colorIds`, the ids the app knows; the
 422 `catalogue-mismatch` when its catalogue has an id the app does not. A Node test (build B)
 asserts that every `catalogue.json` entry equals the `CrystalColors.js` entry with that id on
 name and on all four colour fields (fill, stroke, shine, accent).
+Build F adds twelve aiOnly entries after these 27, and the test also compares `aiOnly`.
 
 **S5. Determinism and the two golden checks.** The same PNG bytes and package versions give the
 same stones. Two checks follow:
@@ -1043,6 +1044,210 @@ Detection was cached, and the rest of the pipeline ran per variant. All 18 image
 | Prompt tests | `tools/test-img-022-redraw-provider.mjs:188`–`:191`, `tools/test-img-024-flat-artwork-style.mjs:139`–`:140` |
 | BACKLOG row | `docs/BACKLOG.md:77` |
 
+## Colour and eyes (build F)
+
+The second live run (8 Oct 2026, prompt v4 with build E) shows three faults, and measurements on 22
+AI images locate their causes. The images are the 18 above plus the four v4 uploads.
+
+- **Missing colours.** The AI's dark greens, olives, warm mid browns and pinkish skin are 8–20
+  ΔE2000 from the nearest catalogue colour. Dark green grass becomes Jet and Hematite, which read as
+  holes.
+- **Colour reading.** `stone_colours()` takes the median of the darker 85 % of a stone's core. The
+  AI paints every stone with a light highlight and a darker rim. Without the highlight, skin reads
+  more orange than the stone looks and snaps to Topaz, so faces get orange blotches.
+- **Human eyes.** `build_eye_copy()` adds iris rings only for animals (`iris=boxes is None`), so a
+  blue or green human iris is lost. The whole eye zone is cleared before the eye stones go in, so
+  the lid and lash stones the AI drew around the eye are lost as well.
+
+Two ideas were tested and dropped:
+- a pupil built from small stones, because at viewing size the eyes disappear;
+- a smaller human pupil, because Einstein's eyes vanish.
+
+### AI-layout-only colours (S4, S13)
+
+Twelve catalogue entries are appended after `hyacinth`. Each has `aiOnly: true`; stroke, shine and
+accent follow the IMG-016 shading rule.
+
+| id | Name | Group | Fill |
+| --- | --- | --- | --- |
+| `golden-shadow` | Golden Shadow | Brown & Peach | `#c99a6c` |
+| `copper` | Copper | Brown & Peach | `#b87333` |
+| `rose-gold` | Rose Gold | Brown & Peach | `#d38f75` |
+| `vintage-rose` | Vintage Rose | Red & Pink | `#d1958e` |
+| `padparadscha` | Padparadscha | Red & Pink | `#de4c52` |
+| `chrysolite` | Chrysolite | Green & Aqua | `#97d38f` |
+| `fern-green` | Fern Green | Green & Aqua | `#3e8e41` |
+| `erinite` | Erinite | Green & Aqua | `#4d8355` |
+| `olivine` | Olivine | Green & Aqua | `#737033` |
+| `khaki` | Khaki | Green & Aqua | `#5b593c` |
+| `metallic-sunshine` | Metallic Sunshine | Yellow & Amber | `#dfb758` |
+| `jet-hematite` | Jet Hematite | Metallic | `#4a5353` |
+
+Where the fills come from:
+- **Nine are sampled from a stone photo.** The fill is the mean colour of 85 % of the stone disc in
+  the owner's supplier catalogue (flat backs, pages 7 and 8, rendered at 330 dpi).
+- **Copper, Olivine and Khaki** come from the owner's supplier list.
+- **A refit to the app's style was rejected.** It was a Lab fit from photo colour to app fill over
+  the 20 stones in both sets, and it left a median error of 8 ΔE.
+
+Where the aiOnly colours appear:
+- **Renderers, exporters and validation** read `STONE_COLORS` and see all 39 colours.
+- **The standard colour selectors leave them out.** These are `listCrystalColorGroups()` (unless
+  passed `{ includeAiOnly: true }`) and app.js's `populateStoneColorOptions(targetId,
+  includeAiOnly=false)`.
+- **The two exceptions** are `#aiStoneColor` and the Colours used swap selects (`pick.id`), which
+  pass `true`.
+- **`AI_ONLY_COLOR_IDS`** is exported, frozen.
+- **`imageColorPalette()` and `LEGACY_IMAGE_COLOR_IDS`** are unchanged (S13).
+- **The redraw server** sends all 39 ids as `colorIds`. `catalogue.json` gains the same twelve
+  entries, with `"aiOnly": true` (S4).
+
+### Rules
+
+`Rules` gains four fields, all `False` by default:
+
+```python
+    extra_colours: bool = False
+    mean_colour: bool = False
+    human_iris: bool = False
+    eye_keep: bool = False
+
+PROTOTYPE = Rules(pupil_core_only=False, keep_chains=False)
+BUILD_E = Rules(pupil_core_only=True, keep_chains=True)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True,
+                human_iris=True, eye_keep=True)
+```
+
+- **`PROTOTYPE` and `BUILD_E` are unchanged.** `test_rules` now compares `BUILD_E` with
+  `PROTOTYPE`; the Build E figures did not move.
+- **Palettes.** `colour.py` holds `BASE` (the 27 non-aiOnly colours) and `FULL` (all 39);
+  `palette(rules)` picks `FULL` when `extra_colours` is set. `snap_colours()`, `family_fix()`,
+  `_fam()`, `_distinct()` and `distinct_tones()` take the palette, which defaults to `BASE`.
+- **`extra_colours`.** Every snap uses `FULL`. `distinct.SKIN` gains golden-shadow, copper,
+  vintage-rose and rose-gold. `_distinct()` never takes an aiOnly colour as the alternate for a
+  cluster; an aiOnly colour is only ever a cluster's own nearest colour.
+  - The SKIN change stopped Hyacinth appearing in Einstein's skin.
+  - The alternate rule stopped single cluster splits from introducing new colours.
+- **`mean_colour`.** `stone_colours(rgb, a, det, mean=True)` returns the mean Lab colour over the
+  whole disc of radius r (at least 2 px), with alpha > 0.5. It is used for every colour that
+  becomes an id:
+  - the ordered stones and fill in `ordered_layout()`;
+  - the eye rings;
+  - `labS` in `post_process()`;
+  - `distinct_tones()`.
+
+  The median `col` stays for every keep-or-drop decision (shadow, interstitial, chains,
+  `genuine_dark`) and for the tiles of a large detection.
+- **`human_iris`.** Human eyes get the iris rings as well. Any ring stone that snaps to Jet,
+  Hematite, Black Diamond, Smoked Topaz or Jet Hematite is left out, so a dark iris does not grow
+  the pupil.
+- **`eye_keep`.** A placed stone is removed only where it overlaps an eye stone (centre distance
+  below the sum of the radii + `GAP` + 0.02 mm), instead of everywhere in the eye zone.
+
+### Prompt v5
+
+`PROMPT_VERSION` becomes 5. The stones prompt is Appendix C.
+- **The palette line** lists all 39 colours (`buildPaletteLine(colors, true)`).
+- **The ramps** name the new colours. Skin gets Rose Gold, Golden Shadow and Copper, with Vintage
+  Rose for cheeks. Greens get Chrysolite, Fern Green, Erinite, Olivine and Khaki. The grey ramp
+  gets Jet Hematite, and yellows get Metallic Sunshine.
+- **The flat prompt** keeps the 27 standard colours, and `FLAT_PROMPT_VERSION` stays 1.
+- **The BACKLOG row** that reserved "PROMPT_VERSION 5" is renamed "PROMPT_VERSION 6".
+
+### Production Sheet lists every colour
+
+Before build F:
+- the "Crystal color:" header line was one line, so a long list ran off the page (the owner's
+  20-colour project lost its last four names on a landscape A4 cover);
+- a long per-colour count list left a landscape cover no room for the page map, so the PDF export
+  failed.
+
+Build F changes this:
+- **Measuring.** Header text is measured with the Helvetica AFM advance widths. The allowed width is
+  the narrower page side less both margins, the 2 mm inset and 1 mm to spare, so it does not depend
+  on the orientation chosen later.
+- **Wrapping.** The "Crystal color:" list and each colour's count line wrap between items, never
+  inside a name; a wrapped line ends with a comma. Every extra line counts in the header height.
+- **Single page.** The count lines stay in one column, as before. A header too tall for the page
+  makes the sheet multi-page.
+- **Cover.** When the header leaves a landscape cover less than `COVER_MAP_MIN_HEIGHT_MM` for the
+  map, the cover turns to portrait; the tile pages keep their orientation. If even the portrait
+  cover has no room, the count lines go into 2 and then 3 columns (4 mm apart, each colour's lines
+  kept together, column-major). A line in a later column carries `xOffsetMm`, which both renderers
+  add to the text inset.
+- **The cover-map `RangeError`** remains for a header no cover can hold.
+- **PDF text.** `latin1Bytes()` maps the WinAnsi punctuation in 0x80–0x9F (em and en dash, curly
+  quotes, bullet, ellipsis and the rest) to its byte. The sheet's "—" for an empty field printed as
+  "?" before; anything else outside WinAnsi still becomes "?".
+
+### Measured with the repository package (8 Oct 2026, Linux)
+
+Detection was cached, and `BUILD_E` and `DEFAULT` ran on the same detections.
+
+- 0 violations on all 22 images.
+- Stone counts within ±0.3 % and coverage within ±0.001 of `BUILD_E`.
+- Pupils are unchanged.
+- The mean look over 22 images goes from 10.25 to 9.82. Look is the mean CIE76 distance between
+  the AI image and a render of the stones, both blurred by half a pitch, over the subject.
+
+| Image | Stones `BUILD_E` → `DEFAULT` | Look | Colour P90 |
+| --- | --- | --- | --- |
+| cat | 2150 → 2150 | 4.59 → 4.56 | 9.9 → 10.0 |
+| dog | 1672 → 1672 | 10.61 → 10.56 | 9.2 → 9.2 |
+| einstein | 3588 → 3594 | 7.98 → 7.87 | 12.6 → 14.1 |
+| jesus | 3300 → 3301 | 7.86 → 7.32 | 8.6 → 9.9 |
+| lake | 4088 → 4088 | 8.64 → 7.92 | 27.8 → 16.3 |
+| leopard | 2430 → 2430 | 5.92 → 5.88 | 12.8 → 8.3 |
+| logo | 833 → 833 | 4.01 → 4.01 | 3.2 → 3.2 |
+| parrot | 2540 → 2541 | 21.31 → 20.83 | 18.4 → 14.2 |
+| portrait | 3989 → 3990 | 25.06 → 25.02 | 11.1 → 10.6 |
+| rose | 1846 → 1846 | 6.76 → 6.06 | 6.3 → 6.8 |
+| tulips | 2674 → 2674 | 12.26 → 9.66 | 32.5 → 20.7 |
+| woman | 2606 → 2612 | 8.06 → 7.18 | 10.3 → 10.8 |
+| sunburst flower | 1011 → 1011 | 8.76 → 10.21 | 5.1 → 6.0 |
+| man (v4 upload) | 2395 → 2395 | 8.07 → 7.48 | 8.1 → 9.2 |
+| bulldog (v4 upload) | 2939 → 2939 | 20.15 → 20.11 | 9.1 → 9.3 |
+| landscape (v4 upload) | 3914 → 3914 | 9.70 → 8.36 | 17.6 → 11.2 |
+| woman (v4 upload) | 2556 → 2563 | 7.63 → 6.66 | 11.2 → 10.0 |
+
+- **Colour P90** is the 90th percentile of ΔE2000 from the colour drawn under each stone to its
+  catalogue colour. It reads the drawn colour by the old median rule, so it favours `BUILD_E`.
+- **`test_build_f` computes look on the decoded PNG.** Over the 13 repository images it gives
+  10.18 → 9.82, with the sunburst flower 8.62 → 10.08.
+- **The sunburst flower is the one regression.** Its leaf green (`#019450`) lies between Emerald and
+  Fern Green and now snaps to Fern Green.
+- **Use of the extra colours** over the 22 images:
+
+  | Colour | Stones |
+  | --- | --- |
+  | Erinite | 1960 |
+  | Copper | 1287 |
+  | Golden Shadow | 1262 |
+  | Rose Gold | 1147 |
+  | Fern Green | 836 |
+  | Khaki | 701 |
+  | Metallic Sunshine | 226 |
+  | Vintage Rose | 130 |
+  | Jet Hematite | 71 |
+  | Padparadscha | 65 |
+  | Olivine | 51 |
+  | Chrysolite | 42 |
+
+### Build F anchors (grepped at `3c1f810`)
+
+| Anchor | Location |
+| --- | --- |
+| `stone_colours()` / `snap_colours()` | `services/strass-layout/strass_layout/colour.py:25` / `:47` |
+| `SKIN` / `_distinct()` / alternate test / `distinct_tones()` | `strass_layout/distinct.py:9` / `:28` / `:53` / `:72` |
+| `col = stone_colours` / `snap_colours(CC)` | `strass_layout/ordered.py:37` / `:150` |
+| `build_eye_copy(..., iris=boxes is None)` / zone drop / `labS` / `family_fix` | `strass_layout/post.py:89` / `:116` / `:152` / `:174` |
+| `distinct_tones()` call | `strass_layout/pipeline.py:48` |
+| `hyacinth` entry / `STONE_COLORS` / `listCrystalColorGroups()` | `src/renderer/CrystalColors.js:173` / `:190` / `:204` |
+| `populateStoneColorOptions()` / `pick.id` call / `aiStoneColor` call | `app.js:256` / `:6881` / `:8017` |
+| `PROMPT_VERSION` / `V4_TAIL` / `buildPaletteLine()` / stones prompt | `server/redraw/prompt.mjs:12` / `:46` / `:81` / `:88` |
+| `computeSizeBreakdownLineTexts()` / "Crystal color" line / cover map check | `src/export/ProductionSheetExporter.js:165` / `:279` / `:624` |
+| `latin1Bytes()` | `src/export/PdfDocument.js:42` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -1273,6 +1478,51 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   `layout(..., rules=DEFAULT)`.
 - `PROMPT_VERSION === 4`, and the stones prompt equals Appendix B with the generated palette line.
 
+**Build F.**
+
+- `PROTOTYPE` still equals today's output (S5.1, S5.2). `BUILD_E` gives the Build E figures above;
+  `test_rules` now runs them with `BUILD_E`.
+- **`DEFAULT` against `BUILD_E`,** on the 12 images and `tests/fixtures/sunburst_flower.png`:
+  - 0 violations, and minimum gap ≥ 0.100 mm;
+  - each stone count within ±1 % of `BUILD_E`, each coverage within ±0.01;
+  - `pupilsMm` and `face` equal to `BUILD_E`;
+  - every colour id in the catalogue;
+  - no aiOnly colour from `BUILD_E` or `PROTOTYPE`;
+  - aiOnly colours used on at least 8 of the 13 images;
+  - each look at most 1.6 above `BUILD_E` (the sunburst flower is +1.46);
+  - the mean look at least 0.25 below the `BUILD_E` mean.
+- **Iris stones.** On woman, einstein and portrait, the count under `DEFAULT` is above `BUILD_E`.
+  Iris stones are SS4 stones that are neither dark nor Crystal, lying between the pupil's edge and
+  3.4 mm beyond it.
+- **Palettes.**
+  - `BASE` is the 27 standard ids and `FULL` all 39.
+  - `palette(PROTOTYPE)` and `palette(BUILD_E)` are `BASE`, and `palette(DEFAULT)` is `FULL`.
+  - Snapping the twelve aiOnly fills with `BASE` never returns an aiOnly id; with `FULL` it returns
+    at least 10 of them.
+- **`stone_colours(..., mean=True)`** on a synthetic stone with a white highlight equals the mean of
+  the disc (within 1e-6). Its lightness is more than 2 above the median rule.
+- **`_distinct()` on a scene where Jet Hematite would be an alternate** picks none, and without the
+  guard it picks some.
+- **App catalogue.**
+  - `CRYSTAL_COLORS` has 39 entries, and the twelve follow `hyacinth` with the pinned values and the
+    shading rule.
+  - `catalogue.json` matches on all fields and on `aiOnly`.
+  - The standard selectors show 27 colours; `#aiStoneColor` and the swap selects show 39.
+- **`PROMPT_VERSION === 5`.** The stones prompt equals Appendix C with the generated palette line of
+  all 39 colours, and the flat palette line has the 27 standard colours.
+- **Production Sheet.**
+  - A 257.6 × 85 mm layout using all 39 colours in three sizes exports on A4 and on Letter.
+  - The cover is portrait.
+  - The "Crystal color:" lines list every colour once, sorted.
+  - Every colour has a count line, and the counts add up to the stone count.
+  - No header line runs past the right margin (Helvetica AFM widths) or reaches the page map, and
+    no two lines share a position.
+  - A 30-colour single-page sheet wraps the colour list between names, every wrapped line ends with
+    a comma, and the production rect starts below the last header line.
+  - The PDF writes "—" as byte 0x97.
+- The single-page RS-3041 SVG stays byte-identical. The PDF differs only in the one "—" byte
+  (`3f` → `97`).
+
 ## Tests the builds must add
 
 **A.**
@@ -1328,6 +1578,14 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   Stamp/Trace/Eraser on ai-layout layers, and the RS-3015 eligibility of other image layers
   unchanged.
 
+**F.**
+
+- `services/strass-layout/tests/test_build_f.py`: the Build F service figures. `test_rules.py`
+  compares `BUILD_E` with `PROTOTYPE`.
+- `tools/test-img-026-ai-colours-sheet.mjs` (group `exporters`): the Build F app, prompt and
+  Production Sheet figures.
+- `tools/test-img-022-redraw-provider.mjs` T1 reads Appendix C instead of Appendix B.
+
 ## Existing tests that grep the text these builds change
 
 - `tools/test-img-022-redraw-provider.mjs`, `tools/test-img-024-flat-artwork-style.mjs`: the
@@ -1366,6 +1624,29 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
     hooks gain an ai-layout branch).
 
   The build's audit must find any others.
+- Build F changes text these files grep:
+  - `tools/test-crystal-color-catalog.mjs:90`–`:91` (27 → 39 colours), `:160` (the full id list)
+    and `:186` (`listCrystalColorGroups({ includeAiOnly: true })` covers every colour);
+  - `tools/test-img-016-neutral-brown-stones.mjs`:
+    - `:88` (the call parser accepts a second argument `true`);
+    - `:155` (a standard select has the 27 standard colours);
+    - `:188` (27 → 39);
+    - `:221`–`:226` (the full id list);
+  - `tools/test-img-026-catalogue.mjs:75` (27 → 39);
+  - `tools/test-img-022-redraw-provider.mjs:188`–`:191` (Appendix C, version 5) and `:262`;
+  - `tools/test-img-024-flat-artwork-style.mjs:113`, `:131`–`:132` and `:139`–`:140` (version 5);
+  - `tools/test-img-026-redraw-jobs.mjs`:
+    - `:153`, `:492` and `:714` (version 5);
+    - `:235` and `:258` (39 ids);
+    - `:259` (the D2 ids are now `slice(-16, -12)`);
+  - `tools/test-img-026-design-editing.mjs:511` and `tools/test-img-026-lightbox.mjs:474` (the
+    `true` argument);
+  - `tools/test-mono-006-monogram-ui.mjs:85` (the function header) and `:347`–`:349` (the monogram
+    select lists exactly the non-aiOnly colours);
+  - `tools/test-rs-3041-multi-page.mjs`:
+    - `:195` (the single-page PDF's SHA-256, the one "—" byte);
+    - `:300`–`:305` (margin 54 now tiles under a portrait cover; the cover-map error needs every
+      colour).
 
 ## Anchors (grepped at `7a9e482`)
 
@@ -1535,6 +1816,67 @@ Use only the colours below, with exactly these hex values, as flat fills:
   tan or brown fur, wood, earth: Light Peach, Light Colorado Topaz, Light Smoked Topaz, Colorado Topaz, Smoked Topaz;
   white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Hematite, Jet;
   greens: Peridot, Emerald; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Square image at the highest resolution available.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
+## Appendix C — Redraw prompt v5 (`PROMPT_VERSION = 5`)
+
+Prompt v5 is Appendix B with the ramp lines of section 4 naming the twelve aiOnly colours (build
+F). Build F makes `buildRedrawPrompt(colors, 'stones')` return `V5_HEAD`, then the palette line of
+all 39 colours (`buildPaletteLine(colors, true)`), then `V5_TAIL`, joined with `\n`. `V5_HEAD` and
+`V5_TAIL` are exactly the text below, split at the `<palette line>` marker. `V5_HEAD` equals
+`V4_HEAD`.
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design. Make the stones large: about 60 stones across the full width of the image.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin: Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Vintage Rose for cheeks and Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Jet Hematite, Hematite, Jet;
+  greens: Chrysolite, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Metallic Sunshine, Gold, Topaz, Hyacinth.
 - Never use Topaz or Hyacinth on skin.
 - Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
 - When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
