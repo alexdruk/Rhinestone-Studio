@@ -11,8 +11,10 @@ from scipy.spatial import cKDTree
 from skimage.color import deltaE_ciede2000, rgb2lab
 
 from .colour import snap_colours, stone_colours
+from .chains import chain_mask
 from .errors import NoStones
 from .geometry import GAP, SS4, SS6, fill, resolve_idx, subject_mask
+from .rules import DEFAULT
 
 CATCH_LAB = np.array([99.0, 0.0, 0.0])
 
@@ -24,7 +26,7 @@ def scale_from(pitch_mm, det):
     return pitch_mm / np.median(d[:, 1])
 
 
-def ordered_layout(px, det, state):
+def ordered_layout(px, det, state, rules=DEFAULT):
     """Return a dict with mm-per-pixel s, the subject mask, the colours col, and the
     stones P (mm, rounded to 0.001 as the prototype wrote them), D (mm) and ids."""
     rgb, a = px.rgb, px.a
@@ -74,6 +76,9 @@ def ordered_layout(px, det, state):
             free = np.min(dd_ - rmain[jj])
             if 2 * free < 0.6 * main_d:
                 inter[i] = True
+    chain = chain_mask(det, col, s, rules)
+    shadow &= ~chain
+    inter &= ~chain
     use = ~tiny & ~inside_big & ~shadow & ~gapdrop & ~inter
     P, Dl, C, S, Mn = [], [], [], [], []
     sq3 = np.sqrt(3)

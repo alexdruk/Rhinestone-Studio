@@ -14,16 +14,18 @@ GAPX = GAP + 0.035
 PUPIL_SIZES = (6.4, 4.7, 4.0, 2.8, 2.0)
 
 
-def find_pupils(px, s, main_px):
+def find_pupils(px, s, main_px, core_only=False):
+    """Pupil candidates. With core_only (Rules.pupil_core_only) a pupil is the dark blob itself,
+    not the dark blob plus a dark iris around it."""
     out = []
     for thr in (25, 16, 10):
-        for c in _find_thr(px, s, main_px, thr):
+        for c in _find_thr(px, s, main_px, thr, core_only):
             if all(np.hypot(c["x"] - o["x"], c["y"] - o["y"]) > main_px * 2 for o in out):
                 out.append(c)
     return out
 
 
-def _find_thr(px, s, main_px, thr):
+def _find_thr(px, s, main_px, thr, core_only=False):
     rgb, a = px.rgb, px.a
     w = np.clip(rgb * a[..., None] + (1 - a[..., None]), 0, 1)
     LAB = cv2.cvtColor((w * 255).astype(np.uint8), cv2.COLOR_RGB2LAB).astype(float)
@@ -62,7 +64,7 @@ def _find_thr(px, s, main_px, thr):
         if np.hypot(hx.mean() - cx, hy.mean() - cy) > 0.5 * De:
             continue
         rr = []
-        for a_ in np.linspace(0, 2 * np.pi, 48, endpoint=False):
+        for a_ in ([] if core_only else np.linspace(0, 2 * np.pi, 48, endpoint=False)):
             for t_ in range(1, int(4 * De)):
                 xx_ = int(cx + x0 + t_ * np.cos(a_))
                 yy_ = int(cy + y0 + t_ * np.sin(a_))

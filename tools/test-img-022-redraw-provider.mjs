@@ -185,10 +185,10 @@ async function runJob(handler, opts) {
 
 // ---- T1. Prompt --------------------------------------------------------------------------------
 
-await test('T1. prompt: IMG-026 v3 text (the spec\'s Appendix A) with the generated palette line, which is every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 3', async () => {
-  assert.equal(PROMPT_VERSION, 3);
+await test('T1. prompt: IMG-026 v4 text (the spec\'s Appendix B) with the generated palette line, which is every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 4', async () => {
+  assert.equal(PROMPT_VERSION, 4);
   const spec = await readFile(fileURLToPath(new URL('../docs/specifications/IMG-026-StrassLayoutService.md', import.meta.url)), 'utf8');
-  const appendix = spec.slice(spec.indexOf('## Appendix A'));
+  const appendix = spec.slice(spec.indexOf('## Appendix B'));
   const block = appendix.slice(appendix.indexOf('```\n') + 4, appendix.indexOf('\n```', appendix.indexOf('```\n') + 4));
   assert.ok(block.includes('\n<palette line>\n'));
   const prompt = buildRedrawPrompt();
@@ -259,7 +259,7 @@ await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provi
 await test('T5. the outgoing request: images/edits, Bearer key, model/quality/size/background/output_format/n/prompt and a PNG image', async () => {
   let spy = spyFetch(okImage);
   let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 3 });
+  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 4 });
   const { url, init } = spy.calls[0];
   assert.equal(url, OPENAI_IMAGE_EDITS_URL);
   assert.equal(url, 'https://api.openai.com/v1/images/edits');

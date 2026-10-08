@@ -14,9 +14,11 @@ from scipy.spatial import cKDTree
 
 from . import darkdots
 from .colour import snap_colours, stone_colours
+from .chains import chain_mask
 from .colsmooth import family_fix
 from .eyes import build_eye_copy, find_pupils
 from .geometry import GAP, SS4, fill, strict_mask, violations
+from .rules import DEFAULT
 
 SIZE_KEYS = {1.5: "ss4", 2.0: "ss6", 2.8: "ss10", 4.0: "ss16", 4.7: "ss20", 6.4: "ss30"}
 
@@ -34,7 +36,7 @@ def _eye_boxes(px, models):
     return out
 
 
-def post_process(px, det, state, first, models, clock):
+def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     """Return (stones, info). stones are dicts {x, y, size, d, color} in frame mm,
     rounded to 0.001 as the prototype wrote them; info has the strict mask and the
     eye data."""
@@ -46,7 +48,7 @@ def post_process(px, det, state, first, models, clock):
     keep = D <= 2.0
     P, D, C = P[keep], D[keep], [c for c, k in zip(C, keep) if k]
 
-    cands = find_pupils(px, s, main_px)
+    cands = find_pupils(px, s, main_px, rules.pupil_core_only)
     boxes = _eye_boxes(px, models)
     Lim = None
     if boxes is not None:
@@ -163,6 +165,10 @@ def post_process(px, det, state, first, models, clock):
     if len(gi):
         dd2, ii2 = tg.query(P[gi])
         genuine_dark[gi] = (col[good][ii2][:, 0] < 35) & (dmm[good][ii2] >= 1.7)
+    chain = chain_mask(det, col, s, rules)
+    if chain.any():
+        near, _ = cKDTree(det[chain][:, [1, 0]] * s).query(P)
+        genuine_dark |= near < 0.5
     C, _ = darkdots.clean(P, D, C, fixed=fixed | genuine_dark)
     for _ in range(5):
         C, _ = family_fix(P, D, C, labS, fixed & np.array([c in ("jet", "crystal-clear") for c in C]))
