@@ -508,7 +508,7 @@ await test('15. index.html and app.js wiring: the panel fields, their population
   const indexHtml = await read('index.html');
   for (const id of ['aiStoneCount', 'aiStoneColorField', 'aiStoneColor', 'aiStoneSizeField', 'aiStoneSize', 'aiStoneDelete']) assert.match(indexHtml, new RegExp(`id="${id}"`));
   assert.match(indexHtml, /<select id="aiStoneColor" style="display:none"><\/select>/);
-  assert.ok(appJs.includes("populateStoneColorOptions('aiStoneColor');"));
+  assert.ok(appJs.includes("populateStoneColorOptions('aiStoneColor',true);"));
   assert.ok(extract('function populateAiStoneSizeOptions(){').includes('listAllStoneSizes()'));
   const tracked = /const HISTORY_TRACKED_CONTROL_IDS=[^\n]*/.exec(appJs)[0];
   for (const id of ['aiStoneColor', 'aiStoneSize']) assert.ok(!tracked.includes(id), `${id} is not history-tracked`);

@@ -5,15 +5,15 @@ import numpy as np
 from scipy.spatial import cKDTree
 from skimage.color import deltaE_ciede2000
 
-from .colour import CAT_IDS, CAT_LAB, KH, KL
+from .colour import BASE, KH, KL
 
 FAMILY = {"light-peach": "brown", "light-colorado": "brown", "colorado-topaz": "brown", "smoked-topaz": "brown",
           "light-smoked-topaz": "brown", "siam": "red", "light-siam": "red", "rose": "pink", "fuchsia": "pink"}
 
 
-def family_fix(P, D, C, lab, fixed, extra=14.0, share=0.4):
-    ids = CAT_IDS
-    d = np.stack([deltaE_ciede2000(lab, np.repeat(c[None], len(lab), 0), kL=KL, kH=KH) for c in CAT_LAB], 1)
+def family_fix(P, D, C, lab, fixed, extra=14.0, share=0.4, pal=BASE):
+    ids = pal.ids
+    d = np.stack([deltaE_ciede2000(lab, np.repeat(c[None], len(lab), 0), kL=KL, kH=KH) for c in pal.lab], 1)
     t = cKDTree(P)
     nb = t.query_ball_point(P, 6.0)
     C = list(C)

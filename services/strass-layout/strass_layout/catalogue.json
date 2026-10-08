@@ -191,5 +191,101 @@
   "shine": "#fae3d8",
   "accent": "#ac4416",
   "estimate": true
+ },
+ "golden-shadow": {
+  "name": "Golden Shadow",
+  "fill": "#c99a6c",
+  "stroke": "#71563c",
+  "shine": "#f6eee6",
+  "accent": "#9b7753",
+  "aiOnly": true
+ },
+ "copper": {
+  "name": "Copper",
+  "fill": "#b87333",
+  "stroke": "#67401d",
+  "shine": "#f3e7dc",
+  "accent": "#8e5927",
+  "aiOnly": true
+ },
+ "rose-gold": {
+  "name": "Rose Gold",
+  "fill": "#d38f75",
+  "stroke": "#765042",
+  "shine": "#f8ece8",
+  "accent": "#a26e5a",
+  "aiOnly": true
+ },
+ "vintage-rose": {
+  "name": "Vintage Rose",
+  "fill": "#d1958e",
+  "stroke": "#755350",
+  "shine": "#f7edec",
+  "accent": "#a1736d",
+  "aiOnly": true
+ },
+ "padparadscha": {
+  "name": "Padparadscha",
+  "fill": "#de4c52",
+  "stroke": "#7c2b2e",
+  "shine": "#f9e1e2",
+  "accent": "#ab3b3f",
+  "aiOnly": true
+ },
+ "chrysolite": {
+  "name": "Chrysolite",
+  "fill": "#97d38f",
+  "stroke": "#557650",
+  "shine": "#edf8ec",
+  "accent": "#74a26e",
+  "aiOnly": true
+ },
+ "fern-green": {
+  "name": "Fern Green",
+  "fill": "#3e8e41",
+  "stroke": "#235024",
+  "shine": "#deecdf",
+  "accent": "#306d32",
+  "aiOnly": true
+ },
+ "erinite": {
+  "name": "Erinite",
+  "fill": "#4d8355",
+  "stroke": "#2b4930",
+  "shine": "#e1eae2",
+  "accent": "#3b6541",
+  "aiOnly": true
+ },
+ "olivine": {
+  "name": "Olivine",
+  "fill": "#737033",
+  "stroke": "#403f1d",
+  "shine": "#e7e7dc",
+  "accent": "#595627",
+  "aiOnly": true
+ },
+ "khaki": {
+  "name": "Khaki",
+  "fill": "#5b593c",
+  "stroke": "#333222",
+  "shine": "#e3e3de",
+  "accent": "#46452e",
+  "aiOnly": true
+ },
+ "metallic-sunshine": {
+  "name": "Metallic Sunshine",
+  "fill": "#dfb758",
+  "stroke": "#7d6631",
+  "shine": "#faf3e3",
+  "accent": "#ac8d44",
+  "aiOnly": true
+ },
+ "jet-hematite": {
+  "name": "Jet Hematite",
+  "fill": "#4a5353",
+  "stroke": "#292e2e",
+  "shine": "#e0e2e2",
+  "accent": "#394040",
+  "aiOnly": true
  }
 }

@@ -150,7 +150,7 @@ async function start(handler, opts) {
   return res.json().jobId;
 }
 
-const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 4 };
+const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 5 };
 
 // ---- Job stages ---------------------------------------------------------------------------------
 
@@ -232,7 +232,7 @@ await test('3. OpenAI timeout: after REDRAW_TIMEOUT_SECONDS (300 s) the job fail
 
 // ---- Layout --------------------------------------------------------------------------------------
 
-await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 27 ids, targetPitchMm: 2.1 }', async () => {
+await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 39 ids, targetPitchMm: 2.1 }', async () => {
   for (const base of [LAYOUT_BASE, `${LAYOUT_BASE}/`]) {
     const { fetch, calls } = router();
     const { handler } = makeHandler({ fetch, env: { LAYOUT_SERVICE_URL: base } });
@@ -255,8 +255,8 @@ await test('4. the exact multipart request to the layout service: POST <LAYOUT_S
     assert.equal(typeof form.get('options'), 'string');
     const options = JSON.parse(form.get('options'));
     assert.deepEqual(options, { colorIds: Object.keys(STONE_COLORS), targetPitchMm: 2.1 });
-    assert.equal(options.colorIds.length, 27);
-    assert.deepEqual(options.colorIds.slice(-4), ['colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
+    assert.equal(options.colorIds.length, 39);
+    assert.deepEqual(options.colorIds.slice(-16, -12), ['colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
   }
 });
 
@@ -489,7 +489,7 @@ await test('12. the rate limit counts job creation only: polls and deletes never
 await test('13. fake mode: 202 with a job, no OpenAI and no layout call; the first three polls see drawing, placing, done with the fake image and fake-layout.json; flat keeps promptVersion 1', async () => {
   const spy = router();
   const { handler } = makeHandler({ fetch: spy.fetch, env: { REDRAW_FAKE: '1', OPENAI_API_KEY: '' } });
-  for (const [body, promptVersion] of [[UPLOAD_BODY, 4], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
+  for (const [body, promptVersion] of [[UPLOAD_BODY, 5], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
     const jobId = await start(handler, { body });
     assert.match(jobId, UUID_PATTERN);
     assert.deepEqual((await poll(handler, jobId)).json(), { stage: 'drawing' });
@@ -711,7 +711,7 @@ await test('22. end to end through the real handler: the provider drives a fake-
   const stages = [];
   const waits = [];
   const result = await createOpenAiProxyProvider({ fetch, wait: recordWait(waits) }).redraw({ pngDataUrl: FAKE_REDRAW_DATA_URL, accessCode: 'letmein', onStage: (s) => stages.push(s) });
-  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 4, layout: FAKE_LAYOUT, layoutError: null });
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 5, layout: FAKE_LAYOUT, layoutError: null });
   assert.deepEqual(stages, ['drawing', 'placing', 'done']);
   assert.equal(waits.length, 3);
 });

@@ -252,8 +252,10 @@ function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(c
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
 // string keys STONE_COLORS is built from). Called once at startup for #stoneColor, and again
 // (RS-3014 Step 1) for each of Stamp/Trace/Paint's own #stampColor/#traceColor/#paintColor selects
-// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected.
-function populateStoneColorOptions(targetId='stoneColor'){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected. IMG-026F: the
+// aiOnly colours are listed only with includeAiOnly (the AI layout's #aiStoneColor and its
+// colour-swap selects).
+function populateStoneColorOptions(targetId='stoneColor',includeAiOnly=false){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(c.aiOnly&&!includeAiOnly)continue;if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 // RS-1013: builds the #stoneSize <option> list from the Stone Library (src/renderer/StoneSizes.js)
 // -- each option's value is the size's plain millimeter diameter (the same raw number a layer's
 // stoneSize / a Stone's sizeMm has always been; see src/geometry/GeometryEngine.js's stoneSizeMm
@@ -6878,7 +6880,7 @@ function renderAiLayoutColourRows(l){
     const count=document.createElement('span');count.className='hint';count.textContent=String(row.count);
     const pick=document.createElement('select');pick.id=`aiLayoutColourPick-${row.fromId}`;
     item.append(swatch,name,count,pick);host.appendChild(item);
-    populateStoneColorOptions(pick.id);pick.value=row.toId;
+    populateStoneColorOptions(pick.id,true);pick.value=row.toId;
     pick.onchange=()=>{const target=selectedLayer();if(!target||target.id!==l.id)return;commitHistory();if(!target.colorSwaps)target.colorSwaps={};if(pick.value===row.fromId)delete target.colorSwaps[row.fromId];else target.colorSwaps[row.fromId]=pick.value;updateAll(true)};
   }
 }
@@ -8014,7 +8016,7 @@ async function applyUnitsChange(newUnits){
 el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
 el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
 
-populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor');for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();populateAiStoneSizeOptions();
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor',true);for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();populateAiStoneSizeOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)

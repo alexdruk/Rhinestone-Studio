@@ -87,8 +87,8 @@ const LEGACY_COLORS = {
   emerald: { fill: '#2aa66a', stroke: '#0b5633', shine: '#c7ffdf', accent: '#16814e' }
 };
 
-await test('1. every required display name is present in the catalog (27 colors since IMG-026)', () => {
-  assert.equal(CRYSTAL_COLORS.length, 27, `expected 27 catalog colors, found ${CRYSTAL_COLORS.length}`);
+await test('1. every required display name is present in the catalog (39 colors since IMG-026F)', () => {
+  assert.equal(CRYSTAL_COLORS.length, 39, `expected 39 catalog colors, found ${CRYSTAL_COLORS.length}`);
   const names = CRYSTAL_COLORS.map((c) => c.name);
   for (const required of REQUIRED_NAMES) {
     assert.ok(names.includes(required), `expected catalog to include a color named "${required}"`);
@@ -157,7 +157,7 @@ await test('5a. IMG-016: the 17 pre-IMG-016 entries keep their catalogue positio
 await test('5b. IMG-016: the six new entries are appended last, in order, with their pinned name, group and values', () => {
   const actual = CRYSTAL_COLORS.slice(17, 23).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]);
   assert.deepEqual(actual, IMG016_ENTRIES);
-  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
+  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold', 'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine', 'jet-hematite']);
 });
 
 await test('6. STONE_COLORS (id-keyed map) matches the catalog array exactly, and the StoneColors.js shim re-exports the identical map', () => {
@@ -183,7 +183,7 @@ await test('8. DEFAULT_CRYSTAL_COLOR_ID resolves to a real catalog entry (matche
 });
 
 await test('9. listCrystalColorGroups() covers every color exactly once, grouped by the `group` field', () => {
-  const groups = listCrystalColorGroups();
+  const groups = listCrystalColorGroups({ includeAiOnly: true });
   const flattened = groups.flatMap((g) => g.colors);
   assert.equal(flattened.length, CRYSTAL_COLORS.length);
   const idsInGroups = new Set(flattened.map((c) => c.id));

@@ -368,6 +368,8 @@ export const GROUPS = {
     'test-rs3011-step8-svg-import-flattening.mjs',
     // Production Sheet per-color/per-size quantity grouping (S-200).
     'test-s200-production-sheet-grouping.mjs',
+    // IMG-026F: the aiOnly colours, prompt v5 and a Production Sheet that lists every colour.
+    'test-img-026-ai-colours-sheet.mjs',
   ],
   renderers: [
     'test-render-export-pipeline.mjs',

@@ -85,7 +85,8 @@ function populatedSelectIds() {
   const rowsStart = code.indexOf('function renderAiLayoutColourRows(');
   const rowsEnd = rowsStart === -1 ? -1 : rowsStart + sliceBraceBalanced(code, rowsStart).length;
   for (const m of code.matchAll(/(for\(let (\w+)=0;\2<(\d+);\2\+\+\))?populateStoneColorOptions\(([^)]*)\)/g)) {
-    const arg = m[4].trim();
+    const [arg, includeAiOnly] = m[4].split(',').map((s) => s.trim());
+    if (includeAiOnly !== undefined && includeAiOnly !== 'true') throw new Error(`unrecognised populateStoneColorOptions() second argument: ${includeAiOnly}`);
     if (arg === '') { ids.push('stoneColor'); continue; }
     // IMG-026 (C2): the Colours used rows create their selects at run time, one per colour, so they
     // are not pinned here; the call is accepted only inside renderAiLayoutColourRows().
@@ -152,7 +153,7 @@ await test('5. rule 5: executed for real, populateStoneColorOptions() emits exac
   for (const id of STONE_COLOR_SELECT_IDS.slice(1)) populate(id);
   assert.deepEqual([...elements.keys()].sort(), [...STONE_COLOR_SELECT_IDS].sort());
   for (const [id, { innerHTML }] of elements) {
-    assert.equal((innerHTML.match(/<option\b/g) || []).length, CRYSTAL_COLORS.length, `${id}: option count`);
+    assert.equal((innerHTML.match(/<option\b/g) || []).length, CRYSTAL_COLORS.filter((c) => !c.aiOnly).length, `${id}: option count`);
     const unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
     const groups = [...innerHTML.matchAll(/<optgroup label="([^"]*)">([\s\S]*?)<\/optgroup>/g)].map((m) => [
       unescape(m[1]), [...m[2].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map((o) => [o[1], unescape(o[2])])
@@ -185,7 +186,7 @@ const median = (values) => {
 };
 
 await test('6. decision 1: the six entries are appended after silver with their pinned values, which are the derivation rule applied to fill; the rule\'s constants are the medians over the 15 rule entries', () => {
-  assert.equal(CRYSTAL_COLORS.length, 27);
+  assert.equal(CRYSTAL_COLORS.length, 39);
   assert.equal(CRYSTAL_COLORS[16].id, 'silver');
   const appended = CRYSTAL_COLORS.slice(17, 23).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
   assert.deepEqual(appended, PINNED_NEW_ENTRIES);
@@ -222,7 +223,9 @@ await test('7. decision 1: flat catalogue order and selector group order', () =>
     'crystal-clear', 'crystal', 'jet', 'siam', 'light-siam', 'rose', 'fuchsia', 'amethyst', 'sapphire',
     'light-sapphire', 'aquamarine', 'emerald', 'peridot', 'topaz', 'citrine', 'gold', 'silver',
     'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach',
-    'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth'
+    'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold',
+    'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine',
+    'jet-hematite'
   ]);
   assert.deepEqual(listCrystalColorGroups().map((g) => [g.group, g.colors.map((c) => c.id)]), [
     ['Clear & Neutral', ['crystal-clear', 'crystal', 'jet', 'black-diamond', 'grey']],
