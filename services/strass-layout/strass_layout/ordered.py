@@ -10,7 +10,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 from skimage.color import deltaE_ciede2000, rgb2lab
 
-from .colour import snap_colours, stone_colours
+from .colour import palette, snap_colours, stone_colours
 from .chains import chain_mask
 from .errors import NoStones
 from .geometry import GAP, SS4, SS6, fill, resolve_idx, subject_mask
@@ -27,7 +27,8 @@ def scale_from(pitch_mm, det):
 
 
 def ordered_layout(px, det, state, rules=DEFAULT):
-    """Return a dict with mm-per-pixel s, the subject mask, the colours col, and the
+    """Return a dict with mm-per-pixel s, the subject mask, the colours col (the median rule,
+    which every keep-or-drop decision reads, whatever Rules.mean_colour says), and the
     stones P (mm, rounded to 0.001 as the prototype wrote them), D (mm) and ids."""
     rgb, a = px.rgb, px.a
     pitch = state.pitch
@@ -35,6 +36,7 @@ def ordered_layout(px, det, state, rules=DEFAULT):
     pitch_px = pitch / s
     mask = subject_mask(a, det, pitch_px)
     col = stone_colours(rgb, a, det)
+    colc = stone_colours(rgb, a, det, True) if rules.mean_colour else col
     d_mm = 2 * det[:, 2] * s
     tiny = d_mm < 1.1
     big = d_mm > 2.9
@@ -110,7 +112,7 @@ def ordered_layout(px, det, state, rules=DEFAULT):
         else:
             P.append((x, y))
             Dl.append(SS4 if minor_det[i] else SS6)
-            C.append(col[i])
+            C.append(colc[i])
             S.append(det[i, 3])
             Mn.append(bool(minor_det[i]))
     if not P:
@@ -137,7 +139,7 @@ def ordered_layout(px, det, state, rules=DEFAULT):
     fP, fD = fill(state, P2, D2, mask, s)
     keep_det = np.nonzero(use)[0]
     vor = cKDTree(det[keep_det][:, [1, 0]] * s)
-    fC = col[keep_det][vor.query(fP)[1]] if len(fP) else np.zeros((0, 3))
+    fC = colc[keep_det][vor.query(fP)[1]] if len(fP) else np.zeros((0, 3))
     PP = np.concatenate([P2, fP])
     DD = np.concatenate([D2, fD])
     CC = np.concatenate([C2, fC])
@@ -147,6 +149,6 @@ def ordered_layout(px, det, state, rules=DEFAULT):
     MN = np.r_[np.zeros(len(P2), bool), np.ones(len(fP), bool)]
     P3, D3, A3, k3 = resolve_idx(PP, DD.copy(), AA, SS_, MN)
     CC = CC[k3]
-    ids, _ = snap_colours(CC)
+    ids, _ = snap_colours(CC, palette(rules))
     P3 = np.array([[round(float(x), 3), round(float(y), 3)] for x, y in P3])
     return {"s": s, "mask": mask, "col": col, "P": P3, "D": D3, "ids": ids}

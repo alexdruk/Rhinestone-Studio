@@ -1,8 +1,12 @@
 """The stone catalogue and colour snapping.
 
-The catalogue is catalogue.json in this package (the 23 app colours plus the four
-IMG-026 D2 colours). Its colour rules name specific ids, so it is owned here and
-never taken from the caller. It is read once, at import.
+The catalogue is catalogue.json in this package (the 23 app colours, the four
+IMG-026 D2 colours and the twelve IMG-026F colours marked "aiOnly"). Its colour
+rules name specific ids, so it is owned here and never taken from the caller. It
+is read once, at import.
+
+BASE is the palette without the aiOnly colours (the prototype's 27); FULL has all
+of them. Rules.extra_colours picks FULL.
 
 Ported from rs_fix.py (stone_colours, snap_colours and the colour constants).
 """
@@ -15,23 +19,48 @@ from skimage.color import deltaE_ciede2000, rgb2lab
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogue.json")) as _f:
     CAT = json.load(_f)
 CAT_IDS = list(CAT)
-CAT_LAB = rgb2lab(np.array([[int(CAT[k]["fill"][i:i + 2], 16) / 255 for i in (1, 3, 5)] for k in CAT_IDS])[None])[0]
+EXTRA_IDS = [k for k in CAT_IDS if CAT[k].get("aiOnly")]
+
+
+class Palette:
+    """Catalogue ids and their Lab colours, in catalogue order."""
+
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.lab = rgb2lab(np.array([[int(CAT[k]["fill"][i:i + 2], 16) / 255 for i in (1, 3, 5)] for k in self.ids])[None])[0]
+
+
+BASE = Palette([k for k in CAT_IDS if k not in EXTRA_IDS])
+FULL = Palette(CAT_IDS)
+CAT_LAB = BASE.lab
+
+
+def palette(rules):
+    return FULL if rules.extra_colours else BASE
+
 
 KL = 1.0
 KH = 1.0
 CHROMA_W = 0.5
 
 
-def stone_colours(rgb, a, det):
-    """Median Lab colour under each detection [y, x, r, ...] (pixels)."""
+def stone_colours(rgb, a, det, mean=False):
+    """Lab colour under each detection [y, x, r, ...] (pixels): the median of the darker 85 % of
+    the core, or with mean (Rules.mean_colour) the mean of the whole disc of radius r."""
     lab = rgb2lab(rgb)
     h, w = a.shape
     out = np.zeros((len(det), 3))
     for i, (y, x, r) in enumerate(det[:, :3]):
         R = max(2.0, 0.65 * r)
-        y0, y1 = int(max(0, y - R)), int(min(h, y + R + 1))
-        x0, x1 = int(max(0, x - R)), int(min(w, x + R + 1))
+        RW = max(R, r) if mean else R
+        y0, y1 = int(max(0, y - RW)), int(min(h, y + RW + 1))
+        x0, x1 = int(max(0, x - RW)), int(min(w, x + RW + 1))
         yy, xx = np.mgrid[y0:y1, x0:x1]
+        if mean:
+            m2 = (np.hypot(yy - y, xx - x) <= max(2.0, r)) & (a[y0:y1, x0:x1] > 0.5)
+            if m2.sum() >= 3:
+                out[i] = lab[y0:y1, x0:x1][m2].mean(0)
+                continue
         m = (np.hypot(yy - y, xx - x) <= R) & (a[y0:y1, x0:x1] > 0.5)
         px = lab[y0:y1, x0:x1][m]
         if len(px) < 3:
@@ -44,12 +73,13 @@ def stone_colours(rgb, a, det):
     return out
 
 
-def snap_colours(lab):
+def snap_colours(lab, pal=BASE):
     """Nearest catalogue id for each Lab colour, with the prototype's skin and chroma rules."""
+    ids, cat = pal.ids, pal.lab
     lab = np.array(lab, float)
-    d = np.stack([deltaE_ciede2000(lab, np.repeat(c[None], len(lab), 0), kL=KL, kH=KH) for c in CAT_LAB], 1)
+    d = np.stack([deltaE_ciede2000(lab, np.repeat(c[None], len(lab), 0), kL=KL, kH=KH) for c in cat], 1)
     chroma = np.hypot(lab[:, 1], lab[:, 2])
-    cat_ch = np.hypot(CAT_LAB[:, 1], CAT_LAB[:, 2])
+    cat_ch = np.hypot(cat[:, 1], cat[:, 2])
     d[np.ix_(chroma >= 18, cat_ch < 8)] += 1000
     hue = np.degrees(np.arctan2(lab[:, 2], lab[:, 1])) % 360
     warm = (hue >= 25) & (hue <= 78) & (chroma < 65) & (chroma > 8)
@@ -57,11 +87,11 @@ def snap_colours(lab):
     pen[warm] = 0
     d += pen
     for k_ in ("gold", "citrine", "peridot"):
-        if k_ in CAT_IDS:
-            d[(hue < 80) & (chroma > 8), CAT_IDS.index(k_)] += 1000
-    if "topaz" in CAT_IDS:
-        d[warm & (chroma < 50), CAT_IDS.index("topaz")] += 1000
-    if "hyacinth" in CAT_IDS:
-        d[chroma < 60, CAT_IDS.index("hyacinth")] += 1000
+        if k_ in ids:
+            d[(hue < 80) & (chroma > 8), ids.index(k_)] += 1000
+    if "topaz" in ids:
+        d[warm & (chroma < 50), ids.index("topaz")] += 1000
+    if "hyacinth" in ids:
+        d[chroma < 60, ids.index("hyacinth")] += 1000
     k = d.argmin(1)
-    return [CAT_IDS[i] for i in k], d[np.arange(len(lab)), k]
+    return [ids[i] for i in k], d[np.arange(len(lab)), k]

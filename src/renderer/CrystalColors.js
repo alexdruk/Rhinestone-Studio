@@ -9,12 +9,16 @@
  * These are decorative, hand-picked approximations for on-screen preview and production-sheet
  * labeling. Names are generic gemstone/color words in common rhinestone-industry use — this
  * catalog does not reference any manufacturer, and its hex values are not calibrated to match any
- * specific manufacturer's commercial color line.
+ * specific manufacturer's commercial color line, except the IMG-026F aiOnly entries, whose fills
+ * were sampled from catalogue photos (see the comment above them).
  *
  * Each entry:
  *   id          stable, unique, lowercase-kebab string — the value stored on Stone.color/layer.color
  *   name        display name
  *   group       UI grouping label only (never read by geometry/render code)
+ *   aiOnly      IMG-026F: true for the twelve colours only Image -> Strass (AI layout) uses. They
+ *               render, count and print like any other colour, but the standard colour selectors
+ *               (listCrystalColorGroups() and app.js's populateStoneColorOptions()) leave them out.
  *   previewColor  primary swatch hex — aliases `fill` below
  *   highlight   optional lighter hex accent — aliases `shine` below
  *   shadow      optional darker hex accent — aliases `accent` below
@@ -28,11 +32,12 @@
  * change to any of them.
  */
 
-function defineColor({ id, name, group, fill, stroke, shine, accent }) {
+function defineColor({ id, name, group, aiOnly = false, fill, stroke, shine, accent }) {
   return {
     id,
     name,
     group,
+    aiOnly,
     previewColor: fill,
     highlight: shine,
     shadow: accent,
@@ -172,6 +177,58 @@ const CRYSTAL_COLOR_LIST = [
   defineColor({
     id: 'hyacinth', name: 'Hyacinth', group: 'Yellow & Amber',
     fill: '#e0581c', stroke: '#7d3110', shine: '#fae3d8', accent: '#ac4416'
+  }),
+  // -- IMG-026F: AI-layout-only colours (aiOnly), appended after hyacinth. Fills are the mean colour
+  // of the stone photos in a supplier's flat-back catalogue, except Copper, Olivine and Khaki, which
+  // come from the owner's supplier list; stroke, shine and accent follow the IMG-016 shading rule.
+  // The layout service's catalogue.json must match (S4). ------------------------------------------
+  defineColor({
+    id: 'golden-shadow', name: 'Golden Shadow', group: 'Brown & Peach', aiOnly: true,
+    fill: '#c99a6c', stroke: '#71563c', shine: '#f6eee6', accent: '#9b7753'
+  }),
+  defineColor({
+    id: 'copper', name: 'Copper', group: 'Brown & Peach', aiOnly: true,
+    fill: '#b87333', stroke: '#67401d', shine: '#f3e7dc', accent: '#8e5927'
+  }),
+  defineColor({
+    id: 'rose-gold', name: 'Rose Gold', group: 'Brown & Peach', aiOnly: true,
+    fill: '#d38f75', stroke: '#765042', shine: '#f8ece8', accent: '#a26e5a'
+  }),
+  defineColor({
+    id: 'vintage-rose', name: 'Vintage Rose', group: 'Red & Pink', aiOnly: true,
+    fill: '#d1958e', stroke: '#755350', shine: '#f7edec', accent: '#a1736d'
+  }),
+  defineColor({
+    id: 'padparadscha', name: 'Padparadscha', group: 'Red & Pink', aiOnly: true,
+    fill: '#de4c52', stroke: '#7c2b2e', shine: '#f9e1e2', accent: '#ab3b3f'
+  }),
+  defineColor({
+    id: 'chrysolite', name: 'Chrysolite', group: 'Green & Aqua', aiOnly: true,
+    fill: '#97d38f', stroke: '#557650', shine: '#edf8ec', accent: '#74a26e'
+  }),
+  defineColor({
+    id: 'fern-green', name: 'Fern Green', group: 'Green & Aqua', aiOnly: true,
+    fill: '#3e8e41', stroke: '#235024', shine: '#deecdf', accent: '#306d32'
+  }),
+  defineColor({
+    id: 'erinite', name: 'Erinite', group: 'Green & Aqua', aiOnly: true,
+    fill: '#4d8355', stroke: '#2b4930', shine: '#e1eae2', accent: '#3b6541'
+  }),
+  defineColor({
+    id: 'olivine', name: 'Olivine', group: 'Green & Aqua', aiOnly: true,
+    fill: '#737033', stroke: '#403f1d', shine: '#e7e7dc', accent: '#595627'
+  }),
+  defineColor({
+    id: 'khaki', name: 'Khaki', group: 'Green & Aqua', aiOnly: true,
+    fill: '#5b593c', stroke: '#333222', shine: '#e3e3de', accent: '#46452e'
+  }),
+  defineColor({
+    id: 'metallic-sunshine', name: 'Metallic Sunshine', group: 'Yellow & Amber', aiOnly: true,
+    fill: '#dfb758', stroke: '#7d6631', shine: '#faf3e3', accent: '#ac8d44'
+  }),
+  defineColor({
+    id: 'jet-hematite', name: 'Jet Hematite', group: 'Metallic', aiOnly: true,
+    fill: '#4a5353', stroke: '#292e2e', shine: '#e0e2e2', accent: '#394040'
   })
 ];
 
@@ -185,6 +242,9 @@ export const LEGACY_IMAGE_COLOR_IDS = Object.freeze([
   'sapphire', 'light-sapphire', 'aquamarine', 'emerald', 'peridot', 'topaz', 'citrine', 'gold',
   'silver', 'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach'
 ]);
+
+// IMG-026F: the ids of the aiOnly entries, in catalogue order.
+export const AI_ONLY_COLOR_IDS = Object.freeze(CRYSTAL_COLOR_LIST.filter((c) => c.aiOnly).map((c) => c.id));
 
 /** Id-keyed lookup map — the same shape the pre-RS-1007 `STONE_COLORS` object already had. */
 export const STONE_COLORS = Object.fromEntries(CRYSTAL_COLOR_LIST.map((c) => [c.id, c]));
@@ -200,11 +260,15 @@ export function isValidCrystalColorId(id) {
   return typeof id === 'string' && Object.prototype.hasOwnProperty.call(STONE_COLORS, id);
 }
 
-/** Catalog entries grouped by `group`, in catalog order — what the UI selector iterates. */
-export function listCrystalColorGroups() {
+/**
+ * Catalog entries grouped by `group`, in catalog order — what the UI selector iterates. The
+ * aiOnly colours are left out unless includeAiOnly is true (IMG-026F).
+ */
+export function listCrystalColorGroups({ includeAiOnly = false } = {}) {
   const groups = [];
   const byGroup = new Map();
   for (const color of CRYSTAL_COLOR_LIST) {
+    if (color.aiOnly && !includeAiOnly) continue;
     if (!byGroup.has(color.group)) {
       const entry = { group: color.group, colors: [] };
       byGroup.set(color.group, entry);

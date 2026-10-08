@@ -162,13 +162,99 @@ function computeSizeBreakdown(stones) {
 // exists. Mirrors S-112's computePlateHeaderLineTexts() -> computeHeaderHeightMm(extraBodyLineCount)
 // integration -- no new page-layout/height-budgeting mechanism, same fixed-slot-height text
 // rendering SVG/PDF already share for every other header line.
-function computeSizeBreakdownLineTexts(breakdown) {
+//
+// IMG-026F: the lines may be set in up to MAX_BREAKDOWN_COLUMNS columns side by side, so that a long
+// colour list still leaves room for the stones (or the cover's page map). With one column the lines
+// are exactly the pre-IMG-026F ones, unless a colour's line is wider than the header, in which case
+// it continues on the next line, split between two sizes. Each colour's lines stay together in one
+// column; columns fill top to bottom, left to right. Returns { lines: [{ text, bold, col, row }],
+// rows }, where rows is the number of header line slots the block takes.
+const MAX_BREAKDOWN_COLUMNS = 3;
+const BREAKDOWN_COLUMN_GAP_MM = 4;
+function computeSizeBreakdownLineTexts(breakdown, maxWidthMm = Infinity, columns = 1) {
   const byColor = new Map();
   for (const entry of breakdown) {
     if (!byColor.has(entry.colorName)) byColor.set(entry.colorName, []);
     byColor.get(entry.colorName).push(`${entry.sizeLabel}: ${entry.count}`);
   }
-  return [...byColor.entries()].map(([colorName, parts]) => ({ text: `${colorName}: ${parts.join(', ')}`, bold: false }));
+  const columnWidthMm = (maxWidthMm - (columns - 1) * BREAKDOWN_COLUMN_GAP_MM) / columns;
+  const groups = [...byColor.entries()].map(([colorName, parts]) => wrapListLine(`${colorName}: `, parts, columnWidthMm));
+  const total = groups.reduce((sum, g) => sum + g.length, 0);
+  let rows = Math.ceil(total / columns);
+  for (;;) {
+    const lines = [];
+    let col = 0;
+    let row = 0;
+    for (const group of groups) {
+      if (row > 0 && row + group.length > rows) {
+        col += 1;
+        row = 0;
+      }
+      for (const text of group) {
+        lines.push({ text, bold: false, col, row });
+        row += 1;
+      }
+    }
+    if (col < columns) return { lines, rows: lines.length ? Math.max(rows, ...lines.map((l) => l.row + 1)) : 0, columnWidthMm };
+    rows += 1;
+  }
+}
+
+// IMG-026F: header text is measured with the Helvetica advance widths (per 1000 em) of the
+// printable ASCII characters, 32 to 126 in order, the font the PDF uses and the SVG names first.
+// Any other character counts as one em, which errs towards wrapping early.
+const HELVETICA_WIDTHS = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+  1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+  333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+  556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584
+];
+
+function headerTextWidthMm(text, sizeMm = HEADER_LINE_SIZE_MM) {
+  let units = 0;
+  for (const ch of String(text)) {
+    const code = ch.codePointAt(0);
+    units += code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : 1000;
+  }
+  return (units / 1000) * sizeMm;
+}
+
+// IMG-026F: the width a header line may take: the narrower side of the page (so the result does
+// not depend on the orientation chosen later), less both margins and the 2 mm text inset, less
+// 1 mm to spare.
+function headerMaxTextWidthMm(pageSize, marginMm) {
+  const page = PAGE_SIZES[pageSize];
+  if (!page) return Infinity;
+  return Math.min(page.widthMm, page.heightMm) - 2 * marginMm - 3;
+}
+
+// IMG-026F: prefix followed by items joined with ", ", broken into as many lines as needed to
+// stay within maxWidthMm. A break always falls between two items; an item wider than the line
+// gets a line of its own.
+function wrapListLine(prefix, items, maxWidthMm) {
+  const lines = [];
+  let current = prefix;
+  let empty = true;
+  for (const item of items) {
+    const candidate = empty ? current + item : `${current}, ${item}`;
+    if (!empty && headerTextWidthMm(candidate) > maxWidthMm) {
+      lines.push(`${current},`);
+      current = item;
+    } else {
+      current = candidate;
+    }
+    empty = false;
+  }
+  lines.push(current);
+  return lines;
+}
+
+// IMG-026F: the "Crystal color:" header line, wrapped. Its first line is one of the seven fixed body
+// lines; any further line counts as an extra body line in computeHeaderHeightMm().
+function computeColorLineTexts(distinctColors, maxWidthMm) {
+  return distinctColors.length ? wrapListLine('Crystal color: ', distinctColors, maxWidthMm) : ['Crystal color: —'];
 }
 
 function normalizeGapMm(gapMm) {
@@ -262,8 +348,8 @@ export function countStonesOutsideProductionArea(stoneLayout, widthMm, heightMm)
 function buildHeaderLines(headerTopMm, fields, extraLineTexts = []) {
   const {
     projectName, objectType, productionWidthMm, productionHeightMm, units, stoneCount, distinctSizesMm,
-    distinctGapsMm, distinctColors, pageSize, orientation, marginMm, mirror, registrationMarks,
-    plateHeaderLineTexts, sizeBreakdownLines
+    distinctGapsMm, pageSize, orientation, marginMm, mirror, registrationMarks,
+    plateHeaderLineTexts, sizeBreakdownLines, colorLineTexts
   } = fields;
   // Each line's baseline (yMm) is computed once, here, so productionSheetToSvg()/
   // productionSheetToPdf() only ever place text at an already-decided position instead of
@@ -276,7 +362,8 @@ function buildHeaderLines(headerTopMm, fields, extraLineTexts = []) {
     { text: `Stone count: ${stoneCount}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone size: ${formatStoneSizeList(distinctSizesMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Gap: ${formatMmList(distinctGapsMm, units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
-    { text: `Crystal color: ${distinctColors.length ? distinctColors.join(', ') : '—'}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
+    // IMG-026F: every colour is listed, over as many lines as it takes (computeColorLineTexts()).
+    ...colorLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM })),
     {
       text: `Page: ${pageSize} (${orientation}) · Margin: ${formatLengthDisplay(marginMm, units)} ${unitSuffix(units)} · Mirror: ${mirror ? 'On' : 'Off'} · Registration marks: ${registrationMarks ? 'On' : 'Off'}`,
       sizeMm: HEADER_LINE_SIZE_MM,
@@ -287,13 +374,27 @@ function buildHeaderLines(headerTopMm, fields, extraLineTexts = []) {
     // the production rect below.
     ...plateHeaderLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM })),
     // S-200: per-color/per-size quantity breakdown -- headerHeightMm above already includes
-    // sizeBreakdownLines.length, so this can never overflow into the production rect below either.
-    ...sizeBreakdownLines.map((line) => ({ text: line.text, bold: line.bold, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM })),
+    // sizeBreakdownLines.rows, so this can never overflow into the production rect below either.
+    // IMG-026F: a line in column col > 0 carries xOffsetMm from the header's text inset, and the
+    // block advances the cursor by its rows only once (breakdownBlock below).
+    ...sizeBreakdownLines.lines.map((line) => ({
+      text: line.text, bold: line.bold, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM,
+      breakdownBlock: { col: line.col, row: line.row, rows: sizeBreakdownLines.rows, columnStepMm: sizeBreakdownLines.columnWidthMm + BREAKDOWN_COLUMN_GAP_MM }
+    })),
     // RS-3041: the cover page's "Pages:" line -- [] on a single-page sheet.
     ...extraLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM }))
-  ].map((line) => {
+  ].map((line, index, all) => {
     // Baseline sits near the bottom of the line's own vertical slot (roughly text cap-height
     // above the baseline, matching how both SVG's y="baseline" and PDF's Td-positioned text work).
+    const block = line.breakdownBlock;
+    if (block) {
+      const yMm = headerCursorMm + block.row * line.slotHeightMm + line.slotHeightMm * 0.72;
+      const next = all[index + 1];
+      if (!next || !next.breakdownBlock) headerCursorMm += block.rows * line.slotHeightMm;
+      const out = { text: line.text, sizeMm: line.sizeMm, bold: Boolean(line.bold), yMm };
+      if (block.col > 0) out.xOffsetMm = block.col * block.columnStepMm;
+      return out;
+    }
     const yMm = headerCursorMm + line.slotHeightMm * 0.72;
     headerCursorMm += line.slotHeightMm;
     return { text: line.text, sizeMm: line.sizeMm, bold: Boolean(line.bold), yMm };
@@ -402,9 +503,15 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
   }
 
   const plateHeaderLineTexts = computePlateHeaderLineTexts({ ...options, units });
+  const maxTextWidthMm = headerMaxTextWidthMm(pageSize, marginMm);
   const sizeBreakdown = computeSizeBreakdown(stoneLayout.stones);
-  const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown);
-  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.length);
+  const distinctColors = distinctCrystalColorNames(stoneLayout.stones);
+  const colorLineTexts = computeColorLineTexts(distinctColors, maxTextWidthMm);
+
+  // IMG-026F: the single page always sets the breakdown in one column; a header too tall for the
+  // page makes the sheet multi-page, whose cover may use more columns.
+  const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown, maxTextWidthMm);
+  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.rows + colorLineTexts.length - 1);
 
   const neededWidthMm = Math.max(productionWidthMm, SCALE_BAR_LENGTH_MM);
   const neededHeightMm = headerHeightMm + productionHeightMm + FOOTER_HEIGHT_MM;
@@ -420,13 +527,12 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
 
   const stoneCount = stoneLayout.stones.length;
   const distinctSizesMm = distinctStoneSizesMm(stoneLayout.stones);
-  const distinctColors = distinctCrystalColorNames(stoneLayout.stones);
   const distinctGapsMm = normalizeGapMm(gapMm);
 
   const headerLines = buildHeaderLines(headerTopMm, {
     projectName, objectType, productionWidthMm, productionHeightMm, units, stoneCount, distinctSizesMm,
-    distinctGapsMm, distinctColors, pageSize, orientation, marginMm, mirror, registrationMarks,
-    plateHeaderLineTexts, sizeBreakdownLines
+    distinctGapsMm, pageSize, orientation, marginMm, mirror, registrationMarks,
+    plateHeaderLineTexts, sizeBreakdownLines, colorLineTexts
   });
 
   const stones = stoneLayout.stones.map((stone) => {
@@ -541,8 +647,6 @@ export function computeProductionSheetDocument(stoneLayout, options = {}) {
   const tileCount = cols * rows;
   const tileWidthMm = productionWidthMm / cols;
   const tileHeightMm = productionHeightMm / rows;
-  const printableWidthMm = pageWidthMm - 2 * marginMm;
-  const printableHeightMm = pageHeightMm - 2 * marginMm;
 
   // D4 then D5: mirror first, then each stone is owned by exactly one tile. Clamping keeps a stone
   // outside the production area (RS-3038) on an edge tile.
@@ -616,11 +720,29 @@ export function computeProductionSheetDocument(stoneLayout, options = {}) {
 
   // D8: the cover page -- today's header plus a "Pages:" line, then a page map of the tile grid.
   const plateHeaderLineTexts = computePlateHeaderLineTexts({ ...options, units });
+  const maxTextWidthMm = headerMaxTextWidthMm(pageSize, marginMm);
   const sizeBreakdown = computeSizeBreakdown(sourceStones);
-  const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown);
+  const colorLineTexts = computeColorLineTexts(distinctCrystalColorNames(sourceStones), maxTextWidthMm);
   const pagesLineText = `Pages: cover + ${tileCount} (${cols} ${cols === 1 ? 'column' : 'columns'} × ${rows} ${rows === 1 ? 'row' : 'rows'}), overlap ${OVERLAP_MM} mm`;
-  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.length + 1);
-  const mapAreaHeightMm = printableHeightMm - headerHeightMm;
+  // IMG-026F: a long colour list can leave the cover no room for the page map. The cover then
+  // turns to portrait (PDF pages may differ in size; the tile pages keep their orientation), and
+  // if that is not enough the breakdown takes a second and then a third column.
+  const portraitHeightMm = Math.max(pageWidthMm, pageHeightMm);
+  let sizeBreakdownLines;
+  let headerHeightMm;
+  for (let columns = 1; ; columns += 1) {
+    sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown, maxTextWidthMm, columns);
+    headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.rows + colorLineTexts.length - 1 + 1);
+    if (portraitHeightMm - 2 * marginMm - headerHeightMm >= COVER_MAP_MIN_HEIGHT_MM || columns >= MAX_BREAKDOWN_COLUMNS) break;
+  }
+  let coverWidthMm = pageWidthMm;
+  let coverHeightMm = pageHeightMm;
+  if (pageHeightMm - 2 * marginMm - headerHeightMm < COVER_MAP_MIN_HEIGHT_MM && pageWidthMm > pageHeightMm) {
+    coverWidthMm = pageHeightMm;
+    coverHeightMm = pageWidthMm;
+  }
+  const coverPrintableWidthMm = coverWidthMm - 2 * marginMm;
+  const mapAreaHeightMm = coverHeightMm - 2 * marginMm - headerHeightMm;
   if (mapAreaHeightMm < COVER_MAP_MIN_HEIGHT_MM) {
     throw new RangeError(
       `Production sheet cover page has no room for the page map on ${pageSize} at margin ${marginMm}mm. ` +
@@ -633,22 +755,21 @@ export function computeProductionSheetDocument(stoneLayout, options = {}) {
     stoneCount: sourceStones.length,
     distinctSizesMm: distinctStoneSizesMm(sourceStones),
     distinctGapsMm: normalizeGapMm(gapMm),
-    distinctColors: distinctCrystalColorNames(sourceStones),
-    pageSize, orientation, marginMm, mirror, registrationMarks, plateHeaderLineTexts, sizeBreakdownLines
+    pageSize, orientation, marginMm, mirror, registrationMarks, plateHeaderLineTexts, sizeBreakdownLines, colorLineTexts
   }, [pagesLineText]);
 
-  const mapScale = Math.min(printableWidthMm / productionWidthMm, (mapAreaHeightMm - COVER_MAP_CAPTION_SLOT_MM) / productionHeightMm);
+  const mapScale = Math.min(coverPrintableWidthMm / productionWidthMm, (mapAreaHeightMm - COVER_MAP_CAPTION_SLOT_MM) / productionHeightMm);
   const mapWidthMm = productionWidthMm * mapScale;
   const mapHeightMm = productionHeightMm * mapScale;
-  const mapLeftMm = marginMm + (printableWidthMm - mapWidthMm) / 2;
+  const mapLeftMm = marginMm + (coverPrintableWidthMm - mapWidthMm) / 2;
   const mapTopMm = marginMm + headerHeightMm;
   const cellMapWidthMm = tileWidthMm * mapScale;
   const cellMapHeightMm = tileHeightMm * mapScale;
   const labelSizeMm = Math.min(COVER_MAP_LABEL_SIZE_MM, cellMapHeightMm / 3);
   const cover = {
     kind: 'cover',
-    pageWidthMm,
-    pageHeightMm,
+    pageWidthMm: coverWidthMm,
+    pageHeightMm: coverHeightMm,
     marginMm,
     headerTopMm,
     headerLines,
@@ -726,7 +847,7 @@ export function productionSheetToSvg(stoneLayout, options = {}) {
     `<rect width="100%" height="100%" fill="white"/>\n`;
 
   for (const line of layout.headerLines) {
-    out += `<text x="${(layout.marginMm + 2).toFixed(3)}" y="${line.yMm.toFixed(3)}" font-family="Helvetica,Arial,sans-serif" font-size="${line.sizeMm}" font-weight="${line.bold ? 'bold' : 'normal'}" fill="#111827">${escapeSvgText(line.text)}</text>\n`;
+    out += `<text x="${(layout.marginMm + 2 + (line.xOffsetMm || 0)).toFixed(3)}" y="${line.yMm.toFixed(3)}" font-family="Helvetica,Arial,sans-serif" font-size="${line.sizeMm}" font-weight="${line.bold ? 'bold' : 'normal'}" fill="#111827">${escapeSvgText(line.text)}</text>\n`;
   }
 
   const r = layout.productionRect;
@@ -800,7 +921,7 @@ function drawPdfStones(doc, stones, { toPt, flipY }) {
 function drawPdfHeaderLines(doc, layout, { toPt, flipY }) {
   doc.setFillColor([0.07, 0.09, 0.15]);
   for (const line of layout.headerLines) {
-    doc.drawText(toPt(layout.marginMm + 2), flipY(line.yMm), line.text, { sizePt: toPt(line.sizeMm) });
+    doc.drawText(toPt(layout.marginMm + 2 + (line.xOffsetMm || 0)), flipY(line.yMm), line.text, { sizePt: toPt(line.sizeMm) });
   }
 }
 
@@ -867,7 +988,8 @@ function drawPdfTilePage(doc, tile) {
 
 /**
  * RS-3041: renders computeProductionSheetDocument() -- one page when the sheet fits, otherwise a
- * cover page plus one page per tile, all the same size.
+ * cover page plus one page per tile, all the same size, except a cover that turns to portrait
+ * for a long colour list (IMG-026F).
  *
  * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
  * @param {object} options See computeProductionSheetLayout().

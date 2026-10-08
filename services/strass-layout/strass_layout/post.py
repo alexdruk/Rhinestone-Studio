@@ -4,6 +4,10 @@ Ported from post.py (EYE_MODE=copy, LASHES on). Pupils and face landmarks give t
 eye stones; holes are filled again against the strict subject mask; stones without
 a colour take their neighbours' colour; isolated dark stones and red stones among
 brown ones are recoloured; any remaining gap violation is removed.
+
+Rules.human_iris gives people the iris rings animals get, without their dark stones;
+Rules.eye_keep removes only the stones that overlap an eye stone instead of the whole
+eye zone.
 """
 from collections import Counter
 
@@ -13,13 +17,14 @@ from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
 from . import darkdots
-from .colour import snap_colours, stone_colours
+from .colour import palette, snap_colours, stone_colours
 from .chains import chain_mask
 from .colsmooth import family_fix
 from .eyes import build_eye_copy, find_pupils
 from .geometry import GAP, SS4, fill, strict_mask, violations
 from .rules import DEFAULT
 
+IRIS_DARK = {"jet", "hematite", "black-diamond", "smoked-topaz", "jet-hematite"}
 SIZE_KEYS = {1.5: "ss4", 2.0: "ss6", 2.8: "ss10", 4.0: "ss16", 4.7: "ss20", 6.4: "ss30"}
 
 
@@ -41,6 +46,8 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     rounded to 0.001 as the prototype wrote them; info has the strict mask and the
     eye data."""
     rgb, a = px.rgb, px.a
+    pal = palette(rules)
+    mean = rules.mean_colour
     s = first["s"]
     mask = strict_mask(a, first["mask"])
     main_px = 2 * np.median(det[det[:, 2] >= np.median(det[:, 2]), 2])
@@ -86,17 +93,20 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     pre = []
     zones = []
     for c in cands:
-        st_, z = build_eye_copy(c, s, iris=boxes is None)
+        st_, z = build_eye_copy(c, s, iris=boxes is None or rules.human_iris)
         pre += st_
         zones.append(z)
     if pre:
         need = [k for k, p in enumerate(pre) if p[3] is None]
         if need:
             pp = np.array([pre[k][4] for k in need])
-            lab_ = stone_colours(rgb, a, np.stack([pp[:, 1] / s, pp[:, 0] / s, np.full(len(pp), 0.3 / s), np.zeros(len(pp))], 1))
-            ids_, _ = snap_colours(lab_)
+            lab_ = stone_colours(rgb, a, np.stack([pp[:, 1] / s, pp[:, 0] / s, np.full(len(pp), 0.3 / s), np.zeros(len(pp))], 1), mean)
+            ids_, _ = snap_colours(lab_, pal)
             for k, cc in zip(need, ids_):
                 pre[k] = (pre[k][0], pre[k][1], pre[k][2], cc, None)
+            if boxes is not None and rules.human_iris:
+                dark_ring = {k for k in need if pre[k][3] in IRIS_DARK}
+                pre = [p for k, p in enumerate(pre) if k not in dark_ring]
         pre = [p[:4] for p in pre]
     pupils = [round(c["diam_mm"], 2) for c in cands]
 
@@ -113,8 +123,12 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
         prD = np.array([p[2] for p in pre])
         prC = [p[3] for p in pre]
         drop = np.zeros(len(P), bool)
-        for (zx, zy, zr) in zones:
-            drop |= np.hypot(P[:, 0] - zx, P[:, 1] - zy) < zr + D / 2 + GAP + 0.02
+        if rules.eye_keep:
+            for qx, qy, qd in zip(prP[:, 0], prP[:, 1], prD):
+                drop |= np.hypot(P[:, 0] - qx, P[:, 1] - qy) < (qd + D) / 2 + GAP + 0.02
+        else:
+            for (zx, zy, zr) in zones:
+                drop |= np.hypot(P[:, 0] - zx, P[:, 1] - zy) < zr + D / 2 + GAP + 0.02
         P, D, C, genuine = P[~drop], D[~drop], [c for c, k in zip(C, drop) if not k], genuine[~drop]
         P = np.concatenate([P, prP])
         D = np.concatenate([D, prD])
@@ -149,7 +163,7 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
         genuine = np.r_[genuine, np.zeros(len(fP), bool)]
         fixed = np.r_[fixed, np.zeros(len(fP), bool)]
 
-    labS = stone_colours(rgb, a, np.stack([P[:, 1] / s, P[:, 0] / s, 0.42 * D / s, np.zeros(len(P))], 1))
+    labS = stone_colours(rgb, a, np.stack([P[:, 1] / s, P[:, 0] / s, 0.42 * D / s, np.zeros(len(P))], 1), mean)
     t = cKDTree(P)
     dark_ids = darkdots.DARK
     for i in [k for k in range(len(P)) if C[k] is None]:
@@ -159,7 +173,7 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
             light = [c for c in cs if c not in dark_ids]
             C[i] = Counter(light if len(light) >= 0.5 * len(cs) else cs).most_common(1)[0][0]
         else:
-            C[i] = snap_colours(labS[i:i + 1])[0][0]
+            C[i] = snap_colours(labS[i:i + 1], pal)[0][0]
     genuine_dark = np.zeros(len(P), bool)
     gi = np.nonzero(genuine & ~fixed)[0]
     if len(gi):
@@ -171,7 +185,7 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
         genuine_dark |= near < 0.5
     C, _ = darkdots.clean(P, D, C, fixed=fixed | genuine_dark)
     for _ in range(5):
-        C, _ = family_fix(P, D, C, labS, fixed & np.array([c in ("jet", "crystal-clear") for c in C]))
+        C, _ = family_fix(P, D, C, labS, fixed & np.array([c in ("jet", "crystal-clear") for c in C]), pal=pal)
     clock.lap("colour")
 
     for _ in range(5):

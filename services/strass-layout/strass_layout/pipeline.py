@@ -8,7 +8,7 @@ catalogue id check.
 """
 import numpy as np
 
-from .colour import CAT_IDS
+from .colour import CAT_IDS, palette
 from .detect import detect_stones
 from .distinct import distinct_tones
 from .errors import CatalogueMismatch, NoStones
@@ -45,7 +45,7 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     P = np.array([[q["x"], q["y"]] for q in stones])
     D = np.array([q["d"] for q in stones])
     C = [q["color"] for q in stones]
-    colours = distinct_tones(px.rgb, px.a, first["s"], P, D, C)
+    colours = distinct_tones(px.rgb, px.a, first["s"], P, D, C, palette(rules), rules.mean_colour)
     for q, c in zip(stones, colours):
         q["color"] = c
     clock.lap("colour")

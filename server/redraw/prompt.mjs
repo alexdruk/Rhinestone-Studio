@@ -5,18 +5,19 @@
 // docs/specifications/IMG-022-RedrawProvider.md D6 and docs/specifications/IMG-024-FlatArtworkStyle.md D2.
 import { STONE_COLORS } from '../../src/renderer/StoneColors.js';
 
-// IMG-026 (S10, S11, build E): version 4 is the placement-chart prompt of the spec's Appendix B, with
-// the generated palette line inside rule 4. Version 3 (Appendix A) lacked the colour ramps and the
-// outline and texture rules; version 2 was the IMG-023 "designer" prompt; see
+// IMG-026 (S10, S11, build F): version 5 is the placement-chart prompt of the spec's Appendix C, with
+// the generated palette line inside rule 4. Version 4 (Appendix B, build E) had colour ramps without
+// the twelve aiOnly colours; version 3 (Appendix A) lacked the ramps and the outline and texture
+// rules; version 2 was the IMG-023 "designer" prompt; see
 // docs/specifications/IMG-026-StrassLayoutService.md.
-export const PROMPT_VERSION = 4;
+export const PROMPT_VERSION = 5;
 
 // IMG-024 (D1/D2): 'stones' is the prompt above; 'flat' asks for flat colour regions, no stones.
 export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
 export const FLAT_PROMPT_VERSION = 1;
 export const PROMPT_VERSIONS = Object.freeze({ stones: PROMPT_VERSION, flat: FLAT_PROMPT_VERSION });
 
-const V4_HEAD = [
+const V5_HEAD = [
   'Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.',
   '',
   '1. STONES',
@@ -43,14 +44,14 @@ const V4_HEAD = [
   'Use only the colours below, with exactly these hex values, as flat fills:'
 ].join('\n');
 
-const V4_TAIL = [
+const V5_TAIL = [
   '- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.',
   '- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.',
   '- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:',
-  '  skin: Light Peach, Light Colorado Topaz, Colorado Topaz, Smoked Topaz, with Crystal only for the brightest highlights;',
-  '  tan or brown fur, wood, earth: Light Peach, Light Colorado Topaz, Light Smoked Topaz, Colorado Topaz, Smoked Topaz;',
-  '  white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Hematite, Jet;',
-  '  greens: Peridot, Emerald; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Gold, Topaz, Hyacinth.',
+  '  skin: Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Vintage Rose for cheeks and Crystal only for the brightest highlights;',
+  '  tan or brown fur, wood, earth: Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;',
+  '  white, grey and black hair, fur, metal, stone: Crystal, Silver, Grey, Black Diamond, Jet Hematite, Hematite, Jet;',
+  '  greens: Chrysolite, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire; reds and pinks: Rose, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Fuchsia; yellows and oranges: Citrine, Metallic Sunshine, Gold, Topaz, Hyacinth.',
   '- Never use Topaz or Hyacinth on skin.',
   '- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.',
   '- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.',
@@ -77,13 +78,15 @@ const FLAT_PROMPT_LINES = [
 ];
 
 // "Name #hex" pairs in catalogue order; the hex is previewColor, the value app.js's
-// imageColorPalette() quantises against.
-export function buildPaletteLine(colors = STONE_COLORS) {
-  return Object.values(colors).map((c) => `${c.name} ${c.previewColor}`).join(', ');
+// imageColorPalette() quantises against. IMG-026F: the aiOnly colours are listed only with
+// includeAiOnly, which the stones prompt passes (its result goes to the layout service); the flat
+// prompt keeps the standard palette.
+export function buildPaletteLine(colors = STONE_COLORS, includeAiOnly = false) {
+  return Object.values(colors).filter((c) => includeAiOnly || !c.aiOnly).map((c) => `${c.name} ${c.previewColor}`).join(', ');
 }
 
 // Any style other than 'flat' is the stones prompt; the handler only passes a validated style.
 export function buildRedrawPrompt(colors = STONE_COLORS, style = 'stones') {
   if (style === 'flat') return [...FLAT_PROMPT_LINES, buildPaletteLine(colors)].join('\n');
-  return [V4_HEAD, buildPaletteLine(colors), V4_TAIL].join('\n');
+  return [V5_HEAD, buildPaletteLine(colors, true), V5_TAIL].join('\n');
 }

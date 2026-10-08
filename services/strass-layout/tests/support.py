@@ -2,7 +2,8 @@
 
 Images and reference results are read from prototype/img and prototype/expected.
 Pipeline runs are memoised per image and rules, so a full test run lays out each image once per
-rules set. The equivalence, golden and report tests use PROTOTYPE; build E's tests use DEFAULT.
+rules set. The equivalence, golden and report tests use PROTOTYPE; build E's tests use BUILD_E;
+build F's tests use DEFAULT against BUILD_E.
 """
 import copy
 import json

@@ -192,7 +192,7 @@ await test('7. single page is byte-identical to c546685: 150x150 A4 SVG and PDF 
   assert.equal(sha256(svg), '3414abee87a8bd597dc916a43e78a760cace4d71f9575db1eb1b556747853bd2');
   const pdf = productionSheetToPdf({ stones: fixture(150, 150) }, fixtureOptions(150));
   assert.equal(pdf.length, 911434);
-  assert.equal(sha256(pdf), '723020417f9cb8befdddf28ac73dce5218d50d9cc653ce9537f4f98e8e7e4928');
+  assert.equal(sha256(pdf), '6cd6fd0770262ef881c8c0565e8919acd71c3a2dcf4702385f1f21dbe0f4894f');
 });
 
 // --- 8. multi-page PDF structure -----------------------------------------------------------------
@@ -297,9 +297,15 @@ await test('10. D12: the multi-page note appears only when multi-page applies, a
 
 // --- 11. D8 map floor ----------------------------------------------------------------------------
 
-await test('11. D8: 300x300 A4 at margin 54 throws the exact cover-map RangeError; margin 53 is portrait 4 x 2, 8 tile pages', () => {
+await test('11. D8: 300x300 A4 at margin 54 tiles landscape 2 x 5 under a portrait cover (IMG-026F); with every catalogue colour in two sizes it throws the exact cover-map RangeError; margin 53 is portrait 4 x 2, 8 tile pages', async () => {
+  const d54 = computeProductionSheetDocument({ stones: fixture(300, 300) }, fixtureOptions(300, { marginMm: 54 }));
+  assert.equal(d54.orientation, 'landscape');
+  assert.deepEqual([d54.cols, d54.rows], [2, 5]);
+  assert.deepEqual([d54.pages[0].pageWidthMm, d54.pages[0].pageHeightMm], [210, 297]);
+  const { CRYSTAL_COLORS } = await import('../src/renderer/CrystalColors.js');
+  const everyColour = CRYSTAL_COLORS.flatMap((c, i) => [1.5, 2.8].map((sizeMm) => ({ xMm: 150 + i, yMm: 150, sizeMm, color: c.id })));
   assert.throws(
-    () => computeProductionSheetDocument({ stones: fixture(300, 300) }, fixtureOptions(300, { marginMm: 54 })),
+    () => computeProductionSheetDocument({ stones: [...fixture(300, 300), ...everyColour] }, fixtureOptions(300, { marginMm: 54 })),
     (error) => error instanceof RangeError &&
       error.message === 'Production sheet cover page has no room for the page map on A4 at margin 54mm. Reduce the margin or choose a larger page size.'
   );

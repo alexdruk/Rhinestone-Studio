@@ -1,17 +1,20 @@
 """Tone separation: k-means (14) on the stone colours, assigned to catalogue colours so
-that clearly different tones of one hue family stay different. Skin tones stay in skin."""
+that clearly different tones of one hue family stay different. Skin tones stay in skin.
+An aiOnly colour (colour.EXTRA_IDS) is never picked as the alternate for a cluster; it is
+only ever a cluster's own nearest colour."""
 import numpy as np
 from sklearn.cluster import KMeans
 from skimage.color import deltaE_ciede2000
 
-from .colour import CAT_IDS, CAT_LAB, KH, KL, snap_colours, stone_colours
+from .colour import BASE, EXTRA_IDS, KH, KL, snap_colours, stone_colours
 
-SKIN = {"light-peach", "light-colorado", "colorado-topaz", "smoked-topaz", "light-smoked-topaz", "topaz"}
+SKIN = {"light-peach", "light-colorado", "colorado-topaz", "smoked-topaz", "light-smoked-topaz", "topaz",
+        "golden-shadow", "copper", "vintage-rose", "rose-gold"}
 
 
-def _fam(a, b):
-    ids = CAT_IDS
-    cat = CAT_LAB
+def _fam(a, b, pal=BASE):
+    ids = pal.ids
+    cat = pal.lab
     pa, pb = cat[ids.index(a)], cat[ids.index(b)]
     if (a in SKIN) != (b in SKIN):
         return False
@@ -25,9 +28,9 @@ def _fam(a, b):
     return min(abs(ha - hb), 360 - abs(ha - hb)) < 25
 
 
-def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0):
-    ids = CAT_IDS
-    cat = CAT_LAB
+def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0, pal=BASE):
+    ids = pal.ids
+    cat = pal.lab
     free = np.nonzero(~prot)[0]
     if len(free) < k:
         return C, 0
@@ -50,6 +53,8 @@ def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0):
                     same = (cp < 10 and ca < 10) or (cp >= 10 and ca >= 10 and min(abs(hp - ha), 360 - abs(hp - ha)) < 25)
                     if ids[pick] in SKIN or ids[alt] in SKIN:
                         same = same and ids[pick] in SKIN and ids[alt] in SKIN
+                    if ids[alt] in EXTRA_IDS:
+                        continue
                     if same and d[ci, alt] <= d[ci, pick] + extra and alt not in assign.values():
                         pick = alt
                         break
@@ -60,18 +65,18 @@ def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0):
     ch = 0
     for i, lbl in zip(free, km.labels_):
         new = ids[assign[lbl]]
-        own = snap_colours(lab[i:i + 1])[0][0]
+        own = snap_colours(lab[i:i + 1], pal)[0][0]
         if own != C[i]:
             continue
-        if new != C[i] and (lbl in moved or _fam(C[i], new)):
+        if new != C[i] and (lbl in moved or _fam(C[i], new, pal)):
             C[i] = new
             ch += 1
     return C, ch
 
 
-def distinct_tones(rgb, a, s, P, D, C):
+def distinct_tones(rgb, a, s, P, D, C, pal=BASE, mean=False):
     """Colour ids after tone separation, for stones at P (mm), diameters D (mm) and ids C."""
-    lab = stone_colours(rgb, a, np.stack([P[:, 1] / s, P[:, 0] / s, 0.42 * D / s, np.zeros(len(P))], 1))
+    lab = stone_colours(rgb, a, np.stack([P[:, 1] / s, P[:, 0] / s, 0.42 * D / s, np.zeros(len(P))], 1), mean)
     prot = np.array([d != 2.0 and d != 1.5 or c in ("jet",) for c, d in zip(C, D)])
-    C2, _ = _distinct(C, lab, prot)
+    C2, _ = _distinct(C, lab, prot, pal=pal)
     return C2

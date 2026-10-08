@@ -471,7 +471,7 @@ await test('12. app.js: the colour rows and Reset are not history-tracked contro
   assert.ok(!write.includes('aiLayoutColour') && !write.includes('colorSwaps'));
   assert.ok(appJs.includes("el('aiLayoutColourReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image'||l.fillMode!=='ai-layout')return;commitHistory();l.colorSwaps={};updateAll(true)};"));
   const rows = extractFunction('function renderAiLayoutColourRows(l){');
-  assert.ok(rows.includes('aiLayoutColourRows(l.aiLayout,l.colorSwaps)') && rows.includes('populateStoneColorOptions(pick.id)'));
+  assert.ok(rows.includes('aiLayoutColourRows(l.aiLayout,l.colorSwaps)') && rows.includes('populateStoneColorOptions(pick.id,true)'));
   assert.ok(rows.includes("commitHistory();if(!target.colorSwaps)target.colorSwaps={};if(pick.value===row.fromId)delete target.colorSwaps[row.fromId];else target.colorSwaps[row.fromId]=pick.value;updateAll(true)"));
 });
 

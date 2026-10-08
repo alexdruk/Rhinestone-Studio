@@ -1,4 +1,4 @@
-"""IMG-026E: the DEFAULT rules (pupil core, outline chains) against PROTOTYPE.
+"""IMG-026E: the BUILD_E rules (pupil core, outline chains) against PROTOTYPE.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "Layout quality (build E)" and the
 Build E acceptance figures. The dark-line coverage and the dropped share are computed here.
@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 from scipy.spatial import cKDTree
 from skimage.color import rgb2lab
 
-from strass_layout import DEFAULT, PROTOTYPE, Rules
+from strass_layout import BUILD_E, DEFAULT, PROTOTYPE, Rules
 from strass_layout.chains import chain_mask
 from strass_layout.eyes import find_pupils
 from strass_layout.imageio import decode_png
@@ -57,7 +57,7 @@ class DefaultAgainstPrototype(unittest.TestCase):
         for name in IMAGES:
             with self.subTest(image=name):
                 proto = support.layout_result(name, PROTOTYPE)["report"]
-                result = support.layout_result(name, DEFAULT)
+                result = support.layout_result(name, BUILD_E)
                 report = result["report"]
                 self.assertEqual(report["violations"], 0)
                 self.assertGreaterEqual(report["minGapMm"], MIN_GAP_MM)
@@ -68,13 +68,13 @@ class DefaultAgainstPrototype(unittest.TestCase):
                 for ours, theirs in zip(report["pupilsMm"], proto["pupilsMm"]):
                     self.assertLessEqual(ours, theirs)
             frame_proto = support.frame_result(name, PROTOTYPE)
-            frame_default = support.frame_result(name, DEFAULT)
+            frame_default = support.frame_result(name, BUILD_E)
             cov_proto.append(dark_line_coverage(name, frame_proto))
             cov_default.append(dark_line_coverage(name, frame_default))
             drop_proto.append(dropped_share(name, frame_proto))
             drop_default.append(dropped_share(name, frame_default))
             print("ROW %s stones %d->%d darkCov %.4f->%.4f dropped %.4f->%.4f" % (
-                name, support.layout_result(name, PROTOTYPE)["report"]["stones"], support.layout_result(name, DEFAULT)["report"]["stones"],
+                name, support.layout_result(name, PROTOTYPE)["report"]["stones"], support.layout_result(name, BUILD_E)["report"]["stones"],
                 cov_proto[-1], cov_default[-1], drop_proto[-1], drop_default[-1]))
         print("MEAN darkCov %.4f->%.4f dropped %.4f->%.4f" % (np.mean(cov_proto), np.mean(cov_default), np.mean(drop_proto), np.mean(drop_default)))
         self.assertGreater(np.mean(cov_default), np.mean(cov_proto))
