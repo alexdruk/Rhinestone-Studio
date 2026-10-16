@@ -1,4 +1,4 @@
-"""IMG-026F: the DEFAULT rules (extra colours, mean colour, human iris, eye stones kept) against BUILD_E.
+"""IMG-026F: the BUILD_F rules (extra colours, mean colour, human iris, eye stones kept) against BUILD_E.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "Colour and eyes (build F)" and the
 Build F acceptance figures. The look figure is computed here: the mean CIE76 distance between the
@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 from skimage.color import rgb2lab
 
-from strass_layout import BUILD_E, DEFAULT, PROTOTYPE, distinct
+from strass_layout import BUILD_E, BUILD_F, PROTOTYPE, distinct
 from strass_layout.colour import BASE, CAT, CAT_IDS, EXTRA_IDS, FULL, palette, snap_colours, stone_colours
 from strass_layout.imageio import decode_png
 from tests import support
@@ -39,7 +39,7 @@ def look(name, frame):
     draw = ImageDraw.Draw(img)
     for q in frame["stones"]:
         x, y, r = q["x"] / s, q["y"] / s, q["d"] / s / 2
-        draw.ellipse([x - r, y - r, x + r, y + r], fill=hex_rgb(CAT[q["color"]]["fill"]))
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=hex_rgb(CAT[q["color"]].get("prototypeFill", CAT[q["color"]]["fill"])))
     out = np.asarray(img).astype(float) / 255.0
     sigma = 0.5 * pitch_px
     region = ndi.binary_dilation(px.a > 0.5, iterations=int(pitch_px))
@@ -69,7 +69,7 @@ class Palettes(unittest.TestCase):
         self.assertEqual(FULL.ids, CAT_IDS)
         self.assertIs(palette(PROTOTYPE), BASE)
         self.assertIs(palette(BUILD_E), BASE)
-        self.assertIs(palette(DEFAULT), FULL)
+        self.assertIs(palette(BUILD_F), FULL)
 
     def test_base_never_snaps_to_an_extra_colour(self):
         lab = FULL.lab[[FULL.ids.index(k) for k in EXTRA]]
@@ -127,7 +127,7 @@ class DefaultAgainstBuildE(unittest.TestCase):
         for name in IMAGES:
             with self.subTest(image=name):
                 e = support.layout_result(name, BUILD_E)["report"]
-                f = support.layout_result(name, DEFAULT)["report"]
+                f = support.layout_result(name, BUILD_F)["report"]
                 self.assertEqual(f["violations"], 0)
                 self.assertGreaterEqual(f["minGapMm"], MIN_GAP_MM)
                 self.assertLessEqual(abs(f["stones"] - e["stones"]), 0.01 * e["stones"])
@@ -139,7 +139,7 @@ class DefaultAgainstBuildE(unittest.TestCase):
                 self.assertFalse(set(support.layout_result(name, PROTOTYPE)["report"]["colours"]) & set(EXTRA))
             uses_extra += bool(set(f["colours"]) & set(EXTRA))
             frame_e = support.frame_result(name, BUILD_E)
-            frame_f = support.frame_result(name, DEFAULT)
+            frame_f = support.frame_result(name, BUILD_F)
             looks_e.append(look(name, frame_e))
             looks_f.append(look(name, frame_f))
             print("ROW %s stones %d->%d look %.2f->%.2f extra %s" % (
@@ -154,7 +154,7 @@ class DefaultAgainstBuildE(unittest.TestCase):
         for name in HUMAN_IMAGES:
             with self.subTest(image=name):
                 e = iris_stones(support.frame_result(name, BUILD_E))
-                f = iris_stones(support.frame_result(name, DEFAULT))
+                f = iris_stones(support.frame_result(name, BUILD_F))
                 print("IRIS %s %d->%d" % (name, e, f))
                 self.assertGreater(f, e)
 

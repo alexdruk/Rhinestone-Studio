@@ -36,7 +36,7 @@ const repoUrl = new URL('..', import.meta.url);
 const appJs = await readFile(fileURLToPath(new URL('app.js', repoUrl)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('index.html', repoUrl)), 'utf8');
 const readFixture = (name) => readFile(fileURLToPath(new URL(`tools/fixtures/img-025/${name}`, repoUrl)), 'utf8');
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 const engine = new GeometryEngine();
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 const SQRT3_2 = Math.sqrt(3) / 2;

@@ -127,7 +127,7 @@ await test('1. Byte-identity of the legacy document (no third argument), measure
   const photoSvg = stoneLayoutToSvg(photoLayout, { widthMm: 60, heightMm: 60 });
   assert.equal(
     crypto.createHash('sha256').update(photoSvg).digest('hex'),
-    '14c52341a04adc46671f5148531ca7ba14c0979f95b954c94bab5a1a1e8f8d26'
+    '61184991dab3f8a668645b3a6d24a9d220c986dc436d8022e83231fcccc8a882'
   );
 });
 
@@ -298,7 +298,7 @@ await test('7. Document structure with options.regions', () => {
   // covered by siamZCount above and by items 4/6's contour-count/vertex/area/IoU assertions).
   const siamAttrsTail = siamPathMatch[1].match(/ fill="[^"]*" fill-opacity="[^"]*" stroke="[^"]*" stroke-width="[^"]*" fill-rule="[^"]*"\/>$/);
   assert.ok(siamAttrsTail, 'expected the siam path to end with its fill/stroke attribute cluster');
-  assert.equal(siamAttrsTail[0], ' fill="#9b1c1c" fill-opacity="0.35" stroke="#4a0d0d" stroke-width="0.12" fill-rule="evenodd"/>');
+  assert.equal(siamAttrsTail[0], ' fill="#7a1b2c" fill-opacity="0.35" stroke="#440f19" stroke-width="0.12" fill-rule="evenodd"/>');
 
   const stoneGroupColors = [...groupedSvg.matchAll(/<g data-layer="img1" data-color="([a-z]+)" data-size="2\.800">/g)].map((m) => m[1]);
   assert.deepEqual(stoneGroupColors, ['citrine', 'sapphire', 'siam']);

@@ -748,9 +748,10 @@ function resolveImageVividness(value){return IMAGE_VIVIDNESS_STEPS.includes(valu
 // populateStoneColorOptions() already crosses the src/renderer -> app.js boundary with), in the
 // same catalog order. src/image/** and src/geometry/** never see CrystalColors.js directly.
 // Constants in this region of app.js must not evaluate imports at load time, because several test
-// harnesses new Function()-evaluate this span.
+// harnesses new Function()-evaluate this span. IMG-026G: the hex is legacyFill, the colour before the
+// catalogue re-measure, so legacy image layers keep their stones.
 let imageColorPaletteCache=null;
-function imageColorPalette(){if(!imageColorPaletteCache){const legacyIds=['crystal-clear','crystal','jet','siam','light-siam','rose','fuchsia','amethyst','sapphire','light-sapphire','aquamarine','emerald','peridot','topaz','citrine','gold','silver','hematite','black-diamond','grey','smoked-topaz','light-colorado','light-peach'];imageColorPaletteCache=Object.values(STONE_COLORS).filter(c=>legacyIds.includes(c.id)).map(c=>({id:c.id,hex:c.previewColor}))}return imageColorPaletteCache}
+function imageColorPalette(){if(!imageColorPaletteCache){const legacyIds=['crystal-clear','crystal','jet','siam','light-siam','rose','fuchsia','amethyst','sapphire','light-sapphire','aquamarine','emerald','peridot','topaz','citrine','gold','silver','hematite','black-diamond','grey','smoked-topaz','light-colorado','light-peach'];imageColorPaletteCache=Object.values(STONE_COLORS).filter(c=>legacyIds.includes(c.id)).map(c=>({id:c.id,hex:c.legacyFill||c.previewColor}))}return imageColorPaletteCache}
 // IMG-012: layer.colorCount === 'auto' (the sentinel, see docs/specifications/IMG-012-AutoColourCount.md
 // section B) resolves to a concrete integer 1-8 through this function alone -- every numeric read
 // site (this file's own multiColorImage flag, computeImageColorField(), generateImageStonesLive(),

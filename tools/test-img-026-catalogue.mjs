@@ -74,12 +74,14 @@ function appJsLegacyLiteral() {
 await test('1. D2: the four entries are appended after light-peach, in order, with the pinned name, group and values, which follow the IMG-016 shading rule', () => {
   assert.equal(CRYSTAL_COLORS.length, 39);
   assert.equal(CRYSTAL_COLORS[22].id, 'light-peach');
-  assert.deepEqual(CRYSTAL_COLORS.slice(23, 27).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]), D2_ENTRIES);
+  const legacy = (c) => (c.legacyFill === c.fill ? [c.fill, c.stroke, c.shine, c.accent] : [c.legacyFill, ...Object.values(applyShadingRule(c.legacyFill))]);
+  assert.deepEqual(CRYSTAL_COLORS.slice(23, 27).map((c) => [c.id, c.name, c.group, ...legacy(c)]), D2_ENTRIES);
   for (const [id, , , fill, stroke, shine, accent] of D2_ENTRIES) {
     assert.deepEqual(applyShadingRule(fill), { stroke, shine, accent }, `${id} follows the rule`);
-    assert.equal(STONE_COLORS[id].previewColor, fill);
-    assert.equal(STONE_COLORS[id].highlight, shine);
-    assert.equal(STONE_COLORS[id].shadow, accent);
+    assert.deepEqual(applyShadingRule(STONE_COLORS[id].fill), { stroke: STONE_COLORS[id].stroke, shine: STONE_COLORS[id].shine, accent: STONE_COLORS[id].accent }, `${id}: the current values follow the rule`);
+    assert.equal(STONE_COLORS[id].legacyFill, fill);
+    assert.equal(STONE_COLORS[id].highlight, STONE_COLORS[id].shine);
+    assert.equal(STONE_COLORS[id].shadow, STONE_COLORS[id].accent);
   }
   const groups = Object.fromEntries(listCrystalColorGroups().map((g) => [g.group, g.colors.map((c) => c.id)]));
   assert.deepEqual(groups['Brown & Peach'].slice(-2), ['colorado-topaz', 'light-smoked-topaz']);
@@ -112,7 +114,7 @@ await test('5. S13: the extracted imageColorPalette(), with STONE_COLORS injecte
   // eslint-disable-next-line no-new-func
   const imageColorPalette = new Function('STONE_COLORS', `let imageColorPaletteCache=null;\n${paletteSource}\nreturn imageColorPalette;`)(STONE_COLORS);
   const palette = imageColorPalette();
-  assert.deepEqual(palette, LEGACY_IMAGE_COLOR_IDS.map((id) => ({ id, hex: STONE_COLORS[id].previewColor })));
+  assert.deepEqual(palette, LEGACY_IMAGE_COLOR_IDS.map((id) => ({ id, hex: STONE_COLORS[id].legacyFill })));
   assert.equal(palette.length, 23);
   assert.ok(palette.every((p) => !['colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth'].includes(p.id)));
   assert.equal(imageColorPalette(), palette, 'the second call returns the cached array');

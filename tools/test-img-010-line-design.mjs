@@ -21,7 +21,7 @@ import { CRYSTAL_COLORS, STONE_COLORS, LEGACY_IMAGE_COLOR_IDS } from '../src/ren
 // ({id,hex}, hex from previewColor/fill, identical values) for every direct engine.generateImageLayout()
 // call below with mode:'line-design'. Tests may import src/renderer/** freely; only src/geometry/**
 // itself may not.
-const LINE_DESIGN_PALETTE = CRYSTAL_COLORS.filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const LINE_DESIGN_PALETTE = CRYSTAL_COLORS.filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 
 // IMG-010 -- Line Design: a filled subject traced as an outline chain plus skeleton-derived line
 // chains at SS6 (2.0mm), the interior filled with SS10 (2.8mm) rings, and the existing IMG-013
@@ -380,7 +380,7 @@ await test('6. No pairwise overlap: every stone (outline, line, fill, pocket) sa
 // colour decisions against a from-scratch recomputation over the raw fixture pixels (not calling
 // into LineDesignSampler.js at all).
 const CATALOG_LABS = CRYSTAL_COLORS.map((c) => {
-  const h = c.fill.replace('#', '');
+  const h = c.legacyFill.replace('#', '');
   return rgbToLab(parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16));
 });
 function nearestCatalogId(r, g, b, allowedIds = null) {
@@ -575,7 +575,7 @@ async function callRealGenerateImageStonesLive(layer, imageBufferCacheEntries, l
     resolveImageTransparentMode: (v) => v ?? 'white',
     resolveImageMaskMode: (v) => (v === 'subject' ? 'subject' : 'threshold'),
     resolveImageColorCount: (l) => l.colorCount ?? 1,
-    imageColorPalette: () => Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor })),
+    imageColorPalette: () => Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill })),
     resolveImageSeed: (v) => v ?? 1,
     resolveImageSpread: (v) => v ?? 1,
     resolveImageEdgeWidth: (v) => v ?? 6,
