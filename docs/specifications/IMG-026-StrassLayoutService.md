@@ -98,6 +98,8 @@ come from the caller. The request carries `colorIds`, the ids the app knows; the
 asserts that every `catalogue.json` entry equals the `CrystalColors.js` entry with that id on
 name and on all four colour fields (fill, stroke, shine, accent).
 Build F adds twelve aiOnly entries after these 27, and the test also compares `aiOnly`.
+Build G re-measures 17 fills; each such entry keeps its old value as `prototypeFill`, which the
+service matches against unless `Rules.real_colours` is set.
 
 **S5. Determinism and the two golden checks.** The same PNG bytes and package versions give the
 same stones. Two checks follow:
@@ -1248,6 +1250,128 @@ Detection was cached, and `BUILD_E` and `DEFAULT` ran on the same detections.
 | `computeSizeBreakdownLineTexts()` / "Crystal color" line / cover map check | `src/export/ProductionSheetExporter.js:165` / `:279` / `:624` |
 | `latin1Bytes()` | `src/export/PdfDocument.js:42` |
 
+## Pupils and stone colours (build G)
+
+The third live run (16 Oct 2026, prompt v5 with build F) shows two faults.
+
+- **Missing pupils.** The woman got no pupil at all and the bulldog lost its right one.
+  - The AI draws the pupil touching the lashes or the dark ring around the eye, with the white
+    highlight inside it.
+  - `_find_thr()` needs a separate, round dark blob (roundness ≥ 0.72), so it finds nothing.
+  - The human fallback in `post_process()` measures the largest dark disc around a box. The
+    highlight punches a hole in that disc, so its diameter comes out 12–17 px against the
+    17.2 px it needs.
+- **Screen colours are not stone colours.** The 27 standard fills are hand-picked screen colours,
+  about 10 ΔE2000 from the stones in the supplier's catalogue photos. Some examples:
+  - real Topaz is a deep amber, not bright orange;
+  - real Light Peach is pinker;
+  - real Emerald and Peridot are much darker.
+
+  The service matches the AI image against these fills and the prompt asks the AI for them, so a
+  stone can be picked for a colour it does not have.
+
+### Inscribed pupils (`pupil_inscribed`)
+
+`find_pupils(px, s, main_px, core_only, inscribed)` adds the candidates of `_find_inscribed()`.
+For thresholds L < 25 and L < 16:
+- holes in the dark mask smaller than π(0.9 main_px)² are filled, which covers the highlight and
+  its rim;
+- local maxima of the distance transform with radius ≥ 0.75 main_px are candidates;
+- a candidate needs highlight pixels (L > 85, chroma < 18) covering 2–35 % of its disc, with their
+  centroid within 0.6 r of the centre;
+- at least half its disc must be darker than the threshold;
+- it must be at least 2 main_px from every other candidate.
+
+The diameter is 2r capped at 2.4 main_px, and the candidate carries `inscribed: True`.
+
+On an animal (no face boxes), an inscribed candidate is kept only if another candidate is level
+with it: vertical offset ≤ ¼ of the horizontal distance, diameters within a factor 1.6
+(`_has_partner()`). This stops a nostril with a glint from being taken for an eye. On a person the
+face boxes already filter the candidates.
+
+### Re-measured stone colours (`real_colours`)
+
+Seventeen entries take the mean colour of their stone photo in the supplier's flat-back catalogue
+(pages 7 and 8, 330 dpi, 85 % of the disc), or the owner's supplier list for the two Smoked Topaz
+shades. Stroke, shine and accent follow the IMG-016 shading rule. The old fill is kept as
+`legacyFill` in `CrystalColors.js` and as `prototypeFill` in `catalogue.json`.
+
+| id | Old fill | New fill | Source |
+| --- | --- | --- | --- |
+| `siam` | `#9b1c1c` | `#7a1b2c` | photo, Siam 208 |
+| `light-siam` | `#d9534f` | `#9f112a` | photo, Light Siam 227 |
+| `rose` | `#ef8fb0` | `#d65d9b` | photo, Rose 209 |
+| `fuchsia` | `#c2185b` | `#902b74` | photo, Fuchsia 502 |
+| `amethyst` | `#7e3f98` | `#903f8a` | photo, Amethyst 204 |
+| `sapphire` | `#2269d3` | `#2f83c3` | photo, Sapphire 206 |
+| `light-sapphire` | `#6fa8dc` | `#94b5dd` | photo, Light Sapphire 211 |
+| `aquamarine` | `#3fc1b0` | `#65bcc2` | photo, Aquamarine 202 |
+| `emerald` | `#2aa66a` | `#217456` | photo, Emerald 205 |
+| `peridot` | `#b5cc18` | `#6bb760` | photo, Peridot 214 |
+| `topaz` | `#e08e26` | `#b6741e` | photo, Topaz 203 |
+| `black-diamond` | `#6b6b72` | `#60726d` | photo, Black Diamond 215 |
+| `smoked-topaz` | `#6e4a2e` | `#583f2d` | supplier list, 220 |
+| `light-colorado` | `#b98a5c` | `#c38e43` | photo, Light Colorado Topaz 246 |
+| `light-peach` | `#eec6a4` | `#e2a791` | photo, Light Peach 362 |
+| `light-smoked-topaz` | `#8a6a4a` | `#826244` | supplier list, 221 |
+| `scarlet` | `#d0101e` | `#bb1a33` | photo, Scarlet 276 |
+
+Ten entries are not re-measured:
+- **No photo exists** for Citrine, Gold, Silver, Hematite, Grey, Colorado Topaz and Hyacinth.
+- **Crystal, Crystal AB and Jet** are kept on purpose. A photo of a clear or black faceted stone
+  measures its reflections, not its colour.
+
+Where each fill is used:
+- **The app renders, exports and prompts with `fill`.** The prompt palette line changes with the
+  catalogue, which IMG-022 D6 does not count as a version bump, so `PROMPT_VERSION` stays 5.
+- **`imageColorPalette()` quantises against `legacyFill`**, so legacy image fill modes give the
+  same stones (S13).
+- **The layout service matches against `fill` only under `real_colours`.** `colour.py` gains
+  `BASE_REAL` and `FULL_REAL`; `BASE` and `FULL` use `prototypeFill`. So `PROTOTYPE`, `BUILD_E` and
+  `BUILD_F` are unchanged.
+- **A real palette blocks the neutral colours for warm skin and fur tones** (hue 25–78°, chroma
+  8–65). Pale skin then takes Light Peach instead of Crystal; the real Light Peach is darker than
+  the old screen colour, and without the block Crystal spots appeared in faces.
+
+### Rules
+
+`Rules` gains `pupil_inscribed` and `real_colours`, both `False` by default:
+
+```python
+BUILD_F = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True,
+                human_iris=True, eye_keep=True)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True,
+                human_iris=True, eye_keep=True, pupil_inscribed=True, real_colours=True)
+```
+
+`test_build_f` now compares `BUILD_F` with `BUILD_E`, and its look render uses `prototypeFill`.
+
+### Measured with the repository package (16 Oct 2026, Linux)
+
+On 24 images (the 22 of build F plus the woman and bulldog of the third run), with cached detection,
+`DEFAULT` against `BUILD_F`:
+- 0 violations, stone counts within ±0.3 %, coverage unchanged.
+- **Pupils change on 4 images, and all four are fixes:**
+  - woman (third run): none → 3.68, 3.68;
+  - bulldog (third run): 4.58 → 4.67, 4.67;
+  - bulldog (v4 upload): 4.57 → 4.66, 4.66;
+  - woman (first upload, `new_portrait`): 3.47 → 3.35, 3.35.
+- **No other image gains a pupil.**
+- **The look against the AI image gets worse on most images,** because those images were drawn
+  with the old screen palette. Prompt v5 now sends the re-measured fills, so new AI images are drawn
+  in stone colours.
+
+### Build G anchors (grepped at `6e05624`)
+
+| Anchor | Location |
+| --- | --- |
+| `find_pupils()` | `services/strass-layout/strass_layout/eyes.py:17` |
+| `find_pupils` call / `_eye_boxes` call | `strass_layout/post.py:58` / `:59` |
+| `Palette` / `palette()` / `snap_colours()` / warm penalty | `strass_layout/colour.py:25` / `:38` / `:76` / `:87` |
+| `DEFAULT` | `strass_layout/rules.py:26` |
+| `defineColor()` / first re-measured entry | `src/renderer/CrystalColors.js:35` / `:72` |
+| `imageColorPalette()` | `app.js:753` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -1523,6 +1647,36 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - The single-page RS-3041 SVG stays byte-identical. The PDF differs only in the one "—" byte
   (`3f` → `97`).
 
+**Build G.**
+
+- **Earlier rules are unchanged.** `PROTOTYPE`, `BUILD_E` and `BUILD_F` give their earlier figures;
+  `test_build_f` runs with `BUILD_F`.
+- **`DEFAULT` against `BUILD_F`,** on the 12 images and `tests/fixtures/sunburst_flower.png`:
+  - 0 violations, and minimum gap ≥ 0.100 mm;
+  - stone counts within ±1 %, coverage within ±0.01;
+  - `pupilsMm` and `face` equal (the pupil fix adds nothing on these images);
+  - every colour id in the catalogue.
+- **Palettes.**
+  - The entries with `prototypeFill` are exactly the 17 re-measured ones.
+  - `BASE` and `FULL` use `prototypeFill`; `BASE_REAL` and `FULL_REAL` use `fill`.
+  - `palette(BUILD_F)` is `FULL` and `palette(DEFAULT)` is `FULL_REAL`.
+  - At least 15 of the 17 new fills snap to their own id with `FULL_REAL`.
+- **`find_pupils()` on a synthetic eye** (a black pupil of radius 16 px fused with a black lash band,
+  with a white highlight inside it, `main_px` 12):
+  - without `inscribed` it finds nothing;
+  - with it, it finds one candidate within 4 px of the centre, with a diameter of 24–28.8 px and the
+    highlight within 4 px of its centre.
+- **`_has_partner()`** accepts a level pupil of similar size. It rejects a lone pupil, one offset
+  vertically by more than a quarter of the horizontal distance, and one 1.75 times larger.
+- **App.**
+  - The 17 entries carry the pinned new fill and their old fill as `legacyFill`, with the shading
+    rule; every other entry has `legacyFill === fill`.
+  - `catalogue.json` matches, with `prototypeFill` on exactly the re-measured entries.
+  - `imageColorPalette()` returns `legacyFill`.
+  - The prompt palette line and the SVG exporter use the new fill.
+- **Pinned test values** that described the old screen colours are now checked against
+  `legacyFill`, plus the shading rule for the re-measured entries ("Existing tests" below).
+
 ## Tests the builds must add
 
 **A.**
@@ -1586,6 +1740,11 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   Production Sheet figures.
 - `tools/test-img-022-redraw-provider.mjs` T1 reads Appendix C instead of Appendix B.
 
+**G.**
+
+- `services/strass-layout/tests/test_build_g.py`: the Build G service figures.
+- `tools/test-img-026-stone-colours.mjs` (group `core`): the Build G app figures.
+
 ## Existing tests that grep the text these builds change
 
 - `tools/test-img-022-redraw-provider.mjs`, `tools/test-img-024-flat-artwork-style.mjs`: the
@@ -1647,6 +1806,25 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
     - `:195` (the single-page PDF's SHA-256, the one "—" byte);
     - `:300`–`:305` (margin 54 now tiles under a portrait cover; the cover-map error needs every
       colour).
+
+- Build G changes text these files grep:
+  - `tools/test-crystal-color-catalog.mjs` tests 5, 5a and 5b: they compare `legacyFill`, and the
+    shading rule for re-measured entries.
+  - `tools/test-img-016-neutral-brown-stones.mjs:35` (the stand-in palette uses `legacyFill`) and
+    test 6 (`legacyView()`, with the pre-G channels of the re-measured rule entries for the median
+    check).
+  - `tools/test-img-026-catalogue.mjs` tests 1 and 5 (`legacyFill`).
+  - The quantizer stand-in palettes (`hex: c.previewColor` → `hex: c.legacyFill`) in:
+    - `tools/test-img-010-line-design.mjs:24`, `:383` and `:578`;
+    - `tools/test-img-012-auto-colour-count.mjs:43`, `test-img-013-fill-empty-slots.mjs:39`;
+    - `test-img-015-direct-catalogue-colour.mjs:42` and `:485`;
+    - `test-img-017-vividness.mjs:37`, `test-img-018-whole-image-mask.mjs:33`;
+    - `test-img-021-rotated-image-stones.mjs:28`, `test-img-024-flat-artwork-style.mjs:43`;
+    - `test-img-025-stone-cleanup.mjs:39`.
+  - `tools/test-img-008-vector-first-svg.mjs:130` (the photo SVG's SHA-256) and `:301` (Siam's fill
+    and stroke in the region SVG).
+  - `services/strass-layout/tests/test_build_f.py` (`BUILD_F` instead of `DEFAULT`; the look render
+    uses `prototypeFill`).
 
 ## Anchors (grepped at `7a9e482`)
 
