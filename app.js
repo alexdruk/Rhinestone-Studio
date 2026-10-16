@@ -3196,6 +3196,13 @@ function updateScaleBar(s,dpr){
   el('scaleBarTrack').style.width=barPx+'px';
   el('scaleBarLabel').textContent=`${formatLengthDisplay(stepMm,project.units)} ${unitSuffix(project.units)}`;
 }
+// IMG-026I: the design canvas can show the stones on the product colour, so the gaps between
+// image stones read as they will on the real piece. A view-only choice like the safe-area guide:
+// it is not saved in the project and never changes the StoneLayout. Flat Sheet has no product
+// colour and keeps the white background. In Design, Paper.js draws on the transparent canvas, so
+// drawLayout() also sets the canvas element's CSS background; White clears it back to the
+// stylesheet's --color-canvas-bg.
+function canvasBackgroundColor(){return el('canvasBackground').value==='product'&&currentObjectTemplate().preview.kind!=='sheet'?project.cupColor:'#fbfdff'}
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
   // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
@@ -3206,8 +3213,9 @@ function drawLayout(){
   // ...) means every existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
   // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
   // blocked by this guard.
+  layoutCanvas.style.background=canvasBackgroundColor()==='#fbfdff'?'':canvasBackgroundColor();
   if(drawingTool.isActive)return;
-  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units});layoutTransform={s,ox,oy,dpr};
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor()});layoutTransform={s,ox,oy,dpr};
   updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
@@ -5368,7 +5376,7 @@ el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 // S-104: the workspace warning's own "Center Text" button -- same shared function, so it can only
 // ever move x/y (never any other property), exactly like the Text Lightbox's Center on Object.
 el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
-el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();el('status').textContent=el('canvasBackground').value==='product'?'Background: product colour':'Background: white'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');
 // S-110: singleOtherSelectedLayer() looks at the selection as it stood *before* the layer about to

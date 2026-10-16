@@ -15,12 +15,13 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
+from skimage.feature import peak_local_max
 
 from . import darkdots
 from .colour import palette, snap_colours, stone_colours
 from .chains import chain_mask
 from .colsmooth import family_fix
-from .eyes import build_eye_copy, find_pupils
+from .eyes import build_eye_copy, find_pupils, glint_angles
 from .geometry import GAP, SS4, fill, strict_mask, violations
 from .rules import DEFAULT
 
@@ -54,6 +55,25 @@ def _has_partner(c, cands):
     return False
 
 
+def _best_disc(dt, hl, cx, cy, min_r):
+    """The dark disc a human pupil fallback takes. The pupil is often fused with lashes or hair
+    into one dark region, so every local maximum of the distance transform with radius at least
+    min_r is a candidate: one holding highlight pixels within 1.3 radii wins over one without,
+    then the one nearest the eye-box centre (cx, cy). Falls back to the largest disc."""
+    peaks = peak_local_max(dt, min_distance=max(1, int(min_r)), threshold_abs=min_r, exclude_border=False)
+    if not len(peaks):
+        return np.unravel_index(np.argmax(dt), dt.shape)
+    hy, hx = np.nonzero(hl)
+    best = None
+    for yy, xx in peaks:
+        r = dt[yy, xx]
+        lit = bool(len(hy)) and np.hypot(hy - yy, hx - xx).min() <= 1.3 * r
+        key = (not lit, np.hypot(xx - cx, yy - cy))
+        if best is None or key < best[0]:
+            best = (key, yy, xx)
+    return best[1], best[2]
+
+
 def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     """Return (stones, info). stones are dicts {x, y, size, d, color} in frame mm,
     rounded to 0.001 as the prototype wrote them; info has the strict mask and the
@@ -84,12 +104,21 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
             x0, x1 = int(max(0, bx - r0)), int(bx + r0)
             sub = Lim[y0:y1, x0:x1]
             for thr in (20, 28, 36):
-                dk = ndi.binary_opening(sub < thr, iterations=1)
+                dk = sub < thr
+                if rules.lively_eyes:
+                    holes = ndi.binary_fill_holes(dk) & ~dk
+                    hlab, nh = ndi.label(holes)
+                    small = np.zeros(nh + 1, bool)
+                    small[1:] = ndi.sum(holes, hlab, range(1, nh + 1)) < np.pi * (0.9 * main_px) ** 2
+                    dk = dk | small[hlab]
+                dk = ndi.binary_opening(dk, iterations=1)
                 if not dk.any():
                     continue
                 dt = ndi.distance_transform_edt(dk)
                 yy, xx = np.unravel_index(np.argmax(dt), dt.shape)
-                Di = 2 * dt.max()
+                if rules.lively_eyes:
+                    yy, xx = _best_disc(dt, sub > 85, bx - x0, by - y0, 0.65 * main_px)
+                Di = 2 * dt[yy, xx]
                 if Di >= 1.3 * main_px:
                     hl = sub > 85
                     if hl.any():
@@ -98,13 +127,17 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
                         hy, hx = hy[k], hx[k]
                     else:
                         hy, hx = yy - Di / 3, xx + Di / 3
-                    cands.append(dict(x=float(xx + x0), y=float(yy + y0), diam_mm=float(Di * s * 1.15), roundness=1.0, hx=float(hx + x0), hy=float(hy + y0)))
+                    cands.append(dict(x=float(xx + x0), y=float(yy + y0), diam_mm=float(Di * s * (1.0 if rules.lively_eyes else 1.15)), roundness=1.0, hx=float(hx + x0), hy=float(hy + y0)))
                     break
     if len(cands) == 2:
         d0, d1 = cands[0]["diam_mm"], cands[1]["diam_mm"]
         if max(d0, d1) / min(d0, d1) < 1.6:
             for c in cands:
                 c["diam_mm"] = (d0 + d1) / 2
+    if rules.lively_eyes and cands:
+        for c in cands:
+            c["r_px"] = c["diam_mm"] / s / 2
+        glint_angles(cands, cv2.cvtColor(px.onwhite, cv2.COLOR_RGB2LAB), a, boxes is not None)
     pre = []
     zones = []
     for c in cands:
@@ -220,5 +253,5 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     stones = [{"x": round(float(x), 3), "y": round(float(y), 3), "size": SIZE_KEYS[float(d)], "d": float(d), "color": c}
               for (x, y), d, c in zip(P, D, C)]
     clock.lap("check")
-    info = {"mask": mask, "face": "human" if boxes is not None else "animal", "pupilsMm": pupils}
+    info = {"mask": mask, "face": "human" if boxes is not None else "animal", "pupilsMm": pupils, "eyeZones": zones}
     return stones, info

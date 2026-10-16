@@ -1,4 +1,4 @@
-"""IMG-026H: the DEFAULT rules (eight more catalogue colours) against BUILD_G.
+"""IMG-026H: the BUILD_H rules (eight more catalogue colours) against BUILD_G.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "More catalogue colours (build H)" and the
 Build H acceptance figures.
@@ -7,7 +7,7 @@ import unittest
 
 import numpy as np
 
-from strass_layout import BUILD_G, DEFAULT, distinct
+from strass_layout import BUILD_G, BUILD_H, distinct
 from strass_layout.colour import ALL_EXTRA_IDS, CAT, CAT_IDS, EXTRA_H_IDS, FULL_REAL, PLUS_REAL, palette, snap_colours
 from tests import support
 
@@ -26,7 +26,7 @@ class Palettes(unittest.TestCase):
         self.assertEqual(PLUS_REAL.ids, CAT_IDS)
         self.assertEqual(FULL_REAL.ids, CAT_IDS[:-8])
         self.assertIs(palette(BUILD_G), FULL_REAL)
-        self.assertIs(palette(DEFAULT), PLUS_REAL)
+        self.assertIs(palette(BUILD_H), PLUS_REAL)
         self.assertTrue(set(H) <= set(ALL_EXTRA_IDS))
         self.assertIs(distinct.ALL_EXTRA_IDS, ALL_EXTRA_IDS)
 
@@ -45,7 +45,7 @@ class DefaultAgainstBuildG(unittest.TestCase):
         for name in IMAGES:
             with self.subTest(image=name):
                 g = support.layout_result(name, BUILD_G)["report"]
-                h = support.layout_result(name, DEFAULT)["report"]
+                h = support.layout_result(name, BUILD_H)["report"]
                 self.assertEqual(h["violations"], 0)
                 self.assertGreaterEqual(h["minGapMm"], MIN_GAP_MM)
                 self.assertLessEqual(abs(h["stones"] - g["stones"]), 0.01 * g["stones"])

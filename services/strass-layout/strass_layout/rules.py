@@ -1,10 +1,10 @@
-"""Which IMG-026E to H rules the pipeline applies on top of the prototype.
+"""Which IMG-026E to I rules the pipeline applies on top of the prototype.
 
 PROTOTYPE reproduces the prototype exactly (the equivalence and golden tests run with it);
-BUILD_E, BUILD_F and BUILD_G are what builds E, F and G shipped; DEFAULT is what the service ships.
+BUILD_E to BUILD_H are what builds E to H shipped; DEFAULT is what the service ships.
 See docs/specifications/IMG-026-StrassLayoutService.md, "Layout quality (build E)",
-"Colour and eyes (build F)", "Pupils and stone colours (build G)" and
-"More catalogue colours (build H)".
+"Colour and eyes (build F)", "Pupils and stone colours (build G)",
+"More catalogue colours (build H)" and "Faces and eyes (build I)".
 """
 from dataclasses import dataclass
 
@@ -23,6 +23,10 @@ class Rules:
     pupil_inscribed: bool = False
     real_colours: bool = False
     more_colours: bool = False
+    lively_eyes: bool = False
+    skin_no_wine: bool = False
+    soft_outlines: bool = False
+    calm_skin: bool = False
 
 
 PROTOTYPE = Rules(pupil_core_only=False, keep_chains=False)
@@ -30,5 +34,8 @@ BUILD_E = Rules(pupil_core_only=True, keep_chains=True)
 BUILD_F = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=True, eye_keep=True)
 BUILD_G = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=True, eye_keep=True,
                 pupil_inscribed=True, real_colours=True)
-DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=True, eye_keep=True,
+BUILD_H = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=True, eye_keep=True,
                 pupil_inscribed=True, real_colours=True, more_colours=True)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=True, eye_keep=True,
+                pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
+                soft_outlines=True, calm_skin=True)
