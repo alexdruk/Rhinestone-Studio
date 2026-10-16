@@ -9,13 +9,18 @@
  * These are decorative, hand-picked approximations for on-screen preview and production-sheet
  * labeling. Names are generic gemstone/color words in common rhinestone-industry use — this
  * catalog does not reference any manufacturer, and its hex values are not calibrated to match any
- * specific manufacturer's commercial color line, except the IMG-026F aiOnly entries, whose fills
- * were sampled from catalogue photos (see the comment above them).
+ * specific manufacturer's commercial color line, except the IMG-026F aiOnly entries and the
+ * entries IMG-026G re-measured (those with a legacyFill), whose fills were sampled from a
+ * supplier's catalogue photos; stroke, shine and accent of a re-measured entry follow the IMG-016
+ * shading rule.
  *
  * Each entry:
  *   id          stable, unique, lowercase-kebab string — the value stored on Stone.color/layer.color
  *   name        display name
  *   group       UI grouping label only (never read by geometry/render code)
+ *   legacyFill  IMG-026G: the fill before the re-measure (equal to fill for an entry that was not
+ *               re-measured). app.js's imageColorPalette() quantises against it, so legacy image
+ *               fill modes give the same stones as before.
  *   aiOnly      IMG-026F: true for the twelve colours only Image -> Strass (AI layout) uses. They
  *               render, count and print like any other colour, but the standard colour selectors
  *               (listCrystalColorGroups() and app.js's populateStoneColorOptions()) leave them out.
@@ -32,12 +37,13 @@
  * change to any of them.
  */
 
-function defineColor({ id, name, group, aiOnly = false, fill, stroke, shine, accent }) {
+function defineColor({ id, name, group, aiOnly = false, fill, stroke, shine, accent, legacyFill = null }) {
   return {
     id,
     name,
     group,
     aiOnly,
+    legacyFill: legacyFill || fill,
     previewColor: fill,
     highlight: shine,
     shadow: accent,
@@ -70,53 +76,53 @@ const CRYSTAL_COLOR_LIST = [
   // -- Red & Pink -----------------------------------------------------------------------------
   defineColor({
     id: 'siam', name: 'Siam', group: 'Red & Pink',
-    fill: '#9b1c1c', stroke: '#4a0d0d', shine: '#ffd9d9', accent: '#6e1313'
+    fill: '#7a1b2c', stroke: '#440f19', shine: '#e8d8db', accent: '#5e1522', legacyFill: '#9b1c1c'
   }),
   defineColor({
     id: 'light-siam', name: 'Light Siam', group: 'Red & Pink',
-    fill: '#d9534f', stroke: '#8a2f2c', shine: '#ffe0dd', accent: '#b5423e'
+    fill: '#9f112a', stroke: '#590a18', shine: '#efd7db', accent: '#7a0d20', legacyFill: '#d9534f'
   }),
   defineColor({
-    // Pre-existing id/values (RS-0003.5C2) — kept byte-identical.
+    // Pre-existing id (RS-0003.5C2); IMG-026G re-measured its colour values.
     id: 'rose', name: 'Rose', group: 'Red & Pink',
-    fill: '#ef8fb0', stroke: '#8a2c4d', shine: '#ffe2ed', accent: '#d75384'
+    fill: '#d65d9b', stroke: '#783457', shine: '#f8e3ee', accent: '#a54877', legacyFill: '#ef8fb0'
   }),
   defineColor({
     id: 'fuchsia', name: 'Fuchsia', group: 'Red & Pink',
-    fill: '#c2185b', stroke: '#6e0d33', shine: '#ffd6ea', accent: '#9c1249'
+    fill: '#902b74', stroke: '#511841', shine: '#ecdbe7', accent: '#6f2159', legacyFill: '#c2185b'
   }),
   // -- Purple & Blue --------------------------------------------------------------------------
   defineColor({
     id: 'amethyst', name: 'Amethyst', group: 'Purple & Blue',
-    fill: '#7e3f98', stroke: '#4a2260', shine: '#eaddf7', accent: '#5c2d72'
+    fill: '#903f8a', stroke: '#51234d', shine: '#ecdeeb', accent: '#6f316a', legacyFill: '#7e3f98'
   }),
   defineColor({
-    // Pre-existing id/values (RS-0003.5C2) — kept byte-identical.
+    // Pre-existing id (RS-0003.5C2); IMG-026G re-measured its colour values.
     id: 'sapphire', name: 'Sapphire', group: 'Purple & Blue',
-    fill: '#2269d3', stroke: '#0f356f', shine: '#b8d8ff', accent: '#174ca2'
+    fill: '#2f83c3', stroke: '#1a496d', shine: '#dceaf5', accent: '#246596', legacyFill: '#2269d3'
   }),
   defineColor({
     id: 'light-sapphire', name: 'Light Sapphire', group: 'Purple & Blue',
-    fill: '#6fa8dc', stroke: '#2e5c8a', shine: '#dbeeff', accent: '#4a80b5'
+    fill: '#94b5dd', stroke: '#53657c', shine: '#edf2f9', accent: '#728baa', legacyFill: '#6fa8dc'
   }),
   // -- Green & Aqua ---------------------------------------------------------------------------
   defineColor({
     id: 'aquamarine', name: 'Aquamarine', group: 'Green & Aqua',
-    fill: '#3fc1b0', stroke: '#1f6e64', shine: '#d4fff9', accent: '#2a9d8f'
+    fill: '#65bcc2', stroke: '#39696d', shine: '#e5f4f5', accent: '#4e9195', legacyFill: '#3fc1b0'
   }),
   defineColor({
-    // Pre-existing id/values (RS-0003.5C2) — kept byte-identical.
+    // Pre-existing id (RS-0003.5C2); IMG-026G re-measured its colour values.
     id: 'emerald', name: 'Emerald', group: 'Green & Aqua',
-    fill: '#2aa66a', stroke: '#0b5633', shine: '#c7ffdf', accent: '#16814e'
+    fill: '#217456', stroke: '#124130', shine: '#d9e7e2', accent: '#195942', legacyFill: '#2aa66a'
   }),
   defineColor({
     id: 'peridot', name: 'Peridot', group: 'Green & Aqua',
-    fill: '#b5cc18', stroke: '#6c7d0e', shine: '#f2ffcf', accent: '#8a9c14'
+    fill: '#6bb760', stroke: '#3c6636', shine: '#e6f3e4', accent: '#528d4a', legacyFill: '#b5cc18'
   }),
   // -- Yellow & Amber -------------------------------------------------------------------------
   defineColor({
     id: 'topaz', name: 'Topaz', group: 'Yellow & Amber',
-    fill: '#e08e26', stroke: '#8a5210', shine: '#ffe3b0', accent: '#b56d1c'
+    fill: '#b6741e', stroke: '#664111', shine: '#f3e7d9', accent: '#8c5917', legacyFill: '#e08e26'
   }),
   defineColor({
     id: 'citrine', name: 'Citrine', group: 'Yellow & Amber',
@@ -142,7 +148,7 @@ const CRYSTAL_COLOR_LIST = [
   }),
   defineColor({
     id: 'black-diamond', name: 'Black Diamond', group: 'Clear & Neutral',
-    fill: '#6b6b72', stroke: '#3c3c40', shine: '#e6e6e7', accent: '#525258'
+    fill: '#60726d', stroke: '#36403d', shine: '#e4e7e6', accent: '#4a5854', legacyFill: '#6b6b72'
   }),
   defineColor({
     id: 'grey', name: 'Grey', group: 'Clear & Neutral',
@@ -150,15 +156,15 @@ const CRYSTAL_COLOR_LIST = [
   }),
   defineColor({
     id: 'smoked-topaz', name: 'Smoked Topaz', group: 'Brown & Peach',
-    fill: '#6e4a2e', stroke: '#3e291a', shine: '#e6e0db', accent: '#553923'
+    fill: '#583f2d', stroke: '#312319', shine: '#e3dedb', accent: '#443123', legacyFill: '#6e4a2e'
   }),
   defineColor({
     id: 'light-colorado', name: 'Light Colorado Topaz', group: 'Brown & Peach',
-    fill: '#b98a5c', stroke: '#684d34', shine: '#f3ebe3', accent: '#8e6a47'
+    fill: '#c38e43', stroke: '#6d5026', shine: '#f5ecdf', accent: '#966d34', legacyFill: '#b98a5c'
   }),
   defineColor({
     id: 'light-peach', name: 'Light Peach', group: 'Brown & Peach',
-    fill: '#eec6a4', stroke: '#856f5c', shine: '#fcf5f0', accent: '#b7987e'
+    fill: '#e2a791', stroke: '#7f5e51', shine: '#faf0ec', accent: '#ae8170', legacyFill: '#eec6a4'
   }),
   // -- IMG-026 (D2): appended after light-peach, same shading rule as the IMG-016 entries. The
   // layout service's strass_layout/catalogue.json must match these (S4). -----------------------
@@ -168,11 +174,11 @@ const CRYSTAL_COLOR_LIST = [
   }),
   defineColor({
     id: 'light-smoked-topaz', name: 'Light Smoked Topaz', group: 'Brown & Peach',
-    fill: '#8a6a4a', stroke: '#4d3b29', shine: '#ebe6e0', accent: '#6a5239'
+    fill: '#826244', stroke: '#493726', shine: '#eae4df', accent: '#644b34', legacyFill: '#8a6a4a'
   }),
   defineColor({
     id: 'scarlet', name: 'Scarlet', group: 'Red & Pink',
-    fill: '#d0101e', stroke: '#740911', shine: '#f7d6d9', accent: '#a00c17'
+    fill: '#bb1a33', stroke: '#690f1d', shine: '#f3d8dc', accent: '#901427', legacyFill: '#d0101e'
   }),
   defineColor({
     id: 'hyacinth', name: 'Hyacinth', group: 'Yellow & Amber',

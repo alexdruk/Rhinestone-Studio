@@ -41,6 +41,19 @@ def _eye_boxes(px, models):
     return out
 
 
+def _has_partner(c, cands):
+    """An inscribed pupil on an animal needs another pupil level with it: the vertical offset at
+    most a quarter of the horizontal distance, and diameters within a factor 1.6."""
+    for o in cands:
+        if o is c:
+            continue
+        dx, dy = abs(o["x"] - c["x"]), abs(o["y"] - c["y"])
+        ratio = max(o["diam_mm"], c["diam_mm"]) / min(o["diam_mm"], c["diam_mm"])
+        if dx > 0 and dy <= 0.25 * dx and ratio < 1.6:
+            return True
+    return False
+
+
 def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     """Return (stones, info). stones are dicts {x, y, size, d, color} in frame mm,
     rounded to 0.001 as the prototype wrote them; info has the strict mask and the
@@ -55,8 +68,10 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     keep = D <= 2.0
     P, D, C = P[keep], D[keep], [c for c, k in zip(C, keep) if k]
 
-    cands = find_pupils(px, s, main_px, rules.pupil_core_only)
+    cands = find_pupils(px, s, main_px, rules.pupil_core_only, rules.pupil_inscribed)
     boxes = _eye_boxes(px, models)
+    if boxes is None:
+        cands = [c for c in cands if not c.get("inscribed") or _has_partner(c, cands)]
     Lim = None
     if boxes is not None:
         cands = [c for c in cands if any(np.hypot(c["x"] - bx, c["y"] - by) < 0.6 * bw for bx, by, bw in boxes)]

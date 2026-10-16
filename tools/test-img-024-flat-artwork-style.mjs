@@ -40,7 +40,7 @@ async function test(name, fn) {
 const repoUrl = new URL('..', import.meta.url);
 const appJs = await readFile(fileURLToPath(new URL('app.js', repoUrl)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('index.html', repoUrl)), 'utf8');
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 const { chooseAiStonePalette, weightedLabDistance } = WeightedLabPalette;
 const engine = new GeometryEngine();
 

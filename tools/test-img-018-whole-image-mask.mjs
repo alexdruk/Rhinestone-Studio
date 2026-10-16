@@ -30,7 +30,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 const appJs = await readFile(fileURLToPath(new URL('../app.js', import.meta.url)), 'utf8');
 const indexHtml = await readFile(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
 

@@ -59,6 +59,8 @@ export const GROUPS = {
     // IMG-026 build B: the D2 colours, the S4 cross-check with the layout service's catalogue.json
     // and the S13 legacy palette pin in app.js.
     'test-img-026-catalogue.mjs',
+    // IMG-026G: the catalogue colours re-measured from the supplier catalogue.
+    'test-img-026-stone-colours.mjs',
     // IMG-026 build C1: the ai-layout engine branch (placement, k clamp, gap flag, colour swaps,
     // rotation) and the image-only SS4.
     'test-img-026-ai-layout-engine.mjs',

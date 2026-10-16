@@ -40,7 +40,7 @@ function parseHex(hex) {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 
 // ---- Fixtures (spec section E, reproduced verbatim -- {r,g,b,data} with data unconditionally 255,
 // i.e. every pixel counted as subject, exactly as chooseAutoColorCount()'s own contract expects a

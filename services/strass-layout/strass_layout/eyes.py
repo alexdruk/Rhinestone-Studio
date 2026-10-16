@@ -14,14 +14,60 @@ GAPX = GAP + 0.035
 PUPIL_SIZES = (6.4, 4.7, 4.0, 2.8, 2.0)
 
 
-def find_pupils(px, s, main_px, core_only=False):
+def find_pupils(px, s, main_px, core_only=False, inscribed=False):
     """Pupil candidates. With core_only (Rules.pupil_core_only) a pupil is the dark blob itself,
-    not the dark blob plus a dark iris around it."""
+    not the dark blob plus a dark iris around it. With inscribed (Rules.pupil_inscribed) a pupil
+    that touches other dark stones is also found, as the largest dark disc around a highlight;
+    those candidates carry inscribed=True."""
     out = []
     for thr in (25, 16, 10):
         for c in _find_thr(px, s, main_px, thr, core_only):
             if all(np.hypot(c["x"] - o["x"], c["y"] - o["y"]) > main_px * 2 for o in out):
                 out.append(c)
+    if inscribed:
+        out += _find_inscribed(px, s, main_px, out)
+    return out
+
+
+def _find_inscribed(px, s, main_px, existing):
+    """Dark discs of radius at least 0.75 main_px, with small holes (a highlight and its rim)
+    filled, that hold a highlight near their centre. The diameter is capped at 2.4 main_px."""
+    rgb, a = px.rgb, px.a
+    w = np.clip(rgb * a[..., None] + (1 - a[..., None]), 0, 1)
+    LAB = cv2.cvtColor((w * 255).astype(np.uint8), cv2.COLOR_RGB2LAB).astype(float)
+    L = LAB[..., 0] / 2.55
+    CH = np.hypot(LAB[..., 1] - 128, LAB[..., 2] - 128)
+    hl = (L > 85) & (CH < 18) & (a > 0.5)
+    out = []
+    for thr in (25, 16):
+        dark = (L < thr) & (a > 0.5)
+        holes = ndi.binary_fill_holes(dark) & ~dark
+        hlab, nh = ndi.label(holes)
+        small = np.zeros(nh + 1, bool)
+        small[1:] = ndi.sum(holes, hlab, range(1, nh + 1)) < np.pi * (0.9 * main_px) ** 2
+        filled = ndi.binary_opening(dark | small[hlab], iterations=1)
+        dt = ndi.distance_transform_edt(filled)
+        peak = (dt == ndi.maximum_filter(dt, size=max(3, int(main_px)))) & (dt >= 0.75 * main_px)
+        ys, xs = np.nonzero(peak)
+        for k in np.argsort(-dt[ys, xs]):
+            y, x, r = int(ys[k]), int(xs[k]), float(dt[ys[k], xs[k]])
+            if any(np.hypot(x - c["x"], y - c["y"]) < 2 * main_px for c in list(existing) + out):
+                continue
+            y0, x0 = max(0, y - int(r)), max(0, x - int(r))
+            yy, xx = np.mgrid[y0:y + int(r) + 1, x0:x + int(r) + 1]
+            inside = np.hypot(yy - y, xx - x) <= r
+            h = hl[yy, xx] & inside
+            n_in = inside.sum()
+            if h.sum() < 0.02 * n_in or h.sum() > 0.35 * n_in:
+                continue
+            if ((L[yy, xx] < thr) & inside).sum() < 0.5 * n_in:
+                continue
+            hy, hx = np.nonzero(h)
+            hx, hy = hx.mean() + x0, hy.mean() + y0
+            if np.hypot(hx - x, hy - y) > 0.6 * r:
+                continue
+            out.append(dict(x=float(x), y=float(y), diam_mm=float(min(2 * r, 2.4 * main_px) * s), roundness=1.0,
+                            hx=float(hx), hy=float(hy), inscribed=True))
     return out
 
 

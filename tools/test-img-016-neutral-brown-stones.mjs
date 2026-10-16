@@ -32,7 +32,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 const hexToRgb = (hex) => {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -180,6 +180,31 @@ const applyRule = (fill) => {
     accent: rgbToHex(v.map((c) => Math.round(RULE.accent * c)))
   };
 };
+// IMG-026G re-measured several entries from the supplier catalogue; each keeps its old fill as
+// legacyFill. The pre-IMG-026G channels of the re-measured rule entries, for the median check below.
+const ORIGINAL_CHANNELS = {
+  siam: ['#9b1c1c', '#4a0d0d', '#ffd9d9', '#6e1313'],
+  'light-siam': ['#d9534f', '#8a2f2c', '#ffe0dd', '#b5423e'],
+  rose: ['#ef8fb0', '#8a2c4d', '#ffe2ed', '#d75384'],
+  fuchsia: ['#c2185b', '#6e0d33', '#ffd6ea', '#9c1249'],
+  amethyst: ['#7e3f98', '#4a2260', '#eaddf7', '#5c2d72'],
+  sapphire: ['#2269d3', '#0f356f', '#b8d8ff', '#174ca2'],
+  'light-sapphire': ['#6fa8dc', '#2e5c8a', '#dbeeff', '#4a80b5'],
+  aquamarine: ['#3fc1b0', '#1f6e64', '#d4fff9', '#2a9d8f'],
+  emerald: ['#2aa66a', '#0b5633', '#c7ffdf', '#16814e'],
+  peridot: ['#b5cc18', '#6c7d0e', '#f2ffcf', '#8a9c14'],
+  topaz: ['#e08e26', '#8a5210', '#ffe3b0', '#b56d1c']
+};
+function legacyView(c) {
+  if (c.legacyFill === c.fill) return c;
+  assert.deepEqual(applyRule(c.fill), { stroke: c.stroke, shine: c.shine, accent: c.accent }, `${c.id}: re-measured channels follow the rule`);
+  if (ORIGINAL_CHANNELS[c.id]) {
+    const [fill, stroke, shine, accent] = ORIGINAL_CHANNELS[c.id];
+    assert.equal(c.legacyFill, fill, `${c.id}: legacyFill is the pre-IMG-026G fill`);
+    return { ...c, fill, stroke, shine, accent };
+  }
+  return { ...c, fill: c.legacyFill, ...applyRule(c.legacyFill) };
+}
 const median = (values) => {
   const s = [...values].sort((a, b) => a - b);
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
@@ -188,20 +213,20 @@ const median = (values) => {
 await test('6. decision 1: the six entries are appended after silver with their pinned values, which are the derivation rule applied to fill; the rule\'s constants are the medians over the 15 rule entries', () => {
   assert.equal(CRYSTAL_COLORS.length, 39);
   assert.equal(CRYSTAL_COLORS[16].id, 'silver');
-  const appended = CRYSTAL_COLORS.slice(17, 23).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
+  const appended = CRYSTAL_COLORS.slice(17, 23).map(legacyView).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
   assert.deepEqual(appended, PINNED_NEW_ENTRIES);
   for (const entry of PINNED_NEW_ENTRIES) {
     assert.deepEqual(applyRule(entry.fill), { stroke: entry.stroke, shine: entry.shine, accent: entry.accent }, `${entry.id} follows the rule`);
-    const color = STONE_COLORS[entry.id];
-    assert.equal(color.previewColor, entry.fill);
-    assert.equal(color.highlight, entry.shine);
-    assert.equal(color.shadow, entry.accent);
+    const color = legacyView(STONE_COLORS[entry.id]);
+    assert.equal(color.legacyFill, entry.fill);
+    assert.equal(STONE_COLORS[entry.id].highlight, STONE_COLORS[entry.id].shine);
+    assert.equal(STONE_COLORS[entry.id].shadow, STONE_COLORS[entry.id].accent);
   }
   const lum = (hex) => hexToRgb(hex).reduce((a, b) => a + b, 0);
   assert.ok(lum(STONE_COLORS.hematite.stroke) < lum(STONE_COLORS.hematite.fill), 'hematite\'s stroke is darker than its fill');
   assert.doesNotThrow(() => validateCrystalColorCatalog());
 
-  const ruleEntries = CRYSTAL_COLORS.slice(0, 17).filter((c) => c.id !== 'jet' && c.id !== 'crystal');
+  const ruleEntries = CRYSTAL_COLORS.slice(0, 17).filter((c) => c.id !== 'jet' && c.id !== 'crystal').map(legacyView);
   assert.equal(ruleEntries.length, 15);
   const ratios = { stroke: [], accent: [], shine: [] };
   for (const c of ruleEntries) {

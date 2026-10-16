@@ -87,6 +87,21 @@ const LEGACY_COLORS = {
   emerald: { fill: '#2aa66a', stroke: '#0b5633', shine: '#c7ffdf', accent: '#16814e' }
 };
 
+// IMG-026G: an entry re-measured from the supplier catalogue keeps its old fill as legacyFill, and its
+// stroke, shine and accent follow the IMG-016 shading rule of the new fill. channels() returns the
+// pre-IMG-026G values for such an entry (after checking the rule), so the pins below still hold.
+const hex2 = (n) => n.toString(16).padStart(2, '0');
+function shadingRule(fill) {
+  const rgb = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16));
+  const channel = (f) => `#${rgb.map((v) => hex2(f(v))).join('')}`;
+  return [channel((v) => Math.round(0.56 * v)), channel((v) => Math.round(v + 0.83 * (255 - v))), channel((v) => Math.round(0.77 * v))];
+}
+function channels(c, pinned) {
+  if (c.legacyFill === c.fill) return [c.fill, c.stroke, c.shine, c.accent];
+  assert.deepEqual([c.stroke, c.shine, c.accent], shadingRule(c.fill), `${c.id}: re-measured channels follow the shading rule`);
+  return [c.legacyFill, ...pinned.slice(1)];
+}
+
 await test('1. every required display name is present in the catalog (39 colors since IMG-026F)', () => {
   assert.equal(CRYSTAL_COLORS.length, 39, `expected 39 catalog colors, found ${CRYSTAL_COLORS.length}`);
   const names = CRYSTAL_COLORS.map((c) => c.name);
@@ -139,10 +154,11 @@ await test('5. the 7 pre-existing ids keep byte-identical fill/stroke/shine/acce
   for (const [id, legacy] of Object.entries(LEGACY_COLORS)) {
     const color = getCrystalColor(id);
     assert.ok(color, `expected legacy id "${id}" to still resolve to a catalog entry`);
-    assert.equal(color.fill, legacy.fill, `${id}.fill changed`);
-    assert.equal(color.stroke, legacy.stroke, `${id}.stroke changed`);
-    assert.equal(color.shine, legacy.shine, `${id}.shine changed`);
-    assert.equal(color.accent, legacy.accent, `${id}.accent changed`);
+    const [fill, stroke, shine, accent] = channels(color, [legacy.fill, legacy.stroke, legacy.shine, legacy.accent]);
+    assert.equal(fill, legacy.fill, `${id}.fill changed`);
+    assert.equal(stroke, legacy.stroke, `${id}.stroke changed`);
+    assert.equal(shine, legacy.shine, `${id}.shine changed`);
+    assert.equal(accent, legacy.accent, `${id}.accent changed`);
     if (legacy.name) assert.equal(color.name, legacy.name, `${id}.name changed`);
   }
   // 'jet' is the one documented label-only change (Jet Black -> Jet); id/values are unchanged above.
@@ -150,12 +166,12 @@ await test('5. the 7 pre-existing ids keep byte-identical fill/stroke/shine/acce
 });
 
 await test('5a. IMG-016: the 17 pre-IMG-016 entries keep their catalogue position, group and four render channels byte-for-byte', () => {
-  const actual = CRYSTAL_COLORS.slice(0, 17).map((c) => [c.id, c.group, c.fill, c.stroke, c.shine, c.accent]);
+  const actual = CRYSTAL_COLORS.slice(0, 17).map((c, i) => [c.id, c.group, ...channels(c, PRE_IMG016_ENTRIES[i].slice(2))]);
   assert.deepEqual(actual, PRE_IMG016_ENTRIES);
 });
 
 await test('5b. IMG-016: the six new entries are appended last, in order, with their pinned name, group and values', () => {
-  const actual = CRYSTAL_COLORS.slice(17, 23).map((c) => [c.id, c.name, c.group, c.fill, c.stroke, c.shine, c.accent]);
+  const actual = CRYSTAL_COLORS.slice(17, 23).map((c, i) => [c.id, c.name, c.group, ...channels(c, IMG016_ENTRIES[i].slice(3))]);
   assert.deepEqual(actual, IMG016_ENTRIES);
   assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold', 'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine', 'jet-hematite']);
 });

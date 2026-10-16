@@ -8,6 +8,11 @@ is read once, at import.
 BASE is the palette without the aiOnly colours (the prototype's 27); FULL has all
 of them. Rules.extra_colours picks FULL.
 
+IMG-026G re-measured some fills from the supplier catalogue; such an entry keeps the
+old value as "prototypeFill". BASE and FULL match against the old values, so the
+prototype and builds E and F are unchanged; BASE_REAL and FULL_REAL use "fill".
+Rules.real_colours picks the REAL palettes.
+
 Ported from rs_fix.py (stone_colours, snap_colours and the colour constants).
 """
 import json
@@ -25,17 +30,23 @@ EXTRA_IDS = [k for k in CAT_IDS if CAT[k].get("aiOnly")]
 class Palette:
     """Catalogue ids and their Lab colours, in catalogue order."""
 
-    def __init__(self, ids):
+    def __init__(self, ids, real=False):
         self.ids = list(ids)
-        self.lab = rgb2lab(np.array([[int(CAT[k]["fill"][i:i + 2], 16) / 255 for i in (1, 3, 5)] for k in self.ids])[None])[0]
+        self.fills = [CAT[k]["fill"] if real else CAT[k].get("prototypeFill", CAT[k]["fill"]) for k in self.ids]
+        self.lab = rgb2lab(np.array([[int(f[i:i + 2], 16) / 255 for i in (1, 3, 5)] for f in self.fills])[None])[0]
+        self.real = real
 
 
 BASE = Palette([k for k in CAT_IDS if k not in EXTRA_IDS])
 FULL = Palette(CAT_IDS)
+BASE_REAL = Palette(BASE.ids, real=True)
+FULL_REAL = Palette(CAT_IDS, real=True)
 CAT_LAB = BASE.lab
 
 
 def palette(rules):
+    if rules.real_colours:
+        return FULL_REAL if rules.extra_colours else BASE_REAL
     return FULL if rules.extra_colours else BASE
 
 
@@ -86,6 +97,8 @@ def snap_colours(lab, pal=BASE):
     pen = CHROMA_W * np.maximum(0, 0.9 * chroma[:, None] - cat_ch[None, :])
     pen[warm] = 0
     d += pen
+    if pal.real:
+        d[np.ix_(warm, cat_ch < 8)] += 1000
     for k_ in ("gold", "citrine", "peridot"):
         if k_ in ids:
             d[(hue < 80) & (chroma > 8), ids.index(k_)] += 1000

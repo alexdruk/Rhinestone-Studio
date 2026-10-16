@@ -39,7 +39,7 @@ async function test(name, fn) {
   }
 }
 
-const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor }));
+const PALETTE = Object.values(STONE_COLORS).filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill }));
 
 // ---- The spec's fixtures, verbatim --------------------------------------------------------------
 const FIXTURE_SIZE_PX = 60;
@@ -482,7 +482,7 @@ await test('9. Line Design parity: the moved labeller reproduces buildLabelField
 
   const layout = engine.generateImageLayout({
     imageBuffer: buffer, layerId: 'p', xMm: 0, yMm: 0, widthMm: 120, heightMm: 120 * FIXTURE_H / FIXTURE_W,
-    stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet', palette: CRYSTAL_COLORS.filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.previewColor })),
+    stoneSizeMm: 2.8, gapMm: 0.3, mode: 'line-design', color: 'jet', palette: CRYSTAL_COLORS.filter((c) => LEGACY_IMAGE_COLOR_IDS.includes(c.id)).map((c) => ({ id: c.id, hex: c.legacyFill })),
     maxWidthPx: 2000, maxHeightPx: 2000
   });
   assert.equal(layout.stones.length, 545);
