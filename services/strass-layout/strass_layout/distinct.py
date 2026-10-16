@@ -6,10 +6,10 @@ import numpy as np
 from sklearn.cluster import KMeans
 from skimage.color import deltaE_ciede2000
 
-from .colour import BASE, EXTRA_IDS, KH, KL, snap_colours, stone_colours
+from .colour import BASE, ALL_EXTRA_IDS, KH, KL, snap_colours, stone_colours
 
 SKIN = {"light-peach", "light-colorado", "colorado-topaz", "smoked-topaz", "light-smoked-topaz", "topaz",
-        "golden-shadow", "copper", "vintage-rose", "rose-gold"}
+        "golden-shadow", "copper", "vintage-rose", "rose-gold", "silk", "rose-peach"}
 
 
 def _fam(a, b, pal=BASE):
@@ -53,7 +53,7 @@ def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0, pal=BASE):
                     same = (cp < 10 and ca < 10) or (cp >= 10 and ca >= 10 and min(abs(hp - ha), 360 - abs(hp - ha)) < 25)
                     if ids[pick] in SKIN or ids[alt] in SKIN:
                         same = same and ids[pick] in SKIN and ids[alt] in SKIN
-                    if ids[alt] in EXTRA_IDS:
+                    if ids[alt] in ALL_EXTRA_IDS:
                         continue
                     if same and d[ci, alt] <= d[ci, pick] + extra and alt not in assign.values():
                         pick = alt

@@ -211,7 +211,7 @@ const median = (values) => {
 };
 
 await test('6. decision 1: the six entries are appended after silver with their pinned values, which are the derivation rule applied to fill; the rule\'s constants are the medians over the 15 rule entries', () => {
-  assert.equal(CRYSTAL_COLORS.length, 39);
+  assert.equal(CRYSTAL_COLORS.length, 47);
   assert.equal(CRYSTAL_COLORS[16].id, 'silver');
   const appended = CRYSTAL_COLORS.slice(17, 23).map(legacyView).map(({ id, name, group, fill, stroke, shine, accent }) => ({ id, name, group, fill, stroke, shine, accent }));
   assert.deepEqual(appended, PINNED_NEW_ENTRIES);
@@ -250,7 +250,7 @@ await test('7. decision 1: flat catalogue order and selector group order', () =>
     'hematite', 'black-diamond', 'grey', 'smoked-topaz', 'light-colorado', 'light-peach',
     'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold',
     'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine',
-    'jet-hematite'
+    'jet-hematite', 'silk', 'light-topaz', 'rose-peach', 'indian-siam', 'greige', 'graphite', 'citrus-green', 'capri-blue'
   ]);
   assert.deepEqual(listCrystalColorGroups().map((g) => [g.group, g.colors.map((c) => c.id)]), [
     ['Clear & Neutral', ['crystal-clear', 'crystal', 'jet', 'black-diamond', 'grey']],

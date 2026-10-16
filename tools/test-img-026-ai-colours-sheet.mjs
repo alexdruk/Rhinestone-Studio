@@ -106,18 +106,18 @@ function namesIn(texts) {
 }
 
 await test('1. catalogue: the twelve aiOnly entries follow hyacinth in order, with the pinned name, group and fill, and the IMG-016 shading rule', () => {
-  assert.equal(CRYSTAL_COLORS.length, 39);
+  assert.equal(CRYSTAL_COLORS.length, 47);
   assert.equal(CRYSTAL_COLORS[26].id, 'hyacinth');
-  const appended = CRYSTAL_COLORS.slice(27).map((c) => [c.id, c.name, c.group, c.fill]);
+  const appended = CRYSTAL_COLORS.slice(27, 39).map((c) => [c.id, c.name, c.group, c.fill]);
   assert.deepEqual(appended, F_ENTRIES);
-  for (const c of CRYSTAL_COLORS.slice(27)) {
+  for (const c of CRYSTAL_COLORS.slice(27, 39)) {
     assert.equal(c.aiOnly, true, `${c.id} is aiOnly`);
     assert.deepEqual({ stroke: c.stroke, shine: c.shine, accent: c.accent }, applyShadingRule(c.fill), `${c.id} follows the rule`);
     assert.equal(c.previewColor, c.fill);
   }
   for (const c of CRYSTAL_COLORS.slice(0, 27)) assert.equal(c.aiOnly, false, `${c.id} is a standard colour`);
   assert.ok(Object.isFrozen(AI_ONLY_COLOR_IDS));
-  assert.deepEqual([...AI_ONLY_COLOR_IDS], F_ENTRIES.map((e) => e[0]));
+  assert.deepEqual([...AI_ONLY_COLOR_IDS].slice(0, 12), F_ENTRIES.map((e) => e[0]));
 });
 
 await test('2. S4: catalogue.json has all 39 ids in catalogue order; each equals CrystalColors.js on name, fill, stroke, shine and accent, and carries aiOnly exactly for the twelve', () => {
@@ -134,7 +134,7 @@ await test('3. selectors: listCrystalColorGroups() leaves the aiOnly colours out
   assert.equal(standard.length, 27);
   assert.ok(standard.every((id) => !AI_ONLY_COLOR_IDS.includes(id)));
   const all = listCrystalColorGroups({ includeAiOnly: true }).flatMap((g) => g.colors.map((c) => c.id));
-  assert.equal(all.length, 39);
+  assert.equal(all.length, 47);
   assert.deepEqual(new Set(all), new Set(CRYSTAL_COLORS.map((c) => c.id)));
 
   const source = extractFunctionSource(appJs, 'function populateStoneColorOptions(');
@@ -155,7 +155,7 @@ await test('3. selectors: listCrystalColorGroups() leaves the aiOnly colours out
 });
 
 await test('4. prompt v5: the stones palette line lists all 39 colours, the flat one the 27 standard ones; the ramps name the new colours', () => {
-  assert.equal(PROMPT_VERSION, 5);
+  assert.equal(PROMPT_VERSION, 6);
   assert.deepEqual(buildPaletteLine().split(', '), CRYSTAL_COLORS.filter((c) => !c.aiOnly).map((c) => `${c.name} ${c.fill}`));
   assert.deepEqual(buildPaletteLine(undefined, true).split(', '), CRYSTAL_COLORS.map((c) => `${c.name} ${c.fill}`));
   const stones = buildRedrawPrompt().split('\n');
@@ -166,7 +166,7 @@ await test('4. prompt v5: the stones palette line lists all 39 colours, the flat
   for (const [, name] of F_ENTRIES) assert.ok(ramps.includes(name), `the ramps name ${name}`);
 });
 
-await test('5. Production Sheet: with all 39 colours a mug band exports on A4 and Letter; the cover turns to portrait, lists every colour and every count, and no header line leaves the page or reaches the page map', () => {
+await test('5. Production Sheet: with every catalogue colour a mug band exports on A4 and Letter; the cover turns to portrait, lists every colour and every count, and no header line leaves the page or reaches the page map', () => {
   for (const pageSize of ['A4', 'Letter']) {
     const layout = allColourLayout(257.6, 85);
     const doc = computeProductionSheetDocument(layout, { productionWidthMm: 257.6, productionHeightMm: 85, pageSize, marginMm: 10 });
@@ -182,7 +182,7 @@ await test('5. Production Sheet: with all 39 colours a mug band exports on A4 an
     const listed = colourBlock.join(' ').replace('Crystal color: ', '').split(/,\s*/).map((s) => s.trim());
     assert.deepEqual(listed, CRYSTAL_COLORS.map((c) => c.name).sort(), `${pageSize}: the Crystal color lines list every colour once, sorted`);
     for (const c of CRYSTAL_COLORS) assert.ok(texts.some((t) => t.startsWith(`${c.name}: `)), `${pageSize}: a count line for ${c.name}`);
-    const counts = [...namesIn(texts).matchAll(/\): (\d+)/g)].map((m) => Number(m[1]));
+    const counts = [...namesIn(texts).matchAll(/(?:\)|SS\d+): (\d+)/g)].map((m) => Number(m[1]));
     assert.equal(counts.reduce((a, b) => a + b, 0), layout.stones.length, `${pageSize}: the counts add up to the stone count`);
     for (const line of cover.headerLines) {
       const x = cover.marginMm + 2 + (line.xOffsetMm || 0);

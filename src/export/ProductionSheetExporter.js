@@ -163,19 +163,19 @@ function computeSizeBreakdown(stones) {
 // integration -- no new page-layout/height-budgeting mechanism, same fixed-slot-height text
 // rendering SVG/PDF already share for every other header line.
 //
-// IMG-026F: the lines may be set in up to MAX_BREAKDOWN_COLUMNS columns side by side, so that a long
+// IMG-026F: the lines may be set in several columns side by side (up to 4, IMG-026H), so that a long
 // colour list still leaves room for the stones (or the cover's page map). With one column the lines
 // are exactly the pre-IMG-026F ones, unless a colour's line is wider than the header, in which case
 // it continues on the next line, split between two sizes. Each colour's lines stay together in one
 // column; columns fill top to bottom, left to right. Returns { lines: [{ text, bold, col, row }],
-// rows }, where rows is the number of header line slots the block takes.
-const MAX_BREAKDOWN_COLUMNS = 3;
+// rows }, where rows is the number of header line slots the block takes. IMG-026H: with shortLabels a
+// catalogue size prints as its name only ("SS6: 142"); the "Stone size:" line gives its millimetres.
 const BREAKDOWN_COLUMN_GAP_MM = 4;
-function computeSizeBreakdownLineTexts(breakdown, maxWidthMm = Infinity, columns = 1) {
+function computeSizeBreakdownLineTexts(breakdown, maxWidthMm = Infinity, columns = 1, shortLabels = false) {
   const byColor = new Map();
   for (const entry of breakdown) {
     if (!byColor.has(entry.colorName)) byColor.set(entry.colorName, []);
-    byColor.get(entry.colorName).push(`${entry.sizeLabel}: ${entry.count}`);
+    byColor.get(entry.colorName).push(`${shortLabels ? entry.sizeLabel.split(' (')[0] : entry.sizeLabel}: ${entry.count}`);
   }
   const columnWidthMm = (maxWidthMm - (columns - 1) * BREAKDOWN_COLUMN_GAP_MM) / columns;
   const groups = [...byColor.entries()].map(([colorName, parts]) => wrapListLine(`${colorName}: `, parts, columnWidthMm));
@@ -730,10 +730,13 @@ export function computeProductionSheetDocument(stoneLayout, options = {}) {
   const portraitHeightMm = Math.max(pageWidthMm, pageHeightMm);
   let sizeBreakdownLines;
   let headerHeightMm;
-  for (let columns = 1; ; columns += 1) {
-    sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown, maxTextWidthMm, columns);
+  // IMG-026H: when three columns are still too tall, the size labels shorten to their names, in two to
+  // four columns.
+  const attempts = [[1, false], [2, false], [3, false], [2, true], [3, true], [4, true]];
+  for (const [columns, shortLabels] of attempts) {
+    sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown, maxTextWidthMm, columns, shortLabels);
     headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.rows + colorLineTexts.length - 1 + 1);
-    if (portraitHeightMm - 2 * marginMm - headerHeightMm >= COVER_MAP_MIN_HEIGHT_MM || columns >= MAX_BREAKDOWN_COLUMNS) break;
+    if (portraitHeightMm - 2 * marginMm - headerHeightMm >= COVER_MAP_MIN_HEIGHT_MM) break;
   }
   let coverWidthMm = pageWidthMm;
   let coverHeightMm = pageHeightMm;

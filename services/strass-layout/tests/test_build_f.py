@@ -64,9 +64,9 @@ def iris_stones(frame):
 class Palettes(unittest.TestCase):
     def test_catalogue_split(self):
         self.assertEqual(EXTRA_IDS, EXTRA)
-        self.assertEqual(len(CAT_IDS), 39)
-        self.assertEqual(BASE.ids, [k for k in CAT_IDS if k not in EXTRA])
-        self.assertEqual(FULL.ids, CAT_IDS)
+        self.assertEqual(len(CAT_IDS), 47)
+        self.assertEqual(BASE.ids, [k for k in CAT_IDS if k not in EXTRA and CAT[k].get("aiSet") != "H"])
+        self.assertEqual(FULL.ids, [k for k in CAT_IDS if CAT[k].get("aiSet") != "H"])
         self.assertIs(palette(PROTOTYPE), BASE)
         self.assertIs(palette(BUILD_E), BASE)
         self.assertIs(palette(BUILD_F), FULL)
@@ -112,12 +112,12 @@ class DistinctAlternates(unittest.TestCase):
         ids, lab, prot = self.scene()
         out, _ = distinct._distinct(ids, lab, prot, pal=FULL)
         self.assertNotIn("jet-hematite", out)
-        saved = distinct.EXTRA_IDS
-        distinct.EXTRA_IDS = []
+        saved = distinct.ALL_EXTRA_IDS
+        distinct.ALL_EXTRA_IDS = []
         try:
             unguarded, _ = distinct._distinct(ids, lab, prot, pal=FULL)
         finally:
-            distinct.EXTRA_IDS = saved
+            distinct.ALL_EXTRA_IDS = saved
         self.assertIn("jet-hematite", unguarded, "without the guard the scene must pick jet-hematite as an alternate")
 
 

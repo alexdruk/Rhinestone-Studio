@@ -72,7 +72,7 @@ function appJsLegacyLiteral() {
 }
 
 await test('1. D2: the four entries are appended after light-peach, in order, with the pinned name, group and values, which follow the IMG-016 shading rule', () => {
-  assert.equal(CRYSTAL_COLORS.length, 39);
+  assert.equal(CRYSTAL_COLORS.length, 47);
   assert.equal(CRYSTAL_COLORS[22].id, 'light-peach');
   const legacy = (c) => (c.legacyFill === c.fill ? [c.fill, c.stroke, c.shine, c.accent] : [c.legacyFill, ...Object.values(applyShadingRule(c.legacyFill))]);
   assert.deepEqual(CRYSTAL_COLORS.slice(23, 27).map((c) => [c.id, c.name, c.group, ...legacy(c)]), D2_ENTRIES);
