@@ -1,4 +1,4 @@
-"""IMG-026G: the DEFAULT rules (inscribed pupils, re-measured stone colours) against BUILD_F.
+"""IMG-026G: the BUILD_G rules (inscribed pupils, re-measured stone colours) against BUILD_F.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "Pupils and stone colours (build G)" and
 the Build G acceptance figures.
@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 from PIL import Image, ImageDraw
 
-from strass_layout import BUILD_E, BUILD_F, DEFAULT, PROTOTYPE
+from strass_layout import BUILD_E, BUILD_F, BUILD_G, PROTOTYPE
 from strass_layout.colour import BASE, BASE_REAL, CAT, CAT_IDS, FULL, FULL_REAL, palette, snap_colours
 from strass_layout.eyes import find_pupils
 from strass_layout.imageio import decode_png
@@ -43,7 +43,7 @@ class Palettes(unittest.TestCase):
         self.assertIs(palette(PROTOTYPE), BASE)
         self.assertIs(palette(BUILD_E), BASE)
         self.assertIs(palette(BUILD_F), FULL)
-        self.assertIs(palette(DEFAULT), FULL_REAL)
+        self.assertIs(palette(BUILD_G), FULL_REAL)
 
     def test_each_remeasured_fill_snaps_to_itself(self):
         lab = np.array([hex_lab(CAT[k]["fill"]) for k in REMEASURED])
@@ -96,7 +96,7 @@ class DefaultAgainstBuildF(unittest.TestCase):
         for name in IMAGES:
             with self.subTest(image=name):
                 f = support.layout_result(name, BUILD_F)["report"]
-                g = support.layout_result(name, DEFAULT)["report"]
+                g = support.layout_result(name, BUILD_G)["report"]
                 self.assertEqual(g["violations"], 0)
                 self.assertGreaterEqual(g["minGapMm"], MIN_GAP_MM)
                 self.assertLessEqual(abs(g["stones"] - f["stones"]), 0.01 * f["stones"])

@@ -13,6 +13,9 @@ old value as "prototypeFill". BASE and FULL match against the old values, so the
 prototype and builds E and F are unchanged; BASE_REAL and FULL_REAL use "fill".
 Rules.real_colours picks the REAL palettes.
 
+IMG-026H added eight more aiOnly colours, marked "aiSet": "H" (EXTRA_H_IDS). Only
+PLUS_REAL, which Rules.more_colours picks, has them.
+
 Ported from rs_fix.py (stone_colours, snap_colours and the colour constants).
 """
 import json
@@ -24,7 +27,9 @@ from skimage.color import deltaE_ciede2000, rgb2lab
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogue.json")) as _f:
     CAT = json.load(_f)
 CAT_IDS = list(CAT)
-EXTRA_IDS = [k for k in CAT_IDS if CAT[k].get("aiOnly")]
+EXTRA_IDS = [k for k in CAT_IDS if CAT[k].get("aiOnly") and CAT[k].get("aiSet") != "H"]
+EXTRA_H_IDS = [k for k in CAT_IDS if CAT[k].get("aiSet") == "H"]
+ALL_EXTRA_IDS = EXTRA_IDS + EXTRA_H_IDS
 
 
 class Palette:
@@ -37,14 +42,17 @@ class Palette:
         self.real = real
 
 
-BASE = Palette([k for k in CAT_IDS if k not in EXTRA_IDS])
-FULL = Palette(CAT_IDS)
+BASE = Palette([k for k in CAT_IDS if k not in ALL_EXTRA_IDS])
+FULL = Palette([k for k in CAT_IDS if k not in EXTRA_H_IDS])
 BASE_REAL = Palette(BASE.ids, real=True)
-FULL_REAL = Palette(CAT_IDS, real=True)
+FULL_REAL = Palette(FULL.ids, real=True)
+PLUS_REAL = Palette(CAT_IDS, real=True)
 CAT_LAB = BASE.lab
 
 
 def palette(rules):
+    if rules.more_colours:
+        return PLUS_REAL
     if rules.real_colours:
         return FULL_REAL if rules.extra_colours else BASE_REAL
     return FULL if rules.extra_colours else BASE

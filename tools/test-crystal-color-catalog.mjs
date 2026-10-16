@@ -102,8 +102,8 @@ function channels(c, pinned) {
   return [c.legacyFill, ...pinned.slice(1)];
 }
 
-await test('1. every required display name is present in the catalog (39 colors since IMG-026F)', () => {
-  assert.equal(CRYSTAL_COLORS.length, 39, `expected 39 catalog colors, found ${CRYSTAL_COLORS.length}`);
+await test('1. every required display name is present in the catalog (47 colors since IMG-026H)', () => {
+  assert.equal(CRYSTAL_COLORS.length, 47, `expected 47 catalog colors, found ${CRYSTAL_COLORS.length}`);
   const names = CRYSTAL_COLORS.map((c) => c.name);
   for (const required of REQUIRED_NAMES) {
     assert.ok(names.includes(required), `expected catalog to include a color named "${required}"`);
@@ -173,7 +173,7 @@ await test('5a. IMG-016: the 17 pre-IMG-016 entries keep their catalogue positio
 await test('5b. IMG-016: the six new entries are appended last, in order, with their pinned name, group and values', () => {
   const actual = CRYSTAL_COLORS.slice(17, 23).map((c, i) => [c.id, c.name, c.group, ...channels(c, IMG016_ENTRIES[i].slice(3))]);
   assert.deepEqual(actual, IMG016_ENTRIES);
-  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold', 'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine', 'jet-hematite']);
+  assert.deepEqual(CRYSTAL_COLORS.map((c) => c.id), [...PRE_IMG016_ENTRIES.map((e) => e[0]), ...IMG016_ENTRIES.map((e) => e[0]), 'colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth', 'golden-shadow', 'copper', 'rose-gold', 'vintage-rose', 'padparadscha', 'chrysolite', 'fern-green', 'erinite', 'olivine', 'khaki', 'metallic-sunshine', 'jet-hematite', 'silk', 'light-topaz', 'rose-peach', 'indian-siam', 'greige', 'graphite', 'citrus-green', 'capri-blue']);
 });
 
 await test('6. STONE_COLORS (id-keyed map) matches the catalog array exactly, and the StoneColors.js shim re-exports the identical map', () => {

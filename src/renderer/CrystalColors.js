@@ -235,6 +235,41 @@ const CRYSTAL_COLOR_LIST = [
   defineColor({
     id: 'jet-hematite', name: 'Jet Hematite', group: 'Metallic', aiOnly: true,
     fill: '#4a5353', stroke: '#292e2e', shine: '#e0e2e2', accent: '#394040'
+  }),
+  // -- IMG-026H: eight more aiOnly colours, appended after jet-hematite. Fills are the mean colour of
+  // the stone photos in the supplier's flat-back catalogue; stroke, shine and accent follow the
+  // IMG-016 shading rule. The layout service's catalogue.json must match (S4). --------------------
+  defineColor({
+    id: 'silk', name: 'Silk', group: 'Brown & Peach', aiOnly: true,
+    fill: '#ebb28d', stroke: '#84644f', shine: '#fcf2ec', accent: '#b5896d'
+  }),
+  defineColor({
+    id: 'light-topaz', name: 'Light Topaz', group: 'Yellow & Amber', aiOnly: true,
+    fill: '#e2a219', stroke: '#7f5b0e', shine: '#faefd8', accent: '#ae7d13'
+  }),
+  defineColor({
+    id: 'rose-peach', name: 'Rose Peach', group: 'Red & Pink', aiOnly: true,
+    fill: '#ee8987', stroke: '#854d4c', shine: '#fcebeb', accent: '#b76968'
+  }),
+  defineColor({
+    id: 'indian-siam', name: 'Indian Siam', group: 'Red & Pink', aiOnly: true,
+    fill: '#610b16', stroke: '#36060c', shine: '#e4d6d7', accent: '#4b0811'
+  }),
+  defineColor({
+    id: 'greige', name: 'Greige', group: 'Clear & Neutral', aiOnly: true,
+    fill: '#847267', stroke: '#4a403a', shine: '#eae7e5', accent: '#66584f'
+  }),
+  defineColor({
+    id: 'graphite', name: 'Graphite', group: 'Clear & Neutral', aiOnly: true,
+    fill: '#52626d', stroke: '#2e373d', shine: '#e2e4e6', accent: '#3f4b54'
+  }),
+  defineColor({
+    id: 'citrus-green', name: 'Citrus Green', group: 'Green & Aqua', aiOnly: true,
+    fill: '#9eb930', stroke: '#58681b', shine: '#eff3dc', accent: '#7a8e25'
+  }),
+  defineColor({
+    id: 'capri-blue', name: 'Capri Blue', group: 'Purple & Blue', aiOnly: true,
+    fill: '#236ab4', stroke: '#143b65', shine: '#dae6f2', accent: '#1b528b'
   })
 ];
 

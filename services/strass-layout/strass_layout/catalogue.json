@@ -302,5 +302,77 @@
   "shine": "#e0e2e2",
   "accent": "#394040",
   "aiOnly": true
+ },
+ "silk": {
+  "name": "Silk",
+  "fill": "#ebb28d",
+  "stroke": "#84644f",
+  "shine": "#fcf2ec",
+  "accent": "#b5896d",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "light-topaz": {
+  "name": "Light Topaz",
+  "fill": "#e2a219",
+  "stroke": "#7f5b0e",
+  "shine": "#faefd8",
+  "accent": "#ae7d13",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "rose-peach": {
+  "name": "Rose Peach",
+  "fill": "#ee8987",
+  "stroke": "#854d4c",
+  "shine": "#fcebeb",
+  "accent": "#b76968",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "indian-siam": {
+  "name": "Indian Siam",
+  "fill": "#610b16",
+  "stroke": "#36060c",
+  "shine": "#e4d6d7",
+  "accent": "#4b0811",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "greige": {
+  "name": "Greige",
+  "fill": "#847267",
+  "stroke": "#4a403a",
+  "shine": "#eae7e5",
+  "accent": "#66584f",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "graphite": {
+  "name": "Graphite",
+  "fill": "#52626d",
+  "stroke": "#2e373d",
+  "shine": "#e2e4e6",
+  "accent": "#3f4b54",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "citrus-green": {
+  "name": "Citrus Green",
+  "fill": "#9eb930",
+  "stroke": "#58681b",
+  "shine": "#eff3dc",
+  "accent": "#7a8e25",
+  "aiOnly": true,
+  "aiSet": "H"
+ },
+ "capri-blue": {
+  "name": "Capri Blue",
+  "fill": "#236ab4",
+  "stroke": "#143b65",
+  "shine": "#dae6f2",
+  "accent": "#1b528b",
+  "aiOnly": true,
+  "aiSet": "H"
  }
 }
