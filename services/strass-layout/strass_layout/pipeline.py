@@ -8,7 +8,7 @@ catalogue id check.
 """
 import numpy as np
 
-from .colour import CAT_IDS, palette
+from .colour import CAT_IDS, palette, stone_colours
 from .detect import detect_stones
 from .distinct import distinct_tones
 from .faces import finish_faces
@@ -47,7 +47,8 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     D = np.array([q["d"] for q in stones])
     C = [q["color"] for q in stones]
     colours = distinct_tones(px.rgb, px.a, first["s"], P, D, C, palette(rules), rules.mean_colour)
-    colours = finish_faces(P, D, colours, palette(rules), info["face"], info["eyeZones"], rules)
+    lab = stone_colours(px.rgb, px.a, np.stack([P[:, 1] / first["s"], P[:, 0] / first["s"], 0.5 * D / first["s"], np.zeros(len(P))], 1), True) if rules.skin_nearest else None
+    colours = finish_faces(P, D, colours, palette(rules), info["face"], info["eyeZones"], rules, lab)
     for q, c in zip(stones, colours):
         q["color"] = c
     clock.lap("colour")

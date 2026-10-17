@@ -1,4 +1,7 @@
-"""IMG-026I: finishing passes for faces, run after tone separation.
+"""IMG-026I and J: finishing passes for faces, run after tone separation.
+
+skin_nearest (IMG-026J) gives every SS4 or SS6 skin and fur stone the skin colour nearest its own
+mean colour, undoing the tone-separation moves inside the skin ramp.
 
 soften_outlines turns a person's black outline stones that sit on skin into Smoked Topaz, away
 from the eyes. calm_skin gives a lone skin stone the shade most of its neighbours share, when
@@ -70,8 +73,27 @@ def calm_skin(P, D, C, pal, eyes, nb=None, max_de=15.0):
     return out, n
 
 
-def finish_faces(P, D, C, pal, face, eyes, rules):
+def skin_nearest(D, C, lab, pal):
+    """Recolour each SS4 or SS6 stone whose colour is in distinct.SKIN to the SKIN colour (Topaz
+    excepted) nearest its Lab colour in ΔE2000. Returns (colours, count)."""
+    ids = [k for k in pal.ids if k in SKIN and k != "topaz"]
+    cat = pal.lab[[pal.ids.index(k) for k in ids]]
+    out = list(C)
+    n = 0
+    for i, c in enumerate(C):
+        if c not in SKIN or D[i] not in (1.5, 2.0):
+            continue
+        new = ids[int(np.argmin(deltaE_ciede2000(np.repeat(lab[i][None], len(ids), 0), cat)))]
+        if new != c:
+            out[i] = new
+            n += 1
+    return out, n
+
+
+def finish_faces(P, D, C, pal, face, eyes, rules, lab=None):
     nb = None
+    if rules.skin_nearest:
+        C, _ = skin_nearest(D, C, lab, pal)
     if rules.soft_outlines and face == "human":
         nb = _neighbours(P, D)
         C, _ = soften_outlines(P, D, C, eyes, nb)
