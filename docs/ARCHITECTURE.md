@@ -3,7 +3,8 @@
 Version: 2.0
 
 Last synchronized with the live repository at commit `f263a30` (`feature/maint-005-release-hygiene`),
-the MAINT-005 v1.2.0 release-hygiene sync. Where this document and the repository disagree, the
+the MAINT-005 v1.2.0 release-hygiene sync. The "Image → Strass" section was added for v2.0.0 at
+`8ec8a46`; other sections were not re-audited then. Where this document and the repository disagree, the
 repository is the source of truth — see `docs/AI_ENGINEER.md`.
 
 ---
@@ -1604,6 +1605,78 @@ categories exist:
   for as unparseable). This closes a real round-trip drift bug: converting from an already-rounded
   2-decimal display value on every unit switch accumulated a few hundredths of a millimeter of error
   per round trip for fields with no canonical store to fall back on.
+
+---
+
+# Image → Strass
+
+**Implementation status (v2.0.0, `develop` @ `8ec8a46`).** Image → Strass turns a photo into a
+stone layout. Two paths exist, and a layer keeps the one it was made with (IMG-026 decision D4).
+
+**Image → Strass v2 (IMG-026, builds A–K).** Every upload is redrawn by AI and then placed by a
+separate layout service:
+
+    Browser                     Node server (tools/dev-server.mjs)       Layout service (Python)
+    upload ──POST /api/redraw──▶ job: OpenAI image ("drawing")
+           ◀──poll every 3 s──  job: POST LAYOUT_SERVICE_URL/layout ──▶ strass_layout.layout()
+                                      ("placing")                  ◀── stones, report
+           ◀── { dataUrl, layout }
+    applyRedraw(): layer.fillMode = 'ai-layout', layer.aiLayout = layout
+
+- **Server.** `server/redraw/` holds the job API (`jobs.mjs`), the prompt (`prompt.mjs`,
+  `PROMPT_VERSION` 6) and the settings (`env.mjs`: `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`,
+  `LAYOUT_SERVICE_URL`). Jobs answer 202 at once and are polled, so a slow OpenAI call or layout
+  never holds a request open. When the layout fails, the job still returns the AI image and the
+  older IMG-023 AI-stones path places the stones.
+- **Layout service.** `services/strass-layout/` is a FastAPI app (`app.py`: `POST /layout`,
+  `GET /health`) around the `strass_layout` package. It is the one place Python is allowed
+  (`CLAUDE.md`, decision D5). Nothing in `src/`, `app.js` or `server/` imports it; the Node server
+  reaches it only over HTTP. It runs natively on Alex's Mac on 127.0.0.1:8000
+  (`scripts/start_layout.sh`) until a server is rented; then the same package runs in Docker and
+  only `LAYOUT_SERVICE_URL` changes. Its tests read the research prototype kept in `prototype/`
+  for the equivalence check.
+- **Layer data.** An ai-layout image layer stores `aiLayout` (`version`, `widthMm`, `heightMm`,
+  `stones` as `[x, y, sizeId, colourId]`, `report`, `editCount`) and `colorSwaps`. The stones
+  are saved in the project, so a project reopens without the AI or the service.
+  `validateProject()` checks every field.
+- **Engine.** `GeometryEngine.generateImageLayout()` hands mode `'ai-layout'` to
+  `_generateAiLayoutStones()` before any image decoding. It builds one `Stone` per entry, applies
+  colour swaps and the layer's rotation, and flags gap violations. Every stone still comes from
+  the one GeometryEngine.
+- **Editing.** Design edits an ai-layout layer stone by stone (delete, move, recolour, resize,
+  add). `src/redraw/AiLayoutEdit.js` is the only write path, and it names stones by their index
+  in `aiLayout.stones`. The lightbox's visible controls come from the pure
+  `imageStudioState()` in `src/ui/ImageStudioState.js`.
+- **Colours.** The catalogue in `src/renderer/CrystalColors.js` has 47 colours. 20 are `aiOnly`:
+  offered by Image → Strass and the colour-swap selects, never by the standard pickers. The
+  Production Sheet lists every colour a layout uses.
+- **3D preview.** Since build K, the instanced stone in `src/preview3d/Preview3DRenderer.js` is a
+  round flat-back rhinestone (`createRhinestoneGeometry()`, 96 triangles) instead of an
+  octahedron (8). It is still one instanced draw call.
+- **View setting.** "Background: White / Product" on the 2D canvas shows the gaps on the product
+  colour. It is not saved and never changes the StoneLayout; Flat Sheet always uses white.
+
+The full specification, with measured figures, is
+`docs/specifications/IMG-026-StrassLayoutService.md`.
+
+**Image → Strass v1 (IMG-000–IMG-025).** Layers made before v2, or made where no redraw provider
+is set up, use the in-browser pipeline: image field and transparency (IMG-001), colour layers
+(IMG-002), organic placement (IMG-003), edge awareness (IMG-004), Check & fix (IMG-005),
+brightness sizes (IMG-006), the studio shell (IMG-007), subject masks (IMG-009, IMG-014,
+IMG-018, IMG-019), line design (IMG-010), catalogue colour and vividness (IMG-015–IMG-017), image
+stones in Design and under rotation (IMG-020, IMG-021), the swappable redraw provider (IMG-022),
+AI stone transfer (IMG-023) and stone clean-up (IMG-025). Each has its own specification under
+`docs/specifications/`, starting with `IMG-000-ImageToStrassAudit.md`.
+
+**Flat Sheet (RS-3037).** `src/products/SheetProductDefinition.js` adds the `sheet` object type,
+a flat 2D-only surface with no physical or 3D counterpart, 150 × 150 mm by default and editable
+from 20 to 500 mm. RS-3039 removed the array spreads that overflowed the stack on very large
+layouts and isolates each layer so one failing layer no longer blanks the canvas. RS-3040 frames
+Design on the sheet, and RS-3041 splits a sheet too big for one page into a multi-page Production
+Sheet.
+
+**Browser baseline (MAINT-007).** The oldest supported browser is Chrome 103 (macOS Sierra);
+`tools/test-browser-baseline.mjs` guards most of the rule.
 
 ---
 
