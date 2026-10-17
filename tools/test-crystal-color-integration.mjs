@@ -112,7 +112,7 @@ await test('6. Project JSON round-trip preserves a brand-new catalog color id (v
   assert.ok(validateSrc, 'expected to find validateProject()');
   // validateProject() must not special-case or enumerate color at all -- it should pass layers
   // through unchanged (`...l`), which is what lets any catalog id (old or new) survive import.
-  assert.ok(!/l\.color/.test(validateSrc[1]), 'validateProject() must not special-case layer.color (it must pass colors through untouched)');
+  assert.ok(!/l\.color\b/.test(validateSrc[1]), 'validateProject() must not special-case layer.color (it must pass colors through untouched)');
 
   const project = {
     version: 2, units: 'mm', name: 'Round Trip', product: 'mug', canvas: { width: 210, height: 90 },

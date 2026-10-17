@@ -22,14 +22,18 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldModalLabelAt, NO_LABEL, fieldLuminanceAt, ink, fieldPixelOn } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
-import { prepareImageField } from '../image/index.js';
+import { prepareImageField, DEFAULT_THRESHOLD, detectAiStones } from '../image/index.js';
+// IMG-008: reuses the same marching-squares Boolean-op tracer Vector Boolean Operations use, to
+// trace per-colour silhouettes from an image layer's own working field for the SVG export's
+// underlying vector regions -- see resolveImagePolygons() and imageRegionColorId() below.
+import { combineShapeSources, contourAreaAbs } from './PathBoolean.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 // S-110: Expanded Shape Library. createShapeNaturalContours() (src/geometry/ShapeLibrary.js) is the
 // only place that knows the *math* for Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
@@ -44,6 +48,17 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // generateMixedSizeInfillStones() are the only S-200 entry points this module calls -- see
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
+import { generateGapFillStones, GAP_FILL_STONE_SIZE_MM } from './GapFill.js';
+// IMG-025 (Stone clean-up): runs on the finished Staggered / AI stones lattice in
+// generateImageLayout() below -- see StoneCleanup.js's own doc comment.
+import { cleanupLatticeStones } from './StoneCleanup.js';
+// IMG-010 (Line Design): the only S-200/IMG-013-adjacent mode whose stones never come from a single
+// sampleFieldByMode() call -- see LineDesignSampler.js's own doc comment and this file's
+// generateImageLayout() branch below.
+import { generateLineDesignStonePoints, LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO } from './LineDesignSampler.js';
+// IMG-023 (AI stones): placement from the stones an AI drew -- see AiStoneSampler.js and
+// generateImageLayout()'s isAiStones branch below.
+import { placeAiStones } from './AiStoneSampler.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -51,8 +66,34 @@ import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedS
 const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
 // RS-1011: Image Trace has no vector perimeter to walk, so 'outline' is never valid for it -- see
 // normalizeImageParams() below and generateImageLayout()'s doc comment.
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
+// IMG-003: 'organic' is a fifth image-only mode -- a Bridson Poisson-disk sample, still no vector
+// perimeter to walk, so it joins this set (not SAMPLE_MODES above).
+// IMG-004: 'edge' is a sixth image-only mode, reusing the same generalized Poisson-disk sampler with
+// a per-point radius keyed to detected edges -- see docs/specifications/IMG-004-EdgeAwareness.md.
+// IMG-010: 'line-design' is a seventh image-only mode -- unlike every mode above, it never reaches
+// sampleFieldByMode() (StoneSampler.js's switch has no case for it); generateImageLayout() branches
+// on it before that call and calls LineDesignSampler.js's own candidate generation instead. See
+// docs/specifications/IMG-010-LineDesign.md's "Architecture decision" section.
+// IMG-023: 'ai-stones' is an eighth, following the same precedent with its own sampler
+// (AiStoneSampler.js). See docs/specifications/IMG-023-AiStoneTransfer.md D1.
+// IMG-026 (C1): 'ai-layout' is a ninth. generateImageLayout() hands it to _generateAiLayoutStones()
+// before normalizeImageParams(), so it never reaches the image field or a sampler. See
+// docs/specifications/IMG-026-StrassLayoutService.md, "Engine".
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge', 'line-design', 'ai-stones', 'ai-layout']);
+// IMG-026 (C1): the layout service's size ids and their diameters. Hand-matched to
+// StoneSizes.js (the app's stone-size catalogue), which this engine must not import;
+// tools/test-img-026-ai-layout-engine.mjs asserts the two agree.
+const AI_LAYOUT_SIZE_MM = Object.freeze({ ss4: 1.5, ss6: 2.0, ss10: 2.8, ss16: 4.0, ss20: 4.7, ss30: 6.4 });
+// IMG-026 (S3): a pair is a gap violation below this many mm, the service's own rule.
+const AI_LAYOUT_MIN_GAP_MM = 0.1;
+const AI_LAYOUT_GAP_EPSILON_MM = 1e-6;
 const DEFAULT_MODE = 'outline';
+// IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
+// -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
+// convention SAMPLE_MODES/IMAGE_SAMPLE_MODES already use) rather than importing src/image's copy,
+// since this is GeometryEngine's own params-side validation, not a re-export.
+const IMAGE_TRANSPARENT_MODES = new Set(['white', 'ignore']);
+const DEFAULT_IMAGE_TRANSPARENT_MODE = 'white';
 // S-110: SHAPE_LIBRARY_KINDS (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring)
 // join Circle/Rectangle here -- every one of them is a generateShapeLayout()/resolveShapePolygons()
 // shape, not a new engine method.
@@ -1141,57 +1182,376 @@ export class GeometryEngine {
    * @param {number} params.heightMm Placement height.
    * @param {number} params.stoneSizeMm
    * @param {number} [params.gapMm]
-   * @param {'fill'|'staggered'|'radial'|'contour'} [params.mode] Default 'fill' -- a raster density
-   *   field has no vector perimeter, so 'outline' is not supported (see RS-1011).
+   * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'|'line-design'|'ai-stones'} [params.mode] Default 'fill' -- a
+   *   raster density field has no vector perimeter, so 'outline' is not supported (see RS-1011).
    * @param {string} [params.color]
    * @param {number} [params.threshold] 0-255, default 128.
    * @param {boolean} [params.invert]
    * @param {number} [params.blurRadiusPx]
+   * @param {number} [params.edgeWidthMm] IMG-004: edge band width in mm, > 0, default 6. Converted to
+   *   a dimensionless `edgeBandFraction` (of `widthMm`) for prepareImageField(), since the working
+   *   field's post-resize pixel width is not reliably `maxWidthPx` (see generateImageLayout()'s own
+   *   comment at its prepareImageField() call site); read only by the 'edge' mode.
+   * @param {number} [params.edgeThinning] IMG-004: interior thinning multiplier, >= 0, default 1;
+   *   read only by the 'edge' mode.
    * @param {number} params.maxWidthPx
    * @param {number} params.maxHeightPx
+   * @param {'white'|'ignore'} [params.transparent] Default 'white' (IMG-001) -- 'white' flattens
+   *   alpha onto white before thresholding (the pre-IMG-001, only-ever behavior); 'ignore' forces
+   *   any pixel whose source alpha is below the coverage threshold off in the generated field,
+   *   regardless of luminance. See docs/specifications/IMG-001-ImageToStrass.md.
+   * @param {number} [params.colorCount] Integer 1-8, default 1 (IMG-002). >1 labels every subject
+   *   pixel with its nearest catalog colour, keeps at most colorCount of them (IMG-015), and gives
+   *   each stone the modal label under its own radius, instead of every stone taking `color`
+   *   uniformly.
+   * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1 -- the
+   *   catalog every pixel is labelled against.
+   * @param {object} [params.colorMap] `nearestId -> overrideId`, default {}. See
+   *   docs/specifications/IMG-002-ColorLayers.md decision 3.
+   * @param {'threshold'|'subject'|'whole'} [params.maskMode] Default 'threshold' (IMG-009). 'subject' calls
+   *   src/image/SubjectMask.js's computeSubjectMask() instead of applyThreshold() for the mask this
+   *   field's `data`/blur/resize/colorCount all run on. See
+   *   docs/specifications/IMG-009-SubjectMask.md. 'whole' keeps every pixel, see
+   *   docs/specifications/IMG-018-WholeImageMask.md.
+   * @param {boolean} [params.cleanup] IMG-025: exactly true runs the stone clean-up pass on a
+   *   Staggered (uniform size) or AI stones layout. See docs/specifications/IMG-025-StoneCleanup.md.
+   * @param {boolean} [params.jetOutline] IMG-025: exactly true adds the one-stone Jet outline to that
+   *   pass; read only while clean-up runs.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
+    if (params && params.mode === 'ai-layout') return this._generateAiLayoutStones(params);
     const options = normalizeImageParams(params);
+    // IMG-023 (D1): AI stones reads the stones the AI drew and needs no prepared field, so
+    // prepareImageField() (a subject-mask pass on every regenerate) is skipped for it.
+    const isAiStones = options.mode === 'ai-stones';
 
-    const field = prepareImageField(options.imageBuffer, {
+    // IMG-004 follow-up: a dimensionless fraction of the placement's own widthMm, not a pixel count
+    // -- resizeField() is downscale-only and aspect-preserving (src/image/Resize.js), so the working
+    // field's actual widthPx is not reliably maxWidthPx (native resolution may already be smaller, or
+    // height may be the binding dimension). prepareImageField() converts this fraction to a pixel
+    // radius itself, from the post-resize field's own real widthPx.
+    const edgeBandFraction = options.edgeWidthMm / options.widthMm;
+    const field = isAiStones ? null : prepareImageField(options.imageBuffer, {
       threshold: options.threshold,
       invert: options.invert,
       blurRadiusPx: options.blurRadiusPx,
+      edgeBandFraction,
       maxWidthPx: options.maxWidthPx,
-      maxHeightPx: options.maxHeightPx
+      maxHeightPx: options.maxHeightPx,
+      transparent: options.transparent,
+      colorCount: options.colorCount,
+      palette: options.palette,
+      maskMode: options.maskMode,
+      vividness: options.vividness,
+      paletteRule: options.paletteRule
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
-    const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm);
+    // IMG-006: brightness-driven stone size samples at the largest rung's pitch, not the layer's own
+    // stoneSizeMm -- see decision 1. `brightnessOptions.sizesMm` has a single entry (reduced to
+    // [stoneSizeMm] by normalizeMixedSizeParams()) whenever brightnessSizesMm has fewer than two
+    // configured entries, so isBrightness is false and every line below is byte-identical to before
+    // this milestone.
+    const isBrightness = options.sizeMode === 'brightness' && options.brightnessOptions.sizesMm.length > 1;
+    const sampleStoneSizeMm = isBrightness
+      ? options.brightnessOptions.sizesMm[options.brightnessOptions.sizesMm.length - 1]
+      : options.stoneSizeMm;
+    const spacingMm = sampleStoneSizeMm + options.gapMm;
+    // IMG-005: a same-layer spacing repair pass, only meaningful for Contour/Radial -- see
+    // docs/specifications/IMG-005-CheckAndFix.md, decision 2. Null for every other mode.
+    const checkFixStats = (options.mode === 'contour' || options.mode === 'radial')
+      ? { violationsFound: 0, repaired: 0, dropped: 0 }
+      : null;
+    // IMG-006: the same threshold/invert resolution prepareImageField() applies internally to build
+    // field.data/field.luminance's mask (ImageFieldPipeline.js's normalizeParams()) -- resolved here
+    // too so ink()'s reading always agrees with the pixel field it is measuring, and so a caller that
+    // never set threshold/invert (every pre-IMG-006 call) still gets well-defined numbers rather than
+    // an undefined threshold propagating into a NaN ink() result.
+    const resolvedThreshold = options.threshold ?? DEFAULT_THRESHOLD;
+    const resolvedInvert = Boolean(options.invert);
+    const isLineDesign = options.mode === 'line-design';
+    // IMG-010: 'line-design' has its own candidate generation (LineDesignSampler.js, below) --
+    // StoneSampler.js's switch has no case for it, so the call is skipped entirely rather than
+    // silently falling through to its `default` (plain Grid Fill) branch.
+    const points = isLineDesign || isAiStones ? [] : sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
+      seed: options.seed,
+      spread: options.spread,
+      edgeThinning: options.edgeThinning,
+      gapMm: options.gapMm,
+      checkFixStats,
+      threshold: resolvedThreshold,
+      invert: resolvedInvert,
+      brightnessThinning: options.brightnessThinning
+    });
 
-    let stones = points.map((point, index) => new Stone({
-      xMm: point.xMm,
-      yMm: point.yMm,
-      sizeMm: options.stoneSizeMm,
-      color: options.color,
-      layerId: options.layerId,
-      index
-    }));
+    // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
+    // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
+    // every stone takes options.color exactly as before this milestone (decision 1's byte-identity
+    // guarantee). The lookup takes each stone's own ABSOLUTE xMm/yMm (not the sampled point's
+    // local coordinates) -- see docs/specifications/IMG-002-ColorLayers.md decision 1. IMG-015
+    // decision 4: it is the modal label within LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO of the stone's
+    // own radius (fieldModalLabelAt()), not the label of its centre pixel, so every call passes the
+    // stone's own size.
+    const labeled = options.colorCount > 1 && field !== null && field.labels !== null;
+    const colorAt = (xMm, yMm, sizeMm) => {
+      if (!labeled) return options.color;
+      const label = fieldModalLabelAt(field, placement, xMm, yMm, (sizeMm / 2) * LINE_DESIGN_MODAL_COLOR_RADIUS_RATIO);
+      if (label === NO_LABEL) return options.color;
+      return imageRegionColorId(options, field, label);
+    };
 
-    // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field, see
-    // MixedSizeGenerator.js.
-    if (options.mixedOptions) {
-      const infillStones = generateMixedSizeInfillStones({
+    let stones;
+    if (isAiStones) {
+      // IMG-023 (D1/D4): every stone is the layer's own size and a catalogue colour; sizeMode is
+      // ignored (this branch comes before isBrightness).
+      const detection = options.aiStoneDetection ?? detectAiStones(options.imageBuffer);
+      const aiPoints = placeAiStones({ detection, imageBuffer: options.imageBuffer, placement, stoneSizeMm: options.stoneSizeMm, gapMm: options.gapMm, palette: options.palette });
+      stones = aiPoints.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: point.color,
+        layerId: options.layerId,
+        index,
+        metadata: { kind: 'ai-stone' }
+      }));
+    } else if (isLineDesign) {
+      // IMG-010: three concurrently-generated populations (outline/line chains at a fixed SS6,
+      // fill rings at a fixed SS10, plus GapFill.js's own pocket pass) from LineDesignSampler.js's
+      // own candidate generation -- never sampleFieldByMode(), see the architecture note on
+      // IMAGE_SAMPLE_MODES above. Mapped straight to Stone instances, the same one-call shape the
+      // isBrightness branch below already uses; `kind` is carried in metadata only (introspection/
+      // testing), never read by any renderer or exporter.
+      const linePoints = generateLineDesignStonePoints({
+        imageBuffer: options.imageBuffer, placement, gapMm: options.gapMm, layerId: options.layerId, colorMap: options.colorMap, palette: options.palette, chromaScale: options.vividness, maskMode: options.maskMode
+      });
+      stones = linePoints.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: point.color,
+        layerId: options.layerId,
+        index,
+        metadata: { kind: point.kind, pathId: point.pathId ?? null }
+      }));
+    } else if (isBrightness) {
+      // IMG-006 decision 1/3: assign each survivor a diameter from its own measured luminance (the
+      // same absolute pixel fieldLabelAt()/colorAt() above already reads), then run
+      // dropOverlappingSizedStones() as a structural safety net -- expected to remove nothing on this
+      // mode's own sampling floor (decision 1's spacing argument), not the mechanism that shapes the
+      // output.
+      const { sizesMm } = options.brightnessOptions;
+      const rungCount = sizesMm.length;
+      const assigned = points.map((point) => {
+        const lum = fieldLuminanceAt(field, placement, point.xMm, point.yMm);
+        const inkValue = ink(lum, resolvedThreshold, resolvedInvert);
+        const rung = Math.min(rungCount - 1, Math.floor(inkValue * rungCount));
+        return { xMm: point.xMm, yMm: point.yMm, sizeMm: sizesMm[rung] };
+      });
+      const survivingStones = dropOverlappingSizedStones(assigned);
+      stones = survivingStones.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: colorAt(point.xMm, point.yMm, point.sizeMm),
+        layerId: options.layerId,
+        index
+      }));
+    } else {
+      stones = points.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: colorAt(point.xMm, point.yMm, options.stoneSizeMm),
+        layerId: options.layerId,
+        index
+      }));
+    }
+
+    // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field. Built
+    // directly from generateMixedSizeInfillPoints() (not the generateMixedSizeInfillStones()
+    // convenience wrapper the shape/svg/path layer types use above/below) because that wrapper's
+    // single `color` argument (MixedSizeGenerator.js) cannot carry a per-point IMG-002 label lookup
+    // -- see docs/specifications/IMG-002-ColorLayers.md, Structure. startIndex still continues from
+    // the base stones' own length, exactly as generateMixedSizeInfillStones() would have produced.
+    // IMG-010 (D3): Line Design ignores S-200 Mixed Stone Size entirely -- decisions (b)-(e) never
+    // anticipated (and Task D never measured) running S-200's additive infill on top of an
+    // already two-size layout. `options.mixedOptions` is otherwise mode-agnostic, so this mode is
+    // excluded here rather than in normalizeMixedSizeParams() itself.
+    if (options.mixedOptions && !isLineDesign && !isAiStones) {
+      const infillPoints = generateMixedSizeInfillPoints({
         mode: options.mode,
         source: { kind: 'field', field, placement },
         mixedOptions: options.mixedOptions,
         gapMm: options.gapMm,
         baseStones: stones,
-        layerId: options.layerId,
-        color: options.color,
-        startIndex: stones.length
+        samplerOptions: { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning }
       });
+      const startIndex = stones.length;
+      const infillStones = infillPoints.map((point, i) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: colorAt(point.xMm, point.yMm, point.sizeMm),
+        layerId: options.layerId,
+        index: startIndex + i
+      }));
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    // IMG-025 (D2): clean-up on the finished lattice, after any colour mapping and before the IMG-013
+    // gap fill (whose fillers are off the lattice) and the IMG-021 rotation. AI stones ignores size
+    // mode, so only Staggered needs uniform size; null cleanupStats means the pass did not run.
+    let cleanupStats = null;
+    if (options.cleanup && (isAiStones || (options.mode === 'staggered' && options.sizeMode === 'uniform'))) {
+      const cleaned = cleanupLatticeStones({ stones, pitchMm: options.stoneSizeMm + options.gapMm, palette: options.palette, placement, layerId: options.layerId, stoneSizeMm: options.stoneSizeMm, outline: options.jetOutline });
+      stones = cleaned.stones;
+      cleanupStats = cleaned.stats;
+    }
+
+    // IMG-013: runs last, against the combined primary + S-200-infill stone set (S-200 infill counts
+    // as "existing" from gap-fill's own point of view, decision 2) -- reuses the same colorAt()
+    // closure built above (Task C) and the same on-field mask test (fieldPixelOn(), decision 4).
+    // GapFill.js calls colorAt(xMm, yMm), so its filler size (GAP_FILL_STONE_SIZE_MM, no
+    // fillerSizeMm override here) is closed over, as LineDesignSampler.js's pocket pass does.
+    // IMG-010: Line Design's own pocket pass already ran inside generateLineDesignStonePoints()
+    // above (decision f, against its own hole-filled subject mask, not `field`) -- running this
+    // generic fillGaps pass again here would double-apply GapFill.js against the wrong mask.
+    if (options.fillGaps && !isLineDesign && !isAiStones) {
+      const isInside = (xMm, yMm) => fieldPixelOn(field, xMm - placement.xMm, yMm - placement.yMm, placement.widthMm, placement.heightMm);
+      const gapFillStones = generateGapFillStones({
+        baseStones: stones,
+        gapMm: options.gapMm,
+        isInside,
+        placement,
+        colorAt: (xMm, yMm) => colorAt(xMm, yMm, GAP_FILL_STONE_SIZE_MM),
+        layerId: options.layerId,
+        startIndex: stones.length
+      });
+      stones = stones.concat(gapFillStones);
+    }
+
+    // IMG-021 (D1): rigid rotation of the finished stones, every mode, around the unrotated placement
+    // box's centre. Count, sizes and colours are unchanged; a 0 rotation leaves `stones` untouched.
+    if (options.rotationDeg !== 0) {
+      stones = rotatePointsAroundCenter(stones, options.rotationDeg, imagePlacementCenter(options)).map((point) => new Stone(point));
+    }
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats, cleanupStats });
+  }
+
+  /**
+   * IMG-026 (C1): the stones of an ai-layout image layer, placed from the layout service's list
+   * (`layer.aiLayout`) with no image and no field. k = max(1, widthMm / aiLayout.widthMm) (S14):
+   * each stone goes to (xMm + k*x, yMm + k*y) and keeps its own diameter, so with k >= 1 no gap
+   * shrinks. `colorSwaps` (S17) recolours after placement. Both stones of every pair closer than
+   * 0.1 mm get `metadata.gapViolation`, and each stone carries `metadata.aiIndex`, its index in
+   * `aiLayout.stones`. The IMG-021 rotation is applied last, around the centre of the placed box.
+   *
+   * @param {{layerId:string, xMm?:number, yMm?:number, widthMm:number, rotationDeg?:number,
+   *   aiLayout:{version:1, widthMm:number, heightMm:number, stones:Array}, colorSwaps?:object}} params
+   * @returns {StoneLayout} with `aiLayoutStats: {stones, violations, minGapMm, k}`
+   */
+  _generateAiLayoutStones(params) {
+    const options = normalizeAiLayoutParams(params);
+    const { aiLayout, colorSwaps } = options;
+    const k = Math.max(1, options.widthMm / aiLayout.widthMm);
+    const placed = aiLayout.stones.map(([x, y, sizeId, colorId], aiIndex) => ({
+      xMm: options.xMm + k * x,
+      yMm: options.yMm + k * y,
+      sizeMm: AI_LAYOUT_SIZE_MM[sizeId],
+      color: Object.prototype.hasOwnProperty.call(colorSwaps, colorId) ? colorSwaps[colorId] : colorId,
+      layerId: options.layerId,
+      metadata: { aiIndex }
+    }));
+
+    const { violations, minGapMm } = flagAiLayoutGapViolations(placed);
+
+    const center = { cxMm: options.xMm + k * aiLayout.widthMm / 2, cyMm: options.yMm + k * aiLayout.heightMm / 2 };
+    const stones = rotatePointsAroundCenter(placed, options.rotationDeg, center).map((point) => new Stone(point));
+
+    return new StoneLayout({
+      layerId: options.layerId,
+      sourceMode: 'ai-layout',
+      stones,
+      aiLayoutStats: { stones: stones.length, violations, minGapMm, k }
+    });
+  }
+
+  /**
+   * Resolve an image layer's per-colour silhouette contours in absolute millimeters, without
+   * sampling stones. IMG-008: the "traced structure" the Vector-first SVG export's `<g id="regions">`
+   * paths are built from -- see docs/specifications/IMG-008-VectorFirstSvg.md decisions 1/3. Mirrors
+   * resolveShapePolygons()/resolveSvgPolygons(): takes the same params generateImageLayout() takes,
+   * runs them through the exact same normalizeImageParams()/prepareImageField() steps so the traced
+   * field is identical to the one stones were sampled from, and produces no Stone/StoneLayout --
+   * generateImageLayout() remains the only stone producer for image layers.
+   *
+   * Traces one region per label present in `field.colorGroups` when `colorCount > 1` and the field is
+   * quantized (labels in ascending order), otherwise one region for the whole `data >= 128` mask
+   * coloured `options.color`. Every contour smaller than one stone's footprint
+   * (`Math.PI * (stoneSizeMm / 2) ** 2`) is dropped, holes included; a label left with no contours
+   * after that floor is omitted. `mode` is accepted (via normalizeImageParams()) and ignored -- these
+   * regions are traced from the working field itself, not from any particular sampling mode.
+   *
+   * @param {object} params Same params generateImageLayout() takes.
+   * @returns {{regions:{colorId:string,contours:{xMm:number,yMm:number}[][]}[], boundingBox:BoundingBox|null}}
+   */
+  resolveImagePolygons(params = {}) {
+    const options = normalizeImageParams(params);
+
+    const edgeBandFraction = options.edgeWidthMm / options.widthMm;
+    const field = prepareImageField(options.imageBuffer, {
+      threshold: options.threshold,
+      invert: options.invert,
+      blurRadiusPx: options.blurRadiusPx,
+      edgeBandFraction,
+      maxWidthPx: options.maxWidthPx,
+      maxHeightPx: options.maxHeightPx,
+      transparent: options.transparent,
+      colorCount: options.colorCount,
+      palette: options.palette,
+      maskMode: options.maskMode,
+      vividness: options.vividness,
+      paletteRule: options.paletteRule
+    });
+
+    const targetSpacingMm = options.stoneSizeMm + options.gapMm;
+    const areaFloorMm2 = Math.PI * (options.stoneSizeMm / 2) ** 2;
+    const baseSource = { kind: 'field', field, xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
+    const traceMask = (label) => {
+      const source = label === undefined ? baseSource : { ...baseSource, label };
+      const { contours } = combineShapeSources(source, null, 'union', { targetSpacingMm });
+      return contours.filter((contour) => contourAreaAbs(contour) >= areaFloorMm2);
+    };
+
+    const regions = [];
+    if (options.colorCount > 1 && field.labels !== null) {
+      for (let label = 0; label < field.colorGroups.length; label++) {
+        const contours = traceMask(label);
+        if (contours.length === 0) continue;
+        regions.push({ colorId: imageRegionColorId(options, field, label), contours });
+      }
+    } else {
+      const contours = traceMask(undefined);
+      if (contours.length > 0) {
+        regions.push({ colorId: options.color, contours });
+      }
+    }
+
+    // IMG-021 (D3): the traced regions sit under the stones in the SVG export, so they take D1's
+    // rotation too, around the same pivot.
+    if (options.rotationDeg !== 0) {
+      const pivot = imagePlacementCenter(options);
+      for (const region of regions) {
+        region.contours = region.contours.map((contour) => rotatePointsAroundCenter(contour, options.rotationDeg, pivot));
+      }
+    }
+
+    const allPoints = regions.flatMap((region) => region.contours).flat();
+    const boundingBox = allPoints.length > 0 ? BoundingBox.fromPoints(allPoints) : null;
+    return { regions, boundingBox };
   }
 
   /**
@@ -2202,6 +2562,15 @@ function normalizeSvgParams(params) {
   };
 }
 
+// IMG-008: the single colour-resolution rule a quantized image layer's stones and its exported
+// regions both use -- factored out of generateImageLayout()'s own colorAt() closure (a pure move,
+// same override lookup) so the two cannot drift. `label` is a real index into `field.colorGroups`
+// (never NO_LABEL -- callers check that themselves before reaching here).
+function imageRegionColorId(options, field, label) {
+  const group = field.colorGroups[label];
+  return options.colorMap[group.nearestId] ?? group.nearestId;
+}
+
 // RS-1008A: threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx are validated once, inside
 // prepareImageField() (src/image/ImageFieldPipeline.js) -- not duplicated here. This function only
 // validates the geometry-side params (placement, stone size/gap/color, layerId, the imageBuffer
@@ -2241,6 +2610,28 @@ function normalizeImageParams(params) {
   const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
   const heightMm = assertPositiveNumber(params.heightMm, 'heightMm');
 
+  // IMG-001: default 'white' matches this method's previous, only, always-flatten-onto-white
+  // behavior exactly, so every pre-existing call site (and every image layer saved before this
+  // milestone, which has no stored transparent field) generates byte-identical geometry.
+  const transparent = params.transparent ?? DEFAULT_IMAGE_TRANSPARENT_MODE;
+  if (!IMAGE_TRANSPARENT_MODES.has(transparent)) {
+    throw new TypeError(`Unsupported image transparency policy: ${transparent}. Expected one of: ${[...IMAGE_TRANSPARENT_MODES].join(', ')}`);
+  }
+
+  // IMG-009: mirrors src/image/ImageFieldPipeline.js's own read-site-permissive maskMode resolution
+  // (never a throw, unlike `transparent` above) -- 'threshold' unless the value is exactly 'subject'.
+  // Forwarded into this method's own prepareImageField() calls below so the live stone-generation and
+  // resolveImagePolygons() (Boolean/SVG-export tracing) paths actually honor a layer's maskMode, not
+  // just the field-preparation module itself. See docs/specifications/IMG-009-SubjectMask.md decision 3.
+  // IMG-018: 'whole' is the third value, see docs/specifications/IMG-018-WholeImageMask.md.
+  const maskMode = params.maskMode === 'subject' ? 'subject' : params.maskMode === 'whole' ? 'whole' : 'threshold';
+
+  // IMG-023: optional precomputed detectAiStones() result (app.js caches it per imageSrc).
+  const aiStoneDetection = params.aiStoneDetection ?? null;
+  if (aiStoneDetection !== null && (typeof aiStoneDetection !== 'object' || typeof aiStoneDetection.ok !== 'boolean')) {
+    throw new TypeError('GeometryEngine.generateImageLayout aiStoneDetection must be a detectAiStones() result when provided.');
+  }
+
   return {
     imageBuffer: params.imageBuffer,
     layerId: params.layerId,
@@ -2257,9 +2648,142 @@ function normalizeImageParams(params) {
     blurRadiusPx: params.blurRadiusPx,
     maxWidthPx: params.maxWidthPx,
     maxHeightPx: params.maxHeightPx,
+    transparent,
+    aiStoneDetection,
+    // IMG-002: permissive defaults, no validation beyond this -- src/image/ImageFieldPipeline.js's
+    // own normalizeParams() is where colorCount/palette are actually range-/shape-checked (it throws
+    // when colorCount > 1 has no palette); this is the same "read-site permissive default, no
+    // validateProject() change" precedent layer.transparent (IMG-001) already established.
+    colorCount: params.colorCount ?? 1,
+    palette: params.palette ?? null,
+    colorMap: params.colorMap ?? {},
+    maskMode,
+    // IMG-017: read-site permissive default, mirroring src/image/ImageFieldPipeline.js's own
+    // normalizeParams() -- any finite number in [1, 2], 1 otherwise, never a throw. No
+    // validateProject() change, no project version bump. See
+    // docs/specifications/IMG-017-Vividness.md decision 3.
+    vividness: typeof params.vividness === 'number' && Number.isFinite(params.vividness) && params.vividness >= 1 && params.vividness <= 2 ? params.vividness : 1,
+    // IMG-024: read-site permissive, like vividness -- exactly 'error' selects the error palette rule
+    // (src/image/ColorQuantize.js labelErrorPaletteColors()), anything else today's rule. See
+    // docs/specifications/IMG-024-FlatArtworkStyle.md D4.
+    paletteRule: params.paletteRule === 'error' ? 'error' : null,
+    // IMG-003: read-site permissive defaults, the same precedent colorCount/palette/colorMap
+    // (IMG-002) and transparent (IMG-001) already established -- no validateProject() change, no
+    // project version bump. Invalid values (non-integer seed, spread < 1) fall back to 1 rather than
+    // throwing, matching every other optional layer field this method defaults this way.
+    seed: Number.isInteger(params.seed) && params.seed >= 0 ? params.seed : 1,
+    spread: typeof params.spread === 'number' && Number.isFinite(params.spread) && params.spread >= 1 ? params.spread : 1,
+    // IMG-004: read-site permissive defaults, the same precedent seed/spread (IMG-003) already
+    // established -- no validateProject() change, no project version bump. Invalid values
+    // (non-positive edgeWidthMm, negative edgeThinning) fall back to 6/1.
+    edgeWidthMm: typeof params.edgeWidthMm === 'number' && Number.isFinite(params.edgeWidthMm) && params.edgeWidthMm > 0 ? params.edgeWidthMm : 6,
+    edgeThinning: typeof params.edgeThinning === 'number' && Number.isFinite(params.edgeThinning) && params.edgeThinning >= 0 ? params.edgeThinning : 1,
+    // IMG-006: read-site permissive default, the same precedent edgeThinning (IMG-004) already
+    // established -- no validateProject() change, no project version bump. Invalid values (negative
+    // brightnessThinning) fall back to 0 (no thinning), the neutral/off value for this field -- unlike
+    // edgeThinning's 1, since brightnessThinning applies even to a plain 'uniform' image layer
+    // (decision 2) and must be a true no-op there by default.
+    brightnessThinning: typeof params.brightnessThinning === 'number' && Number.isFinite(params.brightnessThinning) && params.brightnessThinning >= 0 ? params.brightnessThinning : 0,
+    // IMG-013: read-site permissive default, the same precedent (edgeThinning/brightnessThinning)
+    // already established -- no validateProject() change, no project version bump. A saved project
+    // with no fillGaps field (every project saved before this milestone) coerces to false, which
+    // skips the gap-fill pass entirely, so it regenerates byte-identically.
+    fillGaps: Boolean(params.fillGaps),
+    // IMG-025 (D6): read-site permissive -- only exactly true turns each on; missing or anything else
+    // is off, so a project saved before this milestone regenerates byte-identically.
+    cleanup: params.cleanup === true,
+    jetOutline: params.jetOutline === true,
+    // IMG-021: same normalizeRotationDeg()/assertFiniteNumber() convention normalizeShapeParams() uses.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
-    ...normalizeMixedSizeParams(params, stoneSizeMm)
+    // IMG-006: allowBrightness -- only normalizeImageParams() (this method) passes it.
+    ...normalizeMixedSizeParams(params, stoneSizeMm, { allowBrightness: true })
   };
+}
+
+// IMG-021: the rotation pivot for an image layer's stones and traced regions -- the centre of the
+// unrotated placement box, the same centre app.js's rotatedCornersAABB() rotates the box around.
+// IMG-026 (C1): the small parameter set of _generateAiLayoutStones(). Kept apart from
+// normalizeImageParams() on purpose: an ai-layout layer has no image buffer and no field.
+function normalizeAiLayoutParams(params) {
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine ai-layout requires a non-empty layerId.');
+  }
+  const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
+  const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
+  const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
+  const rotationDeg = assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg');
+
+  const aiLayout = params.aiLayout;
+  if (!aiLayout || typeof aiLayout !== 'object' || Array.isArray(aiLayout)) {
+    throw new TypeError('GeometryEngine ai-layout requires an aiLayout object.');
+  }
+  if (aiLayout.version !== 1) {
+    throw new TypeError(`Unsupported aiLayout version: ${aiLayout.version}. Expected 1.`);
+  }
+  assertPositiveNumber(aiLayout.widthMm, 'aiLayout.widthMm');
+  assertPositiveNumber(aiLayout.heightMm, 'aiLayout.heightMm');
+  if (!Array.isArray(aiLayout.stones)) {
+    throw new TypeError('aiLayout.stones must be an array.');
+  }
+  aiLayout.stones.forEach((entry, i) => {
+    if (!Array.isArray(entry) || entry.length < 4 ||
+      typeof entry[0] !== 'number' || !Number.isFinite(entry[0]) ||
+      typeof entry[1] !== 'number' || !Number.isFinite(entry[1]) ||
+      !Object.prototype.hasOwnProperty.call(AI_LAYOUT_SIZE_MM, entry[2]) ||
+      typeof entry[3] !== 'string' || entry[3].length === 0) {
+      throw new TypeError(`aiLayout.stones[${i}] must be [x, y, size id, colour id].`);
+    }
+  });
+
+  const colorSwaps = params.colorSwaps ?? {};
+  if (!colorSwaps || typeof colorSwaps !== 'object' || Array.isArray(colorSwaps) ||
+    !Object.values(colorSwaps).every((id) => typeof id === 'string' && id.length > 0)) {
+    throw new TypeError('colorSwaps must be an object of colour id to colour id.');
+  }
+
+  return { layerId: params.layerId, xMm, yMm, widthMm, rotationDeg, aiLayout, colorSwaps };
+}
+
+// IMG-026 (C1, S3): sets metadata.gapViolation on both stones of every pair whose gap is below
+// 0.1 mm, with a spatial grid instead of comparing every pair. The cell is the largest diameter
+// plus 1 mm, so every pair closer than 1 mm sits in neighbouring cells: the violation test is
+// exact, and minGapMm is exact whenever it is below 1 mm (null for fewer than two stones).
+function flagAiLayoutGapViolations(stones) {
+  if (stones.length < 2) return { violations: 0, minGapMm: null };
+  let maxSizeMm = 0;
+  for (const s of stones) maxSizeMm = Math.max(maxSizeMm, s.sizeMm);
+  const cellMm = maxSizeMm + 1;
+  const buckets = new Map();
+  let violations = 0;
+  let minGapMm = Infinity;
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellMm);
+    const gy = Math.floor(stone.yMm / cellMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const gapMm = Math.hypot(stone.xMm - other.xMm, stone.yMm - other.yMm) - (stone.sizeMm + other.sizeMm) / 2;
+          if (gapMm < minGapMm) minGapMm = gapMm;
+          if (gapMm < AI_LAYOUT_MIN_GAP_MM - AI_LAYOUT_GAP_EPSILON_MM) {
+            violations++;
+            stone.metadata.gapViolation = true;
+            other.metadata.gapViolation = true;
+          }
+        }
+      }
+    }
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+  return { violations, minGapMm: Number.isFinite(minGapMm) ? minGapMm : null };
+}
+
+function imagePlacementCenter(options) {
+  return { cxMm: options.xMm + options.widthMm / 2, cyMm: options.yMm + options.heightMm / 2 };
 }
 
 // RS-1012: contours/xMm/yMm/widthMm/heightMm are this method's own geometry-side params;

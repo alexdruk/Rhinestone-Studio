@@ -109,7 +109,13 @@ await test('7. generateSvgStonesLive resolves mode via resolveVectorFillMode(lay
 });
 
 await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(layer.fillMode) -- previously no mode was forwarded at all', () => {
-  assert.match(appJs, /mode:resolveImageFillMode\(layer\.fillMode\),color:layer\.color,threshold:layer\.threshold/);
+  // IMG-010 hoisted the resolveImageFillMode(layer.fillMode) call into a single `mode` const, shared
+  // by both the line-design branch's own params object and the ordinary-path one below it (rather
+  // than each re-deriving mode inline, which is what the old, now-stale regex pinned) -- so this
+  // proves the resolution once, then proves each params object forwards that same `mode` binding.
+  assert.match(appJs, /const mode=resolveImageFillMode\(layer\.fillMode\);/, 'expected mode to be resolved once via resolveImageFillMode(layer.fillMode)');
+  assert.match(appJs, /gapMm:layer\.gap,mode,color:layer\.color,colorMap:layer\.colorMap\?\?\{\},palette:imageColorPalette\(\)/, 'expected the line-design params object to forward the shared mode');
+  assert.match(appJs, /gapMm:layer\.gap,mode,color:layer\.color,threshold:layer\.threshold/, 'expected the ordinary-path params object to forward the shared mode');
 });
 
 await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(layer.fillMode) -- previously hard-coded to \'outline\'', () => {
@@ -144,7 +150,10 @@ await test('12. writeSelectedControlsToLayer() writes fillMode back for circle/r
   assert.match(appJs, /l\.r=Math\.max\(1,readLengthField\('shapeW'\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
   assert.match(appJs, /l\.h=Math\.max\(1,readLengthField\('shapeH'\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
   assert.match(appJs, /l\.mode=resolveVectorFillMode\(el\('svgMode'\)\.value\)/, 'svg');
-  assert.match(appJs, /l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)\}else if\(l\.type==='path'\)/, 'image');
+  // Anchored on the preceding write (like the other three cases above), not the branch end --
+  // IMG-002's colorCount/colorMap write-back now sits between the fillMode write and the branch
+  // end, and the guard's real subject is the fillMode write itself, not what follows it.
+  assert.match(appJs, /l\.maxHeightPx=Math\.max\(8,parseIntOr\(el\('imgMaxHeight'\)\.value,DEFAULT_IMAGE_MAX_DIMENSION_PX\)\);l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)/, 'image');
 });
 
 await test('13. #shapeFillMode/#imageFillMode are history-tracked controls (undo/redo coalescing), like #textMode/#svgMode already are', () => {

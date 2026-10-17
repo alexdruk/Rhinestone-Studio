@@ -9,12 +9,19 @@
 //   node tools/run-tests.mjs --group <name>   run exactly tools/test-groups.mjs's GROUPS[<name>]
 //   node tools/run-tests.mjs --all            run every tools/test-*.mjs file, ignoring the
 //                                             default-suite exclusion list
+//   node tools/run-tests.mjs --verbose        stream each test file's stdout/stderr live instead
+//                                             of capturing it (combinable with any of the above)
+//
+// By default, each test file's output is captured rather than streamed: a passing file prints
+// nothing beyond its progress line, a failing file prints its full captured output under a
+// heading. --verbose restores live streaming.
 //
 // See docs/specifications/CI-001-RealTestExecution.md for the full design.
 
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, openSync, closeSync, readFileSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { EXCLUDED_FROM_DEFAULT, GROUPS } from './test-groups.mjs';
 
@@ -36,6 +43,7 @@ export function parseArgs(argv) {
   let group = null;
   let all = false;
   let filter = null;
+  let verbose = false;
 
   while (args.length > 0) {
     const arg = args.shift();
@@ -46,6 +54,8 @@ export function parseArgs(argv) {
       group = args.shift();
     } else if (arg === '--all') {
       all = true;
+    } else if (arg === '--verbose') {
+      verbose = true;
     } else if (arg.startsWith('--')) {
       throw new Error(`Unknown option: ${arg}`);
     } else {
@@ -61,7 +71,7 @@ export function parseArgs(argv) {
     throw new Error('--group, --all, and a filename filter are mutually exclusive');
   }
 
-  return { group, all, filter };
+  return { group, all, filter, verbose };
 }
 
 export function resolveSelection({ group, all, filter }, toolsDir = TOOLS_DIR) {
@@ -93,17 +103,57 @@ export function resolveSelection({ group, all, filter }, toolsDir = TOOLS_DIR) {
   return discovered.filter((name) => !excluded.has(name));
 }
 
-function runFile(name, toolsDir) {
+function runFile(name, toolsDir, verbose) {
   const fullPath = path.join(toolsDir, name);
   const preloadPath = path.join(toolsDir, 'lib/paper-safe-self-preload.mjs');
+  const execArgs = ['--import', `file://${preloadPath}`, fullPath];
   const start = Date.now();
-  const result = spawnSync(process.execPath, ['--import', `file://${preloadPath}`, fullPath], { stdio: 'inherit' });
+
+  if (verbose) {
+    const result = spawnSync(process.execPath, execArgs, { stdio: 'inherit' });
+    const elapsedMs = Date.now() - start;
+    if (result.error) {
+      return { name, passed: false, elapsedMs, spawnError: result.error, output: null };
+    }
+    return { name, passed: result.status === 0, elapsedMs, spawnError: null, output: null };
+  }
+
+  // Redirect stdout and stderr to the same fd (rather than separate 'pipe' buffers) so the
+  // captured text preserves the true chronological interleaving of the two streams, and so
+  // there is no spawnSync maxBuffer to overflow on a chatty test file.
+  const capturePath = path.join(os.tmpdir(), `rhinestone-run-tests-${process.pid}.log`);
+  const fd = openSync(capturePath, 'w');
+  let result;
+  try {
+    result = spawnSync(process.execPath, execArgs, { stdio: ['ignore', fd, fd] });
+  } finally {
+    closeSync(fd);
+  }
   const elapsedMs = Date.now() - start;
 
-  if (result.error) {
-    return { name, passed: false, elapsedMs, spawnError: result.error };
+  let output = '';
+  try {
+    output = readFileSync(capturePath, 'utf8');
+  } catch {
+    output = '';
   }
-  return { name, passed: result.status === 0, elapsedMs, spawnError: null };
+  try {
+    unlinkSync(capturePath);
+  } catch {
+    // best-effort cleanup
+  }
+
+  if (result.error) {
+    return { name, passed: false, elapsedMs, spawnError: result.error, output };
+  }
+  return { name, passed: result.status === 0, elapsedMs, spawnError: null, output };
+}
+
+function printCapturedOutput(name, output) {
+  console.log(`\n--- Output: ${name} ---`);
+  if (output) {
+    process.stdout.write(output.endsWith('\n') ? output : `${output}\n`);
+  }
 }
 
 function formatSeconds(ms) {
@@ -112,8 +162,10 @@ function formatSeconds(ms) {
 
 export function main(argv, toolsDir = TOOLS_DIR) {
   let selection;
+  let verbose = false;
   try {
     const parsed = parseArgs(argv);
+    verbose = parsed.verbose;
     selection = resolveSelection(parsed, toolsDir);
   } catch (err) {
     console.error(`run-tests: ${err.message}`);
@@ -130,13 +182,19 @@ export function main(argv, toolsDir = TOOLS_DIR) {
 
   for (const name of selection) {
     console.log(`\n▶ ${name}`);
-    const result = runFile(name, toolsDir);
+    const result = runFile(name, toolsDir, verbose);
     results.push(result);
     if (result.spawnError) {
       console.error(`✘ ${name} — failed to start: ${result.spawnError.message}`);
+      if (!verbose) {
+        printCapturedOutput(name, result.output);
+      }
     } else {
       const mark = result.passed ? '✔' : '✘';
       console.log(`${mark} ${name} (${formatSeconds(result.elapsedMs)})`);
+      if (!verbose && !result.passed) {
+        printCapturedOutput(name, result.output);
+      }
     }
   }
 

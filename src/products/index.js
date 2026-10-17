@@ -31,6 +31,16 @@ export {
 
 export { getPlateDesignTargetGuide } from './PlateGuides.js';
 
+// RS-3037: Flat Sheet product definition. Kept as its own named exports for the same reason the
+// plate exports above are separate -- sheet-specific, not part of the generic ObjectTemplate
+// registry contract every other template also uses.
+export {
+  SHEET_MIN_MM,
+  SHEET_MAX_MM,
+  getSheetDefaults,
+  clampSheetDimensionMm
+} from './SheetProductDefinition.js';
+
 // RS-2010: Standard Mug/Tumbler/Bottle physical product definitions. Kept as their own named
 // exports (not folded into ObjectTemplate.js's own exports) for the same reason the plate exports
 // above are separate -- these are vessel-specific, not part of the generic ObjectTemplate registry

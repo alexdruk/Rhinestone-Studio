@@ -184,6 +184,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const writeSelectedControlsToLayer = record('writeSelectedControlsToLayer');
   const renderLayerUI = record('renderLayerUI');
   const drawLayout = record('drawLayout');
+  const renderImageStudio = record('renderImageStudio');
   const drawCup = record('drawCup');
   const updateStats = record('updateStats');
   const updateHistoryUI = record('updateHistoryUI');
@@ -201,7 +202,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false,forceStoneRebuild=false){', 'updateAll()');
   const factory = new Function(
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
-    'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
+    'renderLayerUI', 'drawLayout', 'renderImageStudio', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
     'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave', 'drawingTool', 'devicePixelRatio',
     // RS-3032 Step A: updateAll()'s own body now references the real, module-level SHAPE_LIBRARY_KINDS
     // (its Design-canvas sync call site is widened to also cover shape-library layers) -- injected
@@ -217,7 +218,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   );
   const { updateAll, bumpGenerationToken } = factory(
     writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
-    renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
+    renderLayerUI, drawLayout, renderImageStudio, drawCup, updateStats, updateHistoryUI, updateEditingUI,
     updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1,
     SHAPE_LIBRARY_KINDS
   );
@@ -226,17 +227,21 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors, getSyncFromProjectLayersArg: () => syncFromProjectLayersArg };
 }
 
-const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
+// IMG-007 added renderImageStudio() to this tail, sitting AFTER the drawingTool.isActive if/else
+// (not inside either branch), so the RS-3010 drawing-active test below now proves it runs in both
+// branches: its flatMap only swaps 'drawLayout' for the two drawingTool calls and leaves
+// 'renderImageStudio' in place right after them, unchanged.
+const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'renderImageStudio', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
 
 await test('a successful regeneration draws/updates stats/history/warnings and only then schedules autosave, in the required order', async () => {
-  const { run, calls, getStatus } = runUpdateAll({ buildGenerate: () => async () => ({ count: 3 }) });
+  const { run, calls, getStatus } = runUpdateAll({ buildGenerate: () => async () => ({ layout: { count: 3 }, failures: [] }) });
   await run();
   assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER]);
   assert.equal(getStatus(), 'Ready');
 });
 
 await test('updateAll(true) (skipWrite) skips writeSelectedControlsToLayer() but still completes the successful-regeneration tail', async () => {
-  const { run, calls } = runUpdateAll({ skipWrite: true, buildGenerate: () => async () => ({}) });
+  const { run, calls } = runUpdateAll({ skipWrite: true, buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await run();
   assert.deepEqual(calls, SUCCESS_TAIL_ORDER);
 });
@@ -245,12 +250,12 @@ await test('a thrown generation error reports it via #status and console.error, 
   const { run, tailCalls, getStatus, consoleErrors } = runUpdateAll({ buildGenerate: () => async () => { throw new Error('boom'); } });
   await run();
   assert.deepEqual(tailCalls(), [], 'no draw/history/autosave call may run after a failed generation');
-  assert.equal(getStatus(), 'Text generation failed: boom');
+  assert.equal(getStatus(), 'Layout generation failed: boom');
   assert.equal(consoleErrors.length, 1);
 });
 
 await test('a generation token superseded during the await (a newer updateAll() call started first) discards this pass entirely, even though generate() itself succeeded', async () => {
-  const { run, tailCalls, getStatus } = runUpdateAll({ buildGenerate: (bump) => async () => { bump(); return {}; } });
+  const { run, tailCalls, getStatus } = runUpdateAll({ buildGenerate: (bump) => async () => { bump(); return { layout: {}, failures: [] }; } });
   await run();
   assert.deepEqual(tailCalls(), [], 'a stale/superseded pass must not run any of the successful-regeneration tail');
   assert.equal(getStatus(), 'Ready', 'a discarded pass must not touch #status at all');
@@ -265,7 +270,7 @@ await test('a generation token superseded during the await also short-circuits t
 });
 
 await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawingTool.resize() instead of drawLayout()', async () => {
-  const { run, calls } = runUpdateAll({ isDrawing: true, buildGenerate: () => async () => ({}) });
+  const { run, calls } = runUpdateAll({ isDrawing: true, buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await run();
   assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER.flatMap((c) => c === 'drawLayout' ? ['drawingTool.resize', 'drawingTool.syncFromProjectLayers'] : [c])]);
   assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
@@ -281,23 +286,23 @@ await test('canvas-desync fix: while drawing mode is active, updateAll() reconci
     { id: 'svg1', type: 'svg' },
     { id: 'img1', type: 'image' }
   ];
-  const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({}) });
+  const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await run();
   assert.deepEqual(getSyncFromProjectLayersArg(), projectLayers, 'expected path + shape-library + svg/image + text + circle layers -- every supported Design-selectable type now included');
 });
 
 await test('canvas-desync fix: while drawing mode is inactive, updateAll() never calls drawingTool.syncFromProjectLayers()', async () => {
-  const { run, calls } = runUpdateAll({ isDrawing: false, buildGenerate: () => async () => ({}) });
+  const { run, calls } = runUpdateAll({ isDrawing: false, buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await run();
   assert.ok(!calls.includes('drawingTool.syncFromProjectLayers'), 'sync must only run while Design actually owns the canvas');
 });
 
-await test('a lingering "Text generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {
-  const recovered = runUpdateAll({ statusText: 'Text generation failed: boom', buildGenerate: () => async () => ({}) });
+await test('a lingering "Layout generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {
+  const recovered = runUpdateAll({ statusText: 'Layout generation failed: boom', buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await recovered.run();
   assert.equal(recovered.getStatus(), 'Ready');
 
-  const withManifestError = runUpdateAll({ statusText: 'Ready', permanentEngineError: new Error('manifest fetch failed'), buildGenerate: () => async () => ({}) });
+  const withManifestError = runUpdateAll({ statusText: 'Ready', permanentEngineError: new Error('manifest fetch failed'), buildGenerate: () => async () => ({ layout: {}, failures: [] }) });
   await withManifestError.run();
   assert.match(withManifestError.getStatus(), /Font manifest failed to load \(manifest fetch failed\)/);
 });

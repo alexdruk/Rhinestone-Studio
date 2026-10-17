@@ -154,6 +154,47 @@ function buildDistanceField(insideAt, boundingBox, spacingMm) {
 // distance found. Only the first step off the boundary is measured this way; every deeper node
 // inherits it through the ordinary chamfer relaxation. The field then carries a genuine
 // true-distance estimate, so computeInwardRingPolygons() traces at the nominal threshold.
+// Shared by chamferDistanceTransform() and rawGridDistanceTransform() below: relaxes an
+// already-seeded `dist` array (0 at every outside/seed cell, some initial estimate -- possibly
+// Infinity -- at every inside cell) via the standard forward + backward chamfer sweep. Never reads
+// insideAt; the two callers differ only in how they seed the boundary-adjacent inside cells before
+// calling this.
+function relaxChamferDistances(dist, insideGrid, cols, rows, cellSizeMm) {
+  const at = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows) ? 0 : dist[j * cols + i];
+  const ORTHOGONAL_MM = cellSizeMm;
+  const DIAGONAL_MM = cellSizeMm * Math.SQRT2;
+
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const idx = j * cols + i;
+      if (!insideGrid[idx]) continue;
+      dist[idx] = Math.min(
+        dist[idx],
+        at(i - 1, j) + ORTHOGONAL_MM,
+        at(i, j - 1) + ORTHOGONAL_MM,
+        at(i - 1, j - 1) + DIAGONAL_MM,
+        at(i + 1, j - 1) + DIAGONAL_MM
+      );
+    }
+  }
+
+  for (let j = rows - 1; j >= 0; j--) {
+    for (let i = cols - 1; i >= 0; i--) {
+      const idx = j * cols + i;
+      if (!insideGrid[idx]) continue;
+      dist[idx] = Math.min(
+        dist[idx],
+        at(i + 1, j) + ORTHOGONAL_MM,
+        at(i, j + 1) + ORTHOGONAL_MM,
+        at(i + 1, j + 1) + DIAGONAL_MM,
+        at(i - 1, j + 1) + DIAGONAL_MM
+      );
+    }
+  }
+
+  return dist;
+}
+
 function chamferDistanceTransform(insideGrid, cols, rows, cellSizeMm, insideAt, minXmm, minYmm) {
   const dist = new Float64Array(insideGrid.length);
   const outsideAt = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows) ? true : !insideGrid[j * cols + i];
@@ -192,39 +233,47 @@ function chamferDistanceTransform(insideGrid, cols, rows, cellSizeMm, insideAt, 
     }
   }
 
-  const at = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows) ? 0 : dist[j * cols + i];
-  const ORTHOGONAL_MM = cellSizeMm;
-  const DIAGONAL_MM = cellSizeMm * Math.SQRT2;
+  return relaxChamferDistances(dist, insideGrid, cols, rows, cellSizeMm);
+}
+
+/**
+ * IMG-010 (Line Design) -- raw-grid counterpart to chamferDistanceTransform() above, for callers
+ * with a raster mask and no continuous `insideAt` predicate to bisect against (a raw pixel mask has
+ * no meaning at sub-pixel resolution, unlike a vector shape or a field-threshold test). Boundary-
+ * adjacent inside cells are seeded with the flat `cellSizeMm / 2` estimate the module comment above
+ * describes as "the average of the bias" -- coarser than chamferDistanceTransform()'s own sub-cell
+ * localisation, but that localisation fundamentally requires a bisectable predicate this entry point
+ * doesn't have. Reused for both a disk dilation (`distance <= radius` against the mask's complement)
+ * and a disk erosion (this function called directly against the mask itself, then
+ * `distance >= radius`) -- see LineDesignSampler.js's closeDiskMask()/dilateMask().
+ *
+ * @param {Uint8Array|Uint8ClampedArray} insideGrid 0/1, row-major, `cols` x `rows`.
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} cellSizeMm
+ * @returns {Float64Array} Distance (mm) from each inside (1) cell to the nearest outside (0) cell; 0 at every outside cell.
+ */
+export function rawGridDistanceTransform(insideGrid, cols, rows, cellSizeMm) {
+  const dist = new Float64Array(insideGrid.length);
+  const outsideAt = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows) ? true : !insideGrid[j * cols + i];
+  const NEIGHBOUR_DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const idx = j * cols + i;
-      if (!insideGrid[idx]) continue;
-      dist[idx] = Math.min(
-        dist[idx],
-        at(i - 1, j) + ORTHOGONAL_MM,
-        at(i, j - 1) + ORTHOGONAL_MM,
-        at(i - 1, j - 1) + DIAGONAL_MM,
-        at(i + 1, j - 1) + DIAGONAL_MM
-      );
+      if (!insideGrid[idx]) {
+        dist[idx] = 0;
+        continue;
+      }
+      let boundaryAdjacent = false;
+      for (const [di, dj] of NEIGHBOUR_DIRS) {
+        if (outsideAt(i + di, j + dj)) { boundaryAdjacent = true; break; }
+      }
+      dist[idx] = boundaryAdjacent ? cellSizeMm / 2 : Number.POSITIVE_INFINITY;
     }
   }
 
-  for (let j = rows - 1; j >= 0; j--) {
-    for (let i = cols - 1; i >= 0; i--) {
-      const idx = j * cols + i;
-      if (!insideGrid[idx]) continue;
-      dist[idx] = Math.min(
-        dist[idx],
-        at(i + 1, j) + ORTHOGONAL_MM,
-        at(i, j + 1) + ORTHOGONAL_MM,
-        at(i + 1, j + 1) + DIAGONAL_MM,
-        at(i - 1, j + 1) + DIAGONAL_MM
-      );
-    }
-  }
-
-  return dist;
+  return relaxChamferDistances(dist, insideGrid, cols, rows, cellSizeMm);
 }
 
 // READ-001: is this loop a long thin sliver (an elongated shape's collapsed medial band -- keep it)
@@ -767,4 +816,43 @@ export function computeInwardRingPolygons({ insideAt, boundingBox, spacingMm, st
   }
 
   return rings;
+}
+
+/**
+ * IMG-010 (Line Design) -- traces exactly one iso-distance ring, at a caller-chosen `thresholdMm`,
+ * instead of computeInwardRingPolygons()'s own "every ring from startOffsetMm to the shape's
+ * medial reach" walk. Decision (c)'s outline chain wants only the single ring one stone radius in
+ * from the silhouette edge, not the repeated-inward-rings sequence Contour Fill (and this mode's own
+ * decision (e) fill rings) need -- but still wants the *same* cell resolution a real chain/fill pitch
+ * would produce (`spacingMm` still sizes the grid via computeCellSizeMm(), matching
+ * computeInwardRingPolygons()'s own resolution exactly), so this is not simply "call
+ * computeInwardRingPolygons() and keep only the first ring" (there is no cheap way to tell which
+ * returned loops came from which threshold) and not "pass a huge spacingMm to force one iteration"
+ * either (that would also inflate the cell size past computeCellSizeMm()'s own clamp, coarsening the
+ * trace). Reuses buildDistanceField()/traceIsoDistanceContour() directly, unchanged.
+ *
+ * @param {object} params
+ * @param {(xMm:number, yMm:number)=>boolean} params.insideAt
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}} params.boundingBox
+ * @param {number} params.spacingMm Stone pitch, used only to size the distance-field grid (same role
+ *   it plays in computeInwardRingPolygons()) -- must be positive.
+ * @param {number} params.thresholdMm Distance from the boundary to trace the ring at.
+ * @returns {{xMm:number,yMm:number}[][]} Closed ring polygon(s) at exactly this threshold.
+ */
+export function computeSingleDistanceRing({ insideAt, boundingBox, spacingMm, thresholdMm }) {
+  if (!(spacingMm > 0)) {
+    throw new RangeError('computeSingleDistanceRing requires a positive spacingMm.');
+  }
+  if (!boundingBox) {
+    return [];
+  }
+  const field = buildDistanceField(insideAt, boundingBox, spacingMm);
+  if (!field) {
+    return [];
+  }
+  const slopMm = field.cellSizeMm;
+  if (field.maxDistanceMm + slopMm < thresholdMm) {
+    return [];
+  }
+  return traceIsoDistanceContour(field.distanceGrid, field.cols, field.rows, field.minXmm, field.minYmm, field.cellSizeMm, thresholdMm);
 }

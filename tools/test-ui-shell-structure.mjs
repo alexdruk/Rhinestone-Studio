@@ -66,14 +66,15 @@ function section(html, heading) {
 // === Top menu ===================================================================================
 
 // RS-3011 nav-toggle fix: opening a Lightbox that shows/produces design content (Text, Shapes,
-// Import, Image Trace, Export, Production Sheet) now reveals Dual Workspace first, via
+// Import, Export, Production Sheet) now reveals Dual Workspace first, via
 // revealDualWorkspaceForLightbox() -- see test 3b below. Shipping/Settings/Help show no
-// design/geometry content and deliberately keep the old plain-open behavior.
+// design/geometry content and deliberately keep the old plain-open behavior. IMG-011: Image Trace
+// instead reveals the 2D canvas only, via revealCanvasOnlyForLightbox() -- see test 3c below.
 const MENU_ITEMS = [
   { id: 'menuText', label: 'Text', lightbox: 'lightboxText', revealsDualWorkspace: true },
   { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes', revealsDualWorkspace: true },
   { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport', revealsDualWorkspace: true },
-  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace', revealsDualWorkspace: true },
+  { id: 'menuImageTrace', label: 'Image', lightbox: 'lightboxImageTrace', revealsCanvasOnly: true },
   { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport', revealsDualWorkspace: true },
   { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet', revealsDualWorkspace: true },
   { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping', revealsDualWorkspace: false },
@@ -102,14 +103,19 @@ await test('2. every top-menu button has an icon glyph, a visible text label, an
 });
 
 await test('3. every top-menu button opens exactly its documented Lightbox, and every Lightbox overlay exists exactly once', () => {
-  for (const { id, lightbox, revealsDualWorkspace } of MENU_ITEMS) {
+  for (const { id, lightbox, revealsDualWorkspace, revealsCanvasOnly } of MENU_ITEMS) {
     const re = revealsDualWorkspace
       ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealDualWorkspaceForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`)
+      : revealsCanvasOnly
+      ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealCanvasOnlyForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`)
       : new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`);
-    assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : ''}`);
+    assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : revealsCanvasOnly ? ', revealing the 2D canvas only first' : ''}`);
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
-    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)?" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
+    // IMG-007: lightboxImageTrace's overlay now carries a second modifier class ("dock-left",
+    // alongside "non-modal") -- widened from "at most one" to "zero or more" additional classes so
+    // this still matches every Lightbox overlay, not just single-modifier ones.
+    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)*" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
   }
 });
 
@@ -125,6 +131,20 @@ await test('3b. revealDualWorkspaceForLightbox() actually exits Design (setDrawM
   // setDrawMode(false) must run before the setWorkspaceMode('dual') check, not after -- otherwise
   // Design's own exit-restore (workspaceModeBeforeDrawing) would clobber the freshly-set 'dual'.
   assert.ok(body.indexOf('setDrawMode(false)') < body.indexOf("setWorkspaceMode('dual')"), 'expected setDrawMode(false) to run before forcing workspaceMode to dual');
+});
+
+await test('3c. revealCanvasOnlyForLightbox() actually exits Design (setDrawMode(false)) before reusing the exact setWorkspaceMode(\'2d\')+persistActiveView(\'2d\') pair the 2D canvas view itself uses, and is skipped entirely when the 2D canvas is already showing and Design is not active', () => {
+  const fnMatch = appJs.match(/function revealCanvasOnlyForLightbox\(\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a revealCanvasOnlyForLightbox() function in app.js');
+  const body = fnMatch[0];
+  assert.match(body, /const exitingDesign=drawingTool\.isActive;/);
+  assert.match(body, /if\(exitingDesign\)setDrawMode\(false\);/);
+  assert.match(body, /if\(exitingDesign\|\|workspaceMode!=='2d'\)\{/);
+  assert.match(body, /if\(workspaceMode!=='2d'\)setWorkspaceMode\('2d'\);/);
+  assert.match(body, /persistActiveView\('2d'\);/);
+  // setDrawMode(false) must run before the setWorkspaceMode('2d') check, not after -- otherwise
+  // Design's own exit-restore (workspaceModeBeforeDrawing) would clobber the freshly-set '2d'.
+  assert.ok(body.indexOf('setDrawMode(false)') < body.indexOf("setWorkspaceMode('2d')"), 'expected setDrawMode(false) to run before forcing workspaceMode to 2d');
 });
 
 await test('4. the top bar also exposes Undo, Redo, Save, and an Export shortcut, each with a tooltip or visible label', () => {
@@ -195,11 +215,15 @@ await test('8. Import Lightbox has two clearly separated tabs: SVG Import and Pr
 
 await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and Help Lightboxes each expose their documented content', () => {
   const traceBody = extractElementHtml(indexHtml, 'lightboxImageTrace');
-  for (const id of ['importImage', 'importImageFile', 'imgPreviewThreshold', 'imgPreviewInvert', 'imgPreviewBlur', 'imgPreviewMaxWidth', 'imgPreviewMaxHeight', 'imageImportPreviewCanvas', 'imageImportStoneCount', 'imageImportCancel', 'imageImportCommit']) {
+  for (const id of ['importImage', 'importImageFile', 'imageStudioRemove', 'imageStudioView', 'imageStudioCanvas', 'imageStudioStats', 'imageStudioGroupColors', 'imageStudioGroupOrganic', 'imageStudioGroupEdges', 'imageStudioGroupCheckFix', 'imageStudioGroupBrightness']) {
     assert.ok(traceBody.includes(`id="${id}"`), `expected the Image Trace Lightbox to contain #${id}`);
   }
-  for (const id of ['imgThreshold', 'imgInvert', 'imgBlurRadius', 'imgMaxWidth', 'imgMaxHeight']) {
+  for (const id of ['imgThreshold', 'imgInvert', 'imgBlurRadius', 'imgMaxWidth', 'imgMaxHeight', 'imgColorCount', 'imgColorReset', 'imgSeed', 'imgShuffle', 'imgSpread']) {
     assert.ok(traceBody.includes(`id="${id}"`), `expected post-commit editing field #${id} inside the Image Trace Lightbox`);
+  }
+  for (let i = 0; i < 8; i++) {
+    assert.ok(traceBody.includes(`id="imgColorGroup${i}"`), `expected IMG-002 colour row #imgColorGroup${i}`);
+    assert.ok(traceBody.includes(`id="imgColorPick${i}"`), `expected IMG-002 colour picker #imgColorPick${i}`);
   }
   assert.ok(traceBody.includes('id="imageTracePositionSlot"') && traceBody.includes('id="imageTraceStoneSlot"'));
 

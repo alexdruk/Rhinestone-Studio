@@ -174,7 +174,10 @@ await test('A13. the warning is recomputed on every updateAll() call — live du
   // canvas a different way instead) -- tolerate that one branch, but drawCup() onward, including
   // updateTextOutsidePrintableWarning() itself, must remain a real unconditional, adjacent tail: if
   // any of those calls became conditional too, or got reordered, this literal chain breaks.
-  assert.match(updateAllFn, /layout=generated;[\s\S]*?renderLayerUI\(\);if\(drawingTool\.isActive\)\{[^}]*\}else\{drawLayout\(\)\}drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
+  // IMG-007 inserted renderImageStudio() into the unconditional tail, so the chain now runs
+  // drawLayout branch -> renderImageStudio -> drawCup onward, and only comment lines are tolerated
+  // in that gap.
+  assert.match(updateAllFn, /layout=generated;[\s\S]*?renderLayerUI\(\);if\(drawingTool\.isActive\)\{[^}]*\}else\{drawLayout\(\)\}\s*(?:\/\/[^\n]*\n\s*)*renderImageStudio\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
 });
 
 await test('A15. the persistent right Inspector panel (never covered by a modal, always visible while dragging on the canvas) has its own "outside the printable area" warning with a "Center Text" action — not inside the Text Lightbox', () => {

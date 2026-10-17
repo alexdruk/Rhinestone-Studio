@@ -47,20 +47,36 @@ export const STONE_SIZES = STONE_SIZE_LIST;
 /** Id-keyed lookup map, same shape convention as `STONE_COLORS`. */
 export const STONE_SIZE_BY_ID = Object.fromEntries(STONE_SIZE_LIST.map((s) => [s.id, s]));
 
+// IMG-026 (D1, S12): SS4 is an image-only size. Only Image→Strass layouts from the layout service
+// use it, so it stays out of STONE_SIZES, STONE_SIZE_BY_ID and listStoneSizes() (the stone-size
+// picker, monogram sizing and the text height rules), which would otherwise change existing
+// monograms and text. It has no validated text-height range. The lookups below cover it, so a
+// 1.5 mm stone is labelled SS4 everywhere.
+const IMAGE_ONLY_STONE_SIZE_LIST = [
+  { id: 'ss4', name: 'SS4', diameterMm: 1.5, supportedHeightRangeMm: null, imageOnly: true }
+];
+const ALL_STONE_SIZE_LIST = [...IMAGE_ONLY_STONE_SIZE_LIST, ...STONE_SIZE_LIST].sort((a, b) => a.diameterMm - b.diameterMm);
+const ALL_STONE_SIZE_BY_ID = Object.fromEntries(ALL_STONE_SIZE_LIST.map((s) => [s.id, s]));
+
 /** The id a brand-new layer's stoneSize (2mm, matching SS6 exactly) resolves to in the picker. */
 export const DEFAULT_STONE_SIZE_ID = 'ss6';
 
 export function getStoneSize(id) {
-  return STONE_SIZE_BY_ID[id] || null;
+  return ALL_STONE_SIZE_BY_ID[id] || null;
 }
 
 export function isValidStoneSizeId(id) {
-  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(STONE_SIZE_BY_ID, id);
+  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(ALL_STONE_SIZE_BY_ID, id);
 }
 
 /** Catalog entries in display order — what the UI selector iterates to build its options. */
 export function listStoneSizes() {
   return [...STONE_SIZE_LIST];
+}
+
+/** IMG-026 (S12): every size, image-only SS4 included, in ascending diameter. */
+export function listAllStoneSizes() {
+  return [...ALL_STONE_SIZE_LIST];
 }
 
 // A stored stoneSize is a raw float (user-typed history, imported projects, or a value this
@@ -78,7 +94,7 @@ export function findStoneSizeByDiameterMm(diameterMm, toleranceMm = DEFAULT_MATC
   if (typeof diameterMm !== 'number' || !Number.isFinite(diameterMm)) return null;
   let best = null;
   let bestDiff = Infinity;
-  for (const size of STONE_SIZE_LIST) {
+  for (const size of ALL_STONE_SIZE_LIST) {
     const diff = Math.abs(size.diameterMm - diameterMm);
     if (diff < bestDiff) {
       bestDiff = diff;
@@ -215,6 +231,7 @@ export function validateStoneSizeCatalog(list = STONE_SIZE_LIST) {
     }
     previousDiameterMm = size.diameterMm;
     const range = size.supportedHeightRangeMm;
+    if (size.imageOnly === true && range === null) continue;
     if (
       !Array.isArray(range) ||
       range.length !== 2 ||

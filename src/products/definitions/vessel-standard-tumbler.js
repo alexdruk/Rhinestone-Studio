@@ -1,4 +1,13 @@
-{
+/**
+ * Standard Tumbler product definition data.
+ *
+ * MAINT-007: converted from a JSON module import to a plain .js module. Chrome 103
+ * (this project's minimum supported browser, see docs/specifications/MAINT-007-BrowserBaseline.md)
+ * predates the JS import-attributes syntax used for JSON modules, so the data below -- unchanged
+ * in meaning from the original vessel-standard-tumbler.json -- is exported as a plain ES module default export
+ * instead.
+ */
+export default {
   "schemaVersion": 1,
   "id": "vessel-standard-tumbler",
   "name": "Standard Tumbler",
@@ -42,4 +51,4 @@
       "printableMarginMm is larger than the mug's: the tapered base and rolled rim lip are both excluded from a typical 20oz skinny tumbler's sublimation wrap."
     ]
   }
-}
+};

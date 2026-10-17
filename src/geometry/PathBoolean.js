@@ -160,6 +160,14 @@ function sourceBoundingBox(source) {
   }
   if (source.kind === 'field') {
     if (!(source.widthMm > 0) || !(source.heightMm > 0)) return null;
+    // IMG-021 (D3): a rotated field's box is the axis-aligned box of its rotated corners.
+    if (source.rotationDeg) {
+      const cxMm = source.xMm + source.widthMm / 2, cyMm = source.yMm + source.heightMm / 2;
+      const radians = source.rotationDeg * (Math.PI / 180);
+      const halfW = (Math.abs(Math.cos(radians)) * source.widthMm + Math.abs(Math.sin(radians)) * source.heightMm) / 2;
+      const halfH = (Math.abs(Math.sin(radians)) * source.widthMm + Math.abs(Math.cos(radians)) * source.heightMm) / 2;
+      return { minXmm: cxMm - halfW, minYmm: cyMm - halfH, maxXmm: cxMm + halfW, maxYmm: cyMm + halfH };
+    }
     return { minXmm: source.xMm, minYmm: source.yMm, maxXmm: source.xMm + source.widthMm, maxYmm: source.yMm + source.heightMm };
   }
   throw new TypeError(`Unsupported boolean shape source kind: ${source.kind}`);
@@ -171,12 +179,26 @@ function sampleSource(source, xMm, yMm) {
     return isPointInsidePolygons({ xMm, yMm }, source.polygons) ? 1 : 0;
   }
   const { field } = source;
+  // IMG-021 (D3): a rotated field is sampled by rotating the query point back into the field's
+  // unrotated box, around the box centre.
+  if (source.rotationDeg) {
+    const cxMm = source.xMm + source.widthMm / 2, cyMm = source.yMm + source.heightMm / 2;
+    const radians = -source.rotationDeg * (Math.PI / 180);
+    const dxMm = xMm - cxMm, dyMm = yMm - cyMm;
+    xMm = cxMm + dxMm * Math.cos(radians) - dyMm * Math.sin(radians);
+    yMm = cyMm + dxMm * Math.sin(radians) + dyMm * Math.cos(radians);
+  }
   const localXMm = xMm - source.xMm;
   const localYMm = yMm - source.yMm;
   if (localXMm < 0 || localYMm < 0 || localXMm > source.widthMm || localYMm > source.heightMm) return 0;
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / source.widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / source.heightMm) * field.heightPx)));
-  return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD ? 1 : 0;
+  const index = pixelY * field.widthPx + pixelX;
+  if (field.data[index] < FIELD_ON_THRESHOLD) return 0;
+  // IMG-008: an optional per-label mask restriction (Vector-first SVG's per-colour region tracing) --
+  // absent for every pre-existing caller, so this is a no-op there.
+  if (source.label !== undefined && field.labels[index] !== source.label) return 0;
+  return 1;
 }
 
 function combineValues(subjectValue, clipValue, operation) {
@@ -192,7 +214,11 @@ function combineValues(subjectValue, clipValue, operation) {
 /**
  * Combine two shape sources with a single boolean operation.
  *
- * @param {{kind:'polygons',polygons:{xMm:number,yMm:number}[][]}|{kind:'field',field:object,xMm:number,yMm:number,widthMm:number,heightMm:number}} subjectSource
+ * @param {{kind:'polygons',polygons:{xMm:number,yMm:number}[][]}|{kind:'field',field:object,xMm:number,yMm:number,widthMm:number,heightMm:number,label?:number}} subjectSource
+ *   A 'field' source's optional `label` (IMG-008) restricts sampling to pixels whose
+ *   `field.labels` entry equals it, in addition to the ordinary `field.data` on-test -- used to
+ *   trace one quantized image layer's colour label at a time. Omitted (the default), sampling is
+ *   unaffected -- byte-identical to before this option existed.
  * @param {*} clipSource Same shape as subjectSource.
  * @param {'union'|'subtract'|'intersect'|'xor'} operation
  * @param {object} [options]

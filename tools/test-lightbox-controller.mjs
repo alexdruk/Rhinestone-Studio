@@ -71,10 +71,10 @@ await test('7. every element with [data-lightbox-close] closes the dialog withou
   assert.match(lightboxSource, /closeButtons\.forEach|for \(const btn of closeButtons\)/);
 });
 
-await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for the 10 non-modal S-105 Lightboxes (or "true" for the one modal sub-dialog lightboxGalleryPreview -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
+await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for the 10 non-modal S-105 Lightboxes (or "true" for the modal sub-dialogs lightboxGalleryPreview and lightboxRedrawConsent (IMG-022) -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
   const overlayIds = [...appJs.matchAll(/new Lightbox\('(\w+)'/g)].map((m) => m[1]);
   assert.ok(overlayIds.length >= 9, 'expected at least nine Lightbox instances');
-  const MODAL_SUB_DIALOGS = new Set(['lightboxGalleryPreview']);
+  const MODAL_SUB_DIALOGS = new Set(['lightboxGalleryPreview', 'lightboxRedrawConsent']);
   for (const id of overlayIds) {
     const expectedAriaModal = MODAL_SUB_DIALOGS.has(id) ? 'true' : 'false';
     const re = new RegExp(`<div class="lightbox-overlay[^"]*" id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="${expectedAriaModal}" aria-labelledby="(\\w+)"`);

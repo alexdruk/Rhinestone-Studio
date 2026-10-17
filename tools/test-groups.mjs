@@ -51,11 +51,37 @@ export const GROUPS = {
     'test-stone-color.mjs',
     'test-history-manager.mjs',
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-pdf-document.mjs',
     'test-object-dimensions.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-color-catalog.mjs',
+    // IMG-026 build B: the D2 colours, the S4 cross-check with the layout service's catalogue.json
+    // and the S13 legacy palette pin in app.js.
+    'test-img-026-catalogue.mjs',
+    // IMG-026G: the catalogue colours re-measured from the supplier catalogue.
+    'test-img-026-stone-colours.mjs',
+    // IMG-026 build C1: the ai-layout engine branch (placement, k clamp, gap flag, colour swaps,
+    // rotation) and the image-only SS4.
+    'test-img-026-ai-layout-engine.mjs',
     'test-image-pipeline.mjs',
+    'test-img-001-field.mjs',
+    'test-img-002-color-layers.mjs',
+    'test-img-003-organic-placement.mjs',
+    'test-img-004-edge-awareness.mjs',
+    'test-img-005-check-and-fix.mjs',
+    'test-img-006-brightness-sizes.mjs',
+    'test-img-008-vector-first-svg.mjs',
+    'test-img-009-subject-mask.mjs',
+    'test-img-011-import-defaults.mjs',
+    'test-img-012-auto-colour-count.mjs',
+    'test-img-013-fill-empty-slots.mjs',
+    'test-img-014-subject-mask-photographic.mjs',
+    'test-img-015-direct-catalogue-colour.mjs',
+    'test-img-016-neutral-brown-stones.mjs',
+    'test-img-017-vividness.mjs',
+    'test-img-018-whole-image-mask.mjs',
+    'test-img-019-subject-mask-resized.mjs',
     'test-alignment-engine.mjs',
     'test-snap-engine.mjs',
     'test-editing-selection.mjs',
@@ -83,6 +109,7 @@ export const GROUPS = {
     'test-product-vessel-dimensions.mjs',
     'test-examples-regression.mjs',
     'test-production-sheet-exporter.mjs',
+    'test-rs-3038-prod-sheet-messages.mjs',
     'test-crystal-color-integration.mjs',
     'test-image-trace-regression.mjs',
     'test-path-boolean-integration.mjs',
@@ -106,6 +133,19 @@ export const GROUPS = {
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
     'test-read-008-ratio-floor.mjs',
+    'test-rs-3039-large-layout.mjs',
+    // IMG-022: redraw provider -- server handler with an injected fetch, src/redraw with injected
+    // decode/encode, the layer transform, and validateProject() extracted from app.js.
+    'test-img-022-redraw-provider.mjs',
+    // IMG-024: flat artwork redraw style -- server style check, client wire/record, the 'error'
+    // palette rule, the WeightedLabPalette.js move and the app.js/index.html wiring.
+    'test-img-024-flat-artwork-style.mjs',
+    // IMG-026 build B: redraw jobs -- the job API, the layout-service call, fake mode and the
+    // polling client, with injected fetch, clock and timers.
+    'test-img-026-redraw-jobs.mjs',
+    // IMG-026 build C1: validateProject() for ai-layout layers, the redraw paths, the Fill style
+    // option, the exporters with a 1.5 mm stone and byte identity for gallery and legacy image stones.
+    'test-img-026-ai-layout-app.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
@@ -118,6 +158,10 @@ export const GROUPS = {
     // (which makes grep/git treat the file as binary). A permanent codebase-level rule, same
     // category as the module-boundary guards above.
     'test-source-hygiene.mjs',
+    'test-browser-baseline.mjs',
+    // Dev tooling: the `npm run dev` server (tools/dev-server.mjs) sends Cache-Control: no-cache,
+    // no-store, so a browser never reuses a stale ES module during local testing.
+    'test-dev-server-no-cache.mjs',
   ],
   // Gallery is disabled in the public UI, but its catalog/wiring logic is still protected — both
   // files here already run as part of core/integration, so this group is a complete,
@@ -172,6 +216,28 @@ export const GROUPS = {
     'test-geometry-stone-overlap-same-contour.mjs',
     'test-arc-projection.mjs',
     'test-image-pipeline.mjs',
+    'test-img-001-field.mjs',
+    'test-img-002-color-layers.mjs',
+    'test-img-003-organic-placement.mjs',
+    'test-img-004-edge-awareness.mjs',
+    'test-img-005-check-and-fix.mjs',
+    'test-img-006-brightness-sizes.mjs',
+    'test-img-008-vector-first-svg.mjs',
+    'test-img-009-subject-mask.mjs',
+    'test-img-011-import-defaults.mjs',
+    'test-img-012-auto-colour-count.mjs',
+    'test-img-013-fill-empty-slots.mjs',
+    'test-img-014-subject-mask-photographic.mjs',
+    'test-img-015-direct-catalogue-colour.mjs',
+    'test-img-016-neutral-brown-stones.mjs',
+    'test-img-017-vividness.mjs',
+    'test-img-018-whole-image-mask.mjs',
+    'test-img-019-subject-mask-resized.mjs',
+    'test-img-021-rotated-image-stones.mjs',
+    // IMG-023: AI stones -- detection, palette, placement, sizing, against the reference prototype.
+    'test-img-023-ai-stone-transfer.mjs',
+    // IMG-025: stone clean-up -- the port against the reference fixtures, the engine gate, wiring.
+    'test-img-025-stone-cleanup.mjs',
     'test-image-trace-regression.mjs',
     'test-fill-algorithms.mjs',
     'test-fill-algorithms-integration.mjs',
@@ -210,6 +276,7 @@ export const GROUPS = {
     // PERF-006 (MAINT-004 registration): pure spatial-geometry algorithm --
     // isPointInsidePolygons()'s cache in StoneSampler.js.
     'test-perf-006-point-in-polygon-cache.mjs',
+    'test-rs-3039-large-layout.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
@@ -271,6 +338,7 @@ export const GROUPS = {
   ],
   products: [
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-object-template-integration.mjs',
     'test-object-dimensions.mjs',
     'test-product-plate-round-dinner.mjs',
@@ -291,6 +359,9 @@ export const GROUPS = {
     // RS-3036: DXF cutting-template export (StoneLayout -> mm DXF, per-color layers).
     'test-rs3036-dxf-exporter.mjs',
     'test-production-sheet-exporter.mjs',
+    'test-rs-3038-prod-sheet-messages.mjs',
+    // RS-3041: multi-page Production Sheets (cover + true-size tile pages, PDF only).
+    'test-rs-3041-multi-page.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
     // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)
@@ -299,6 +370,8 @@ export const GROUPS = {
     'test-rs3011-step8-svg-import-flattening.mjs',
     // Production Sheet per-color/per-size quantity grouping (S-200).
     'test-s200-production-sheet-grouping.mjs',
+    // IMG-026F: the aiOnly colours, prompt v5 and a Production Sheet that lists every colour.
+    'test-img-026-ai-colours-sheet.mjs',
   ],
   renderers: [
     'test-render-export-pipeline.mjs',
@@ -312,6 +385,8 @@ export const GROUPS = {
     'test-preview3d-instanced-stones.mjs',
     'test-preview3d-render-scheduling.mjs',
     'test-preview3d-stone-orientation.mjs',
+    // IMG-026K: the 3D preview's round flat-back rhinestone geometry.
+    'test-img-026-rhinestone-geometry.mjs',
     // src/drawing/StoneSpriteCache.js: offscreen sprite baking for the Design view's stone-dot
     // preview (cache-hit/miss behaviour against a stubbed canvas).
     'test-stone-sprite-cache.mjs',
@@ -330,12 +405,19 @@ export const GROUPS = {
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
     'test-mono-021-mark-hooks.mjs',
+    'test-img-020-image-stones-in-design.mjs',
+    // IMG-026 build D: editing ai-layout stones in Design -- the one write path, stone mode, the mark
+    // tools on ai-layout layers, gap rings and the Production Sheet warning.
+    'test-img-026-design-editing.mjs',
+    'test-rs-3040-design-framing.mjs',
     // PERF-005 (MAINT-004 registration): app.js's live-editing UI responsiveness -- the
     // stone-size-picker overlap-capability re-sweep call-count fix.
     'test-perf-005-stone-size-lazy-sweep.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
+    // IMG-026I: the design canvas background switch (white or the product colour).
+    'test-img-026-product-background.mjs',
     'test-lightbox-controller.mjs',
     'test-topmenu-active-state.mjs',
     'test-lightbox-movable-persistent.mjs',
@@ -363,6 +445,8 @@ export const GROUPS = {
     'test-txt-103-text-sizing-consistency.mjs',
     'test-s200-app-integration.mjs',
     'test-rs2012-text-gap-mixed-size-ux.mjs',
+    // IMG-026 build C2: the Image -> Strass lightbox for ai-layout layers.
+    'test-img-026-lightbox.mjs',
   ],
   history: [
     'test-history-manager.mjs',
@@ -413,6 +497,7 @@ export const GROUPS = {
   fast: [
     'test-architecture-module-boundaries.mjs',
     'test-browser-dependency-loading.mjs',
+    'test-browser-baseline.mjs',
     'test-module-graph-exports.mjs',
     'test-project-model-consolidation.mjs',
     'test-geometry-engine.mjs',
@@ -424,6 +509,7 @@ export const GROUPS = {
     'test-shape-fit.mjs',
     'test-shape-library.mjs',
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-svg-parser.mjs',
     'test-pdf-document.mjs',
     'test-render-export-pipeline.mjs',

@@ -82,7 +82,7 @@ const escapeHtmlSrc = sliceLine(appJs, 'function escapeHtml(s){', 'escapeHtml()'
 // MONO-015: updateMonogramWeightStepsVisibility() (inside the sliced Monogram section) calls this
 // graduated-step option builder, which lives outside that section.
 const weightStepsOptionsHtmlSrc = sliceBetween(appJs, 'function weightStepsOptionsHtml(baseStoneSizeMm){', '\n}', 'weightStepsOptionsHtml()', { inclusive: true });
-const populateStoneColorOptionsSrc = sliceLine(appJs, "function populateStoneColorOptions(targetId='stoneColor'){", 'populateStoneColorOptions()');
+const populateStoneColorOptionsSrc = sliceLine(appJs, "function populateStoneColorOptions(targetId='stoneColor',includeAiOnly=false){", 'populateStoneColorOptions()');
 const currentSnapshotSrc = sliceLine(appJs, 'function currentSnapshot(){', 'currentSnapshot()');
 const commitHistorySrc = sliceLine(appJs, 'function commitHistory(){', 'commitHistory()');
 const closeHistorySessionSrc = sliceLine(appJs, 'function closeHistorySession(){', 'closeHistorySession()');
@@ -157,7 +157,7 @@ const sandboxFactory = new Function(
   // they must be supplied for the module-level S-105 exclusivity logic in src/ui/Lightbox.js to be
   // able to close a stale open Lightbox from an earlier scenario without throwing (same precedent as
   // tools/test-ui-import-autoswitch-regression.mjs's own stub list).
-  'relocateFieldGroups', 'updateObjectTemplateDetail', 'updateImageTraceSections',
+  'relocateFieldGroups', 'updateObjectTemplateDetail', 'renderImageStudio',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
   'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix', 'formatLengthDisplay',
   `
@@ -345,7 +345,7 @@ await test('2e. Color options match the real crystal color catalog (STONE_COLORS
   s.populateStoneColorOptions('monogramColor');
   const html = el('monogramColor').innerHTML;
   for (const c of Object.values(STONE_COLORS)) {
-    assert.ok(html.includes(`value="${c.id}"`), `expected a <option> for color "${c.id}"`);
+    assert.equal(html.includes(`value="${c.id}"`), !c.aiOnly, `expected a <option> for color "${c.id}" exactly when it is not aiOnly`);
   }
 });
 

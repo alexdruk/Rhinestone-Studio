@@ -389,3 +389,88 @@ retired with a build-vs-vendor decision recorded.
 documentation` both green before the `develop`→`main` merge; both were confirmed by Sasha
 immediately prior to tagging. No `src/**`, `app.js`, or `index.html` changes are part of this
 release milestone itself — it touches only `package.json`, this file, and the `main` branch.
+
+### Version 2.0.0 — released 2026-10-17 (`v2.0.0`)
+
+Version 2.0.0 is the first tagged release since `v1.3.0` (`2e1121f`, 15 Sep 2026). It is cut from
+`develop` at `8ec8a46` plus this release milestone. No release record was written for `v1.2.0` or
+`v1.3.0`; `v1.3.0` added the DXF cutting template (`RS-3036`). `package.json` still read `1.2.0`
+and `package-lock.json` `1.0.1`; both now read `2.0.0`.
+
+The bump is semver-major because Image → Strass becomes a different product: every uploaded
+photo is redrawn by AI and placed by a new Python service, and the result is a new layer kind
+edited stone by stone. Project JSON stays backward compatible: layers saved before v2 keep their
+engine path and controls (`IMG-026` decision D4).
+
+**Image → Strass v2 (`IMG-026`, builds A–K).** The browser sends the photo to the Node server,
+which asks OpenAI (`gpt-image-2.5-sunburst`, quality high, prompt v6) for a stone-art image, then
+sends that image to the layout service in `services/strass-layout/`. The service returns a stone
+list, which becomes an ai-layout image layer that Design can edit. In order:
+
+- A, the layout service (FastAPI, `POST /layout`);
+- B, redraw jobs with polling, the layout call, and four new catalogue colours;
+- C1, the ai-layout layer data and its GeometryEngine path, SS4, and the default model;
+- C2, the Image → Strass lightbox for ai-layout layers;
+- D, stone-by-stone editing in Design;
+- E, outline chains and pupil cores, prompt v4;
+- F, twelve aiOnly colours, the human iris, the full Production Sheet colour list, prompt v5;
+- G, fused pupils and 17 catalogue fills re-measured from supplier photos;
+- H, eight more aiOnly colours, prompt v6, short Production Sheet labels in up to four columns;
+- I, catch-light direction, the human pupil fallback, soft outlines, calm skin, and the
+  "Background: White / Product" control on the 2D canvas;
+- J, skin and fur stones take their nearest skin colour;
+- K, the 3D Object Preview draws round flat-back faceted rhinestones instead of octahedra.
+
+The catalogue now has 47 colours, 20 of them aiOnly: offered by Image → Strass and the
+colour-swap selects, never by the standard pickers. The specification is
+`docs/specifications/IMG-026-StrassLayoutService.md`.
+
+**Image → Strass v1 (`IMG-000`–`IMG-025`).** The in-browser pipeline that v2 builds on and falls
+back to: colour layers, organic placement, edge awareness, Check & fix, brightness sizes, the
+studio shell, subject masks, line design, vividness, image stones in Design and under rotation,
+the swappable redraw provider (`IMG-022`), AI stone transfer (`IMG-023`) and stone clean-up
+(`IMG-025`).
+
+**Flat Sheet and Production Sheet (`RS-3037`–`RS-3041`).** The Flat Sheet object type, clearer
+Production Sheet messages, large layouts that no longer overflow the stack or blank the canvas
+when one layer fails, Design framed on the sheet, and multi-page Production Sheets.
+
+**Browser baseline (`MAINT-007`, `MAINT-008`).** The oldest supported browser is Chrome 103
+(macOS Sierra). `MAINT-008` lets the module-graph test load Paper.js under Node.
+
+**Deployment.** The layout service runs natively on Alex's own computer, bound to 127.0.0.1:8000
+and started with `services/strass-layout/scripts/start_layout.sh`, until a server is rented
+(`IMG-026` decision D5). Then the same package runs in Docker and only `LAYOUT_SERVICE_URL`
+changes. The Node server needs
+`OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY` and `LAYOUT_SERVICE_URL` in
+`.env`. Without the service, an upload still gets its AI image and is placed by the older
+`IMG-023` AI-stones path.
+
+**Not verified for this release.**
+
+- Every layout-quality figure from build H on was measured on AI images drawn with earlier
+  prompts. Prompt v6 has not been run on fresh images.
+- The 3D preview's speed with build K's round stones (96 triangles per stone, about 290,000 for a
+  3,000-stone image layout) was seen only in a software renderer, not on Chrome 103 hardware.
+- No browser pass beyond the per-build checks was done for this release.
+
+**Known issues (non-blocking).**
+
+- The AI paints skin more saturated than any skin stone (about L 64, chroma 49), so faces stay a
+  little patchier than the AI image.
+- The face test finds a face in the lake landscape, so the soft-outline pass runs there.
+- The 2D canvas grid is bright on a dark product background.
+- Production Sheet and Design show the true layout with its real gaps. The customer-facing
+  preview shows the product colour in the gaps, not tinted gaps; agreed by Alex on 17 Oct 2026.
+- The redraw prompt asks for the same stone count on every product. A product-aware count
+  (PROMPT_VERSION 7) is open in `docs/BACKLOG.md`.
+
+The first three are also rows in `docs/BACKLOG.md`.
+
+**Testing gate.** The `tools/test-*.mjs` suite stands at 191 files, up from 150 at `v1.3.0`, all
+passing at `8ec8a46`. The layout service's Python suite (79 tests) passed at build J; build K
+changed no Python. The 2.0.0 gate requires `node tools/run-tests.mjs --all` and
+`node tools/run-tests.mjs --group documentation` both green on this commit before the
+`develop`→`main` merge. This milestone changes no code: it touches `package.json`,
+`package-lock.json`, this file, the status docs (`docs/ARCHITECTURE.md`, `docs/PRODUCT_ROADMAP.md`,
+`docs/BACKLOG.md`) and the `main` branch.

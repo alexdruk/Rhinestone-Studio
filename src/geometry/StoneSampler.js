@@ -8,6 +8,7 @@
 
 import { Point2D, BoundingBox } from '../text/VectorPath.js';
 import { computeInwardRingPolygons, splitSliverRuns } from './ContourRingSampler.js';
+import { samplePoissonDiskPoints } from './OrganicSampler.js';
 import { groupCongruentContours, applyRigidTransform } from './CongruentContours.js';
 
 // Outline-mode uniform-perimeter spacing: the actual per-contour walk step that makes
@@ -371,6 +372,121 @@ export function dedupeStonePoints(points, minDistanceMm) {
 }
 
 /**
+ * IMG-005: same bucket-hash scan shape as dedupeStonePoints() above, generalized to attempt one
+ * repositioning nudge before dropping a too-close candidate, and floored at the true manufacturing
+ * floor `stoneSizeMm + gapMm` rather than dedupeStonePoints()'s `stoneSizeMm`-only floor.
+ *
+ * For each candidate, in input order: if no kept point in its 3x3 cell neighborhood is closer than
+ * `stoneSizeMm + gapMm`, keep it as-is. Otherwise find the single nearest offending kept point. If
+ * it sits at zero distance from the candidate, drop the candidate immediately (the nudge direction
+ * is undefined). Otherwise move the candidate directly away from that nearest point to exactly
+ * `stoneSizeMm + gapMm` from it, and re-validate the nudged position from scratch: `insideAt()` must
+ * accept it, and its own (recomputed) 3x3 cell neighborhood must clear the same floor against every
+ * kept point found there. On success the nudged position is kept (a new Point2D, not the original
+ * candidate); on failure the candidate is dropped. Single-shot -- no retry, no relaxation, matching
+ * dedupeStonePoints()'s own scan-order-dependent, no-backtracking posture.
+ *
+ * See docs/specifications/IMG-005-CheckAndFix.md, decision 1.
+ *
+ * @param {Point2D[]} points Already-placed (absolute project-mm) candidate points.
+ * @param {(xMm: number, yMm: number) => boolean} insideAt Placement-aware on-field test.
+ * @param {number} stoneSizeMm
+ * @param {number} gapMm
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [stats] Mutable
+ *   accumulator, incremented in place; violationsFound === repaired + dropped always.
+ * @returns {Point2D[]}
+ */
+export function nudgeOrDropStonePoints(points, insideAt, stoneSizeMm, gapMm, stats = null) {
+  const floorMm = stoneSizeMm + gapMm;
+  if (!(floorMm > 0) || points.length === 0) {
+    return points;
+  }
+
+  const cellSizeMm = floorMm;
+  const floorSqMm = floorMm * floorMm;
+  const buckets = new Map();
+  const kept = [];
+
+  const cellOf = (xMm, yMm) => ({ gx: Math.floor(xMm / cellSizeMm), gy: Math.floor(yMm / cellSizeMm) });
+
+  const nearestOffender = (xMm, yMm) => {
+    const { gx, gy } = cellOf(xMm, yMm);
+    let nearest = null;
+    let nearestDistSqMm = Infinity;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = xMm - other.xMm;
+          const ddy = yMm - other.yMm;
+          const distSqMm = ddx * ddx + ddy * ddy;
+          if (distSqMm < floorSqMm && distSqMm < nearestDistSqMm) {
+            nearestDistSqMm = distSqMm;
+            nearest = other;
+          }
+        }
+      }
+    }
+    return nearest;
+  };
+
+  const clearOfAllKept = (xMm, yMm) => {
+    const { gx, gy } = cellOf(xMm, yMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = xMm - other.xMm;
+          const ddy = yMm - other.yMm;
+          if (ddx * ddx + ddy * ddy < floorSqMm) return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const keep = (point) => {
+    kept.push(point);
+    const { gx, gy } = cellOf(point.xMm, point.yMm);
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(point);
+  };
+
+  for (const point of points) {
+    const nearest = nearestOffender(point.xMm, point.yMm);
+    if (!nearest) {
+      keep(point);
+      continue;
+    }
+
+    if (stats) stats.violationsFound++;
+
+    const ddx = point.xMm - nearest.xMm;
+    const ddy = point.yMm - nearest.yMm;
+    const distMm = Math.hypot(ddx, ddy);
+    if (!(distMm > 0)) {
+      if (stats) stats.dropped++;
+      continue;
+    }
+
+    const nudgedXMm = nearest.xMm + (ddx / distMm) * floorMm;
+    const nudgedYMm = nearest.yMm + (ddy / distMm) * floorMm;
+
+    if (insideAt(nudgedXMm, nudgedYMm) && clearOfAllKept(nudgedXMm, nudgedYMm)) {
+      keep(new Point2D(nudgedXMm, nudgedYMm));
+      if (stats) stats.repaired++;
+    } else {
+      if (stats) stats.dropped++;
+    }
+  }
+
+  return kept;
+}
+
+/**
  * RC-004: drop any stone whose center lands within the physically-correct "touching" distance of
  * an already-kept stone *from a different layer* -- the sum of the two stones' own radii, i.e.
  * `(a.d + b.d) / 2` -- scanning in input order (first of any overlapping pair wins, matching
@@ -401,7 +517,9 @@ export function dedupeStonesByRadius(stones) {
     return stones;
   }
 
-  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of stones) cellSizeMm = Math.max(cellSizeMm, s.d);
   const buckets = new Map();
   const kept = [];
 
@@ -469,7 +587,9 @@ export function dropOverlappingSizedStones(assigned) {
     return assigned;
   }
 
-  const cellSizeMm = Math.max(...assigned.map((s) => s.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of assigned) cellSizeMm = Math.max(cellSizeMm, s.sizeMm);
   const buckets = new Map();
   const kept = [];
 
@@ -532,7 +652,9 @@ export function findCrossGroupCollisions(stones) {
     return collisions;
   }
 
-  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const s of stones) cellSizeMm = Math.max(cellSizeMm, s.d);
   const buckets = new Map();
   const seenGroupPairs = new Set();
 
@@ -1563,7 +1685,9 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
 // Density field "on" (RS-1008A): a field value at/above this level counts as foreground for
 // sampleFieldFillPoints(), the same 0-255 density scale Blur.js/Threshold.js already use
 // (thresholded/uninverted 0/1 masks rescale to 0/255, so 128 is the natural midpoint cutoff).
-const FIELD_ON_THRESHOLD = 128;
+// Exported (IMG-002) so tools/test-img-002-color-layers.mjs can assert this stays equal to
+// src/image/ColorQuantize.js's own hand-matched copy of the same value.
+export const FIELD_ON_THRESHOLD = 128;
 
 /**
  * Fill a placement box with a regular grid of points spaced spacingMm apart, keeping only points
@@ -1611,13 +1735,174 @@ export function sampleFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, sp
   return points;
 }
 
-function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+// IMG-004: shared clamped-floor pixel-index arithmetic for fieldPixelOn() (below) and
+// fieldEdgeAt() (sampleEdgeFieldFillPoints()'s own lookup) -- factored out so the two lookups
+// cannot drift apart. Returns -1 when (localXMm, localYMm) is off the placement box.
+function fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm) {
   if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
-    return false;
+    return -1;
   }
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
-  return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD;
+  return pixelY * field.widthPx + pixelX;
+}
+
+// IMG-013: exported (not module-private) so GapFill.js's mask test (decision 4) reuses the exact
+// on-field check every sampler in this module already uses, instead of a second copy -- the local-
+// coordinate convention (an absolute point is `fieldPixelOn(field, xMm - placement.xMm, yMm -
+// placement.yMm, widthMm, heightMm)`) mirrors this module's own insideAtPlaced() closures further
+// below (e.g. sampleRadialFieldFillPoints()).
+export function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  return index >= 0 && field.data[index] >= FIELD_ON_THRESHOLD;
+}
+
+// IMG-004: reads field.edge through the same fieldPixelIndex() lookup fieldPixelOn() uses against
+// field.data, so an edge-mode point's radius is always computed from the same pixel its on-field
+// test used. Returns 0 (no edge) when the point is off-field or the field carries no edge channel.
+function fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm) {
+  if (!field.edge) return 0;
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  return index >= 0 ? field.edge[index] : 0;
+}
+
+// IMG-006: per-point "ink" (darkness, [0,1]) derived from a raw 0..255 luminance reading against
+// threshold/invert -- decision 3's formula. `invert` off darkens toward `threshold` (0 at/above
+// threshold, 1 at lum 0); `invert` on darkens toward 255 (0 at/below threshold, 1 at lum 255). Both
+// branches guard their own divisor (threshold 0 for invert off, threshold 255 for invert on) by
+// returning 0 rather than dividing by zero. Shared by GeometryEngine.generateImageLayout()'s
+// per-assigned-point rung lookup (against the absolute fieldLuminanceAt() below) and this module's
+// own local-coordinate fieldInkAt() (organic/edge radiusAt) -- one formula, two coordinate systems,
+// the same relationship fieldPixelOn()/fieldLabelAt() already have to each other.
+export function ink(lum, threshold, invert) {
+  if (!invert) {
+    if (threshold === 0) return 0;
+    return Math.min(1, Math.max(0, (threshold - lum) / threshold));
+  }
+  if (threshold === 255) return 0;
+  return Math.min(1, Math.max(0, (lum - threshold) / (255 - threshold)));
+}
+
+// IMG-006: local-coordinate ink() lookup against field.luminance, mirroring fieldEdgeAt()'s own
+// local-coordinate/off-field convention -- 0 (no thinning) off-field or when the field carries no
+// luminance channel. Used only by sampleOrganicFieldFillPoints()/sampleEdgeFieldFillPoints()'s own
+// radiusAt(); only ever called for an already-on-field point (insideAt() gates first there), so the
+// off-field branch is defensive parity, not a real code path.
+function fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert) {
+  if (!field.luminance) return 0;
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  if (index < 0) return 0;
+  return ink(field.luminance[index], threshold, invert);
+}
+
+// IMG-002 follow-up: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- exported (not
+// module-private) so GeometryEngine.js imports this copy instead of hand-declaring a third one, and
+// so tools/test-img-002-color-layers.mjs's FIELD_ON_THRESHOLD-parity case can also assert this stays
+// equal to ColorQuantize.js's copy. Two hand-matched copies across the src/image/src/geometry
+// boundary (this one and ColorQuantize.js's, StoneSampler.js has no src/image dependency and this
+// milestone adds none), both test-pinned, instead of three with one unreachable from any test.
+export const NO_LABEL = 255;
+
+/**
+ * Look up a field's per-pixel color label at an absolute (xMm, yMm) -- the exported counterpart to
+ * the module-private fieldPixelOn() above, reusing its exact clamped floor((local/extentMm)*extentPx)
+ * pixel-resolution formula so the two always agree pixel-for-pixel on which cell a coordinate falls
+ * into. Returns NO_LABEL when the resolved pixel is off-field or field.labels is null.
+ *
+ * @param {{widthPx: number, heightPx: number, labels: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @returns {number} The label byte (0..K-1), or NO_LABEL.
+ */
+export function fieldLabelAt(field, placement, xMm, yMm) {
+  if (!field.labels) return NO_LABEL;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return NO_LABEL;
+  }
+  const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
+  const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
+  return field.labels[pixelY * field.widthPx + pixelX];
+}
+
+/**
+ * IMG-015 decision 4: the modal label under a stone's own disk rather than the label of its centre
+ * pixel. Counts every labelled (non-NO_LABEL) pixel with dx^2 + dy^2 <= r^2 around fieldLabelAt()'s
+ * own clamped centre cell, where r = max(1, round(radiusMm / (widthMm / widthPx))), and returns the
+ * most frequent label, ties to the lowest. A disk with no labelled pixel falls back to
+ * fieldLabelAt(), so an off-field coordinate or a null field.labels still returns NO_LABEL. The same
+ * rule LineDesignSampler.js's own modal colour vote applies.
+ *
+ * @param {{widthPx: number, heightPx: number, labels: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @param {number} radiusMm The vote disk's radius.
+ * @returns {number} The label byte (0..K-1), or NO_LABEL.
+ */
+export function fieldModalLabelAt(field, placement, xMm, yMm, radiusMm) {
+  if (!field.labels) return NO_LABEL;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return NO_LABEL;
+  }
+  const { widthPx, heightPx, labels } = field;
+  const centerX = Math.min(widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * widthPx)));
+  const centerY = Math.min(heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * heightPx)));
+  const radiusPx = Math.max(1, Math.round(radiusMm / (widthMm / widthPx)));
+  const counts = new Map();
+  for (let dy = -radiusPx; dy <= radiusPx; dy++) {
+    for (let dx = -radiusPx; dx <= radiusPx; dx++) {
+      if (dx * dx + dy * dy > radiusPx * radiusPx) continue;
+      const px = centerX + dx, py = centerY + dy;
+      if (px < 0 || py < 0 || px >= widthPx || py >= heightPx) continue;
+      const label = labels[py * widthPx + px];
+      if (label === NO_LABEL) continue;
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+  }
+  if (counts.size === 0) return fieldLabelAt(field, placement, xMm, yMm);
+  let best = NO_LABEL, bestCount = -1;
+  for (const [label, count] of counts) {
+    if (count > bestCount || (count === bestCount && label < best)) { bestCount = count; best = label; }
+  }
+  return best;
+}
+
+/**
+ * Look up a field's raw per-pixel luminance (0..255) at an absolute (xMm, yMm) -- IMG-006's
+ * fieldLabelAt() counterpart for field.luminance. Mirrors its exact coordinate/pixel arithmetic so a
+ * stone's assigned brightness size is read from the same pixel its on-field (field.data) test used.
+ * Returns the sentinel `0` when the resolved pixel is off-field or field.luminance is null --
+ * matching fieldEdgeAt()'s own off-field convention (a plain 0, not a dedicated out-of-band value)
+ * rather than fieldLabelAt()'s NO_LABEL: field.luminance has no reserved "not a real reading" byte
+ * the way labels do. In practice this branch is unreachable: this is only ever called (see
+ * GeometryEngine.generateImageLayout()) for a point sampleFieldByMode() already produced, which is
+ * on-field by construction -- the sentinel exists only for defensive parity with fieldLabelAt()'s
+ * own off-field contract.
+ *
+ * @param {{widthPx: number, heightPx: number, luminance: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @returns {number} 0..255, or the sentinel 0 off-field/no channel.
+ */
+export function fieldLuminanceAt(field, placement, xMm, yMm) {
+  if (!field.luminance) return 0;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return 0;
+  }
+  const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
+  const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
+  return field.luminance[pixelY * field.widthPx + pixelX];
 }
 
 /**
@@ -1669,9 +1954,13 @@ export function sampleStaggeredFieldFillPoints(field, { xMm, yMm, widthMm, heigh
  * @param {number} placement.heightMm
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor. Defaults to spacingMm.
+ * @param {number} [gapMm] IMG-005: manufacturing gap added on top of stoneSizeMm for the repair
+ *   pass's true floor. Defaults to 0 (reduces to dedupeStonePoints()'s own stoneSizeMm-only floor).
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [checkFixStats]
+ *   IMG-005: mutable accumulator forwarded to nudgeOrDropStonePoints(). Defaults to null.
  * @returns {Point2D[]}
  */
-export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, gapMm = 0, checkFixStats = null) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleRadialFieldFillPoints requires a positive spacingMm.');
   }
@@ -1700,7 +1989,12 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
     }
   }
 
-  return dedupeStonePoints(points, stoneSizeMm);
+  // IMG-005: a second, placement-aware insideAt -- fieldPixelOn() above is called with LOCAL
+  // coordinates throughout this function; nudgeOrDropStonePoints() validates already-placed
+  // (absolute) points, so it needs the placement's own xMm/yMm subtracted back out. See
+  // docs/specifications/IMG-005-CheckAndFix.md, decision 1, "Coordinate-space note".
+  const insideAtPlaced = (absXMm, absYMm) => fieldPixelOn(field, absXMm - xMm, absYMm - yMm, widthMm, heightMm);
+  return nudgeOrDropStonePoints(points, insideAtPlaced, stoneSizeMm, gapMm, checkFixStats);
 }
 
 /**
@@ -1719,9 +2013,13 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
  * @param {number} placement.heightMm
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor -- see the DEDUPE note above. Defaults to spacingMm.
+ * @param {number} [gapMm] IMG-005: manufacturing gap added on top of stoneSizeMm for the repair
+ *   pass's true floor. Defaults to 0 (reduces to dedupeStonePoints()'s own stoneSizeMm-only floor).
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [checkFixStats]
+ *   IMG-005: mutable accumulator forwarded to nudgeOrDropStonePoints(). Defaults to null.
  * @returns {Point2D[]}
  */
-export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, gapMm = 0, checkFixStats = null) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleContourFieldFillPoints requires a positive spacingMm.');
   }
@@ -1749,7 +2047,117 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
     }
   }
 
-  return dedupeStonePoints(points, stoneSizeMm);
+  // IMG-005: a second, placement-aware insideAt -- the insideAt closure above is defined in LOCAL
+  // coordinates for computeInwardRingPolygons()'s use; nudgeOrDropStonePoints()
+  // validates already-placed (absolute) points, so it needs the placement's own xMm/yMm subtracted
+  // back out. See docs/specifications/IMG-005-CheckAndFix.md, decision 1, "Coordinate-space note".
+  const insideAtPlaced = (absXMm, absYMm) => fieldPixelOn(field, absXMm - xMm, absYMm - yMm, widthMm, heightMm);
+  return nudgeOrDropStonePoints(points, insideAtPlaced, stoneSizeMm, gapMm, checkFixStats);
+}
+
+/**
+ * IMG-003's Bridson Poisson-disk ('organic') fill -- unlike Fill/Staggered/Radial/Contour above, it
+ * has no vector-sampler counterpart (there is no sampleOrganicFillPoints() for shapes/SVG/paths; see
+ * decision 1). Built the same way sampleContourFieldFillPoints() above builds its own insideAt() and
+ * delegates to ContourRingSampler.js's computeInwardRingPolygons(). Takes stoneSizeMm only for
+ * dispatcher-signature symmetry with the other three field samplers -- deliberately not forwarded to
+ * samplePoissonDiskPoints(), which never reads it (see docs/specifications/IMG-003-OrganicPlacement.md
+ * decision 2): the minimum-distance floor is `spacingMm * max(1, spread)`, enforced at acceptance
+ * time, so there is no separate dedupeStonePoints() pass here unlike Radial/Contour above.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] Unused -- kept only for dispatcher-signature symmetry. Defaults to spacingMm.
+ * @param {object} [options]
+ * @param {number} [options.seed]
+ * @param {number} [options.spread]
+ * @param {number} [options.brightnessThinning] IMG-006: >= 0, default 0 (no thinning). See decision
+ *   2/3 -- multiplies the base radius by `(1 + brightnessThinning * (1 - ink))`. `0` (the default,
+ *   and every pre-IMG-006 layer) is byte-identical to before this milestone *by construction*: the
+ *   call below omits `radiusAt`/`maxRadiusMm` entirely rather than passing one that would evaluate
+ *   to the same constant, since samplePoissonDiskPoints()'s variable-radius path computes its own
+ *   neighbourhood reach differently and would risk drifting from the original fixed-radius path.
+ * @param {number} [options.threshold] Only read when `brightnessThinning` is truthy.
+ * @param {boolean} [options.invert] Only read when `brightnessThinning` is truthy.
+ * @returns {Point2D[]}
+ */
+export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, brightnessThinning = 0, threshold, invert } = {}) {
+  const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
+  let localPoints;
+  if (brightnessThinning) {
+    const base = spacingMm * Math.max(1, spread);
+    const radiusAt = (localXMm, localYMm) =>
+      base * (1 + brightnessThinning * (1 - fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert)));
+    const maxRadiusMm = base * (1 + brightnessThinning);
+    localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread, radiusAt, maxRadiusMm });
+  } else {
+    localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread });
+  }
+  return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
+}
+
+/**
+ * IMG-004's edge-aware fill -- built the same way sampleOrganicFieldFillPoints() above is built, but
+ * supplies samplePoissonDiskPoints() a `radiusAt` so points thin away from the field's detected edges
+ * (`field.edge`, from src/image/Edge.js's edgeChannel(), via prepareImageField()) instead of using one
+ * shared radius everywhere. `edgeAt = 255` (a maximal-edge pixel) gives `radiusAt = base`, i.e. full
+ * Organic density -- the manufacturing floor, never packed tighter; `edgeAt = 0` gives the maximum
+ * thinning this call allows, `base * (1 + edgeThinning)`. See
+ * docs/specifications/IMG-004-EdgeAwareness.md, decision 5.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray, edge?: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] Unused -- kept only for dispatcher-signature symmetry. Defaults to spacingMm.
+ * @param {object} [options]
+ * @param {number} [options.seed]
+ * @param {number} [options.spread]
+ * @param {number} [options.edgeThinning] >= 0. Default 1.
+ * @param {number} [options.brightnessThinning] IMG-006: >= 0, default 0 (no thinning). Multiplies
+ *   the existing edge-factor radius by a second `(1 + brightnessThinning * (1 - ink))` factor (see
+ *   sampleOrganicFieldFillPoints()'s own doc comment for the ink formula). `0` (the default) makes
+ *   this factor exactly `1` everywhere, so this mode already going through `radiusAt` unconditionally
+ *   (unlike Organic) means byte-identity holds by simple multiplicative neutrality, with no
+ *   conditional call shape needed here.
+ * @param {number} [options.threshold] Only meaningfully read when `brightnessThinning` is truthy.
+ * @param {boolean} [options.invert] Only meaningfully read when `brightnessThinning` is truthy.
+ * @returns {Point2D[]}
+ */
+export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, edgeThinning = 1, brightnessThinning = 0, threshold, invert } = {}) {
+  const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
+  const base = spacingMm * Math.max(1, spread);
+  // IMG-006: the ink factor is only ever computed when brightnessThinning is truthy -- NOT folded
+  // unconditionally into radiusAt as `* (1 + brightnessThinning * (1 - ink))`. brightnessThinning: 0
+  // makes that factor mathematically 1 when `ink` is a real number, but `threshold`/`invert` are
+  // legitimately undefined on every call that never opted into brightness thinning (including a
+  // direct StoneSampler.js caller, not just GeometryEngine's own resolved defaults) -- and
+  // `0 * (1 - NaN)` is `NaN`, not `0`, which would corrupt radiusAt (and therefore
+  // samplePoissonDiskPoints()'s farEnough() floor) silently. Skipping the computation entirely below
+  // this threshold keeps the pre-IMG-006 formula byte-identical *by construction*, not by relying on
+  // multiplication-by-zero neutrality.
+  const radiusAt = brightnessThinning
+    ? (localXMm, localYMm) => {
+      const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
+      const edgeFactor = 1 + edgeThinning * (1 - edgeAt / 255);
+      const inkFactor = 1 + brightnessThinning * (1 - fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert));
+      return base * edgeFactor * inkFactor;
+    }
+    : (localXMm, localYMm) => {
+      const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
+      return base * (1 + edgeThinning * (1 - edgeAt / 255));
+    };
+  const maxRadiusMm = brightnessThinning ? base * (1 + edgeThinning) * (1 + brightnessThinning) : base * (1 + edgeThinning);
+  const localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread, radiusAt, maxRadiusMm });
+  return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
 }
 
 /**
@@ -1758,20 +2166,28 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
  * (a raster density field has no vector perimeter to walk); 'fill' is the default, matching
  * generateImageLayout()'s previous, only, always-fill behavior.
  *
- * @param {'fill'|'staggered'|'radial'|'contour'} mode
+ * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'} mode
  * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
  * @param {object} placement
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor forwarded to the 'radial' and 'contour'
  *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
- *   'fill'/'staggered' ignore it. Defaults to spacingMm.
+ *   'fill'/'staggered' ignore it, and 'organic'/'edge' never read it at all (see
+ *   sampleOrganicFieldFillPoints()'s own doc comment). Defaults to spacingMm.
+ * @param {object|null} [samplerOptions] IMG-003/IMG-004/IMG-005/IMG-006: `{seed, spread,
+ *   edgeThinning, gapMm, checkFixStats, brightnessThinning, threshold, invert}`, read only by the
+ *   'organic' ({seed, spread, brightnessThinning, threshold, invert}), 'edge' ({seed, spread,
+ *   edgeThinning, brightnessThinning, threshold, invert}), and 'radial'/'contour' ({gapMm,
+ *   checkFixStats}) cases. Every other case ignores it, so this parameter is purely additive.
  * @returns {Point2D[]}
  */
-export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm, samplerOptions = null) {
   switch (mode) {
     case 'staggered': return sampleStaggeredFieldFillPoints(field, placement, spacingMm);
-    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
-    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
+    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions?.gapMm ?? 0, samplerOptions?.checkFixStats ?? null);
+    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions?.gapMm ?? 0, samplerOptions?.checkFixStats ?? null);
+    case 'organic': return sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
+    case 'edge': return sampleEdgeFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
     case 'fill':
     default:
       return sampleFieldFillPoints(field, placement, spacingMm);

@@ -28,3 +28,39 @@ export function maskFieldToRgba(field) {
 
   return out;
 }
+
+function hexToRgb(hex) {
+  const h = String(hex).replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/**
+ * IMG-002: converts a labeled field (`field.labels`, populated by the quantizer once colorCount > 1)
+ * into an RGBA buffer for the "Colours" preview view -- modeled on maskFieldToRgba() above, the same
+ * "field-to-RGBA is a pure, DOM-free conversion, app.js wraps it in an actual ImageData/putImageData()
+ * call" split. `fillsByLabel` keeps palette knowledge out of src/image: app.js resolves each row's
+ * catalog color to a hex string and hands this function a plain array indexed by label; any label
+ * with no entry (including NO_LABEL, 255, which never has one) paints white -- the same "background"
+ * convention Grayscale.js's own alpha-onto-white compositing already uses.
+ *
+ * @param {{labels: (Uint8ClampedArray|null)}} field
+ * @param {string[]} fillsByLabel Hex color per label index (0..K-1).
+ * @returns {Uint8ClampedArray} RGBA, length === field.labels.length*4 (or 0 when labels is null).
+ */
+export function labelsFieldToRgba(field, fillsByLabel) {
+  const labels = field.labels;
+  const length = labels ? labels.length : 0;
+  const out = new Uint8ClampedArray(length * 4);
+
+  for (let i = 0; i < length; i++) {
+    const hex = fillsByLabel[labels[i]];
+    const [r, g, b] = hex ? hexToRgb(hex) : [255, 255, 255];
+    const offset = i * 4;
+    out[offset] = r;
+    out[offset + 1] = g;
+    out[offset + 2] = b;
+    out[offset + 3] = 255;
+  }
+
+  return out;
+}

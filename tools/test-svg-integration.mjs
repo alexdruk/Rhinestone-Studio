@@ -29,7 +29,7 @@ async function test(name, fn) {
 }
 
 await test('1. generate() routes svg layers through a live generation method calling the permanent engine\'s generateSvgLayout', () => {
-  assert.match(appJs, /if\(l\.type==='svg'\)raw\.push\(\.\.\.await this\.generateSvgStonesLive\(l\)\)/);
+  assert.match(appJs, /if\(l\.type==='svg'\)for\(const s of await this\.generateSvgStonesLive\(l\)\)raw\.push\(s\)/);
   assert.match(appJs, /async generateSvgStonesLive\s*\(/, 'expected an async generateSvgStonesLive method');
   assert.match(appJs, /this\.permanentEngine\.generateSvgLayout\(/, 'expected a call to generateSvgLayout on the permanent engine');
 });

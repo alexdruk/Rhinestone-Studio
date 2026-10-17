@@ -3,7 +3,8 @@
 Version: 2.0
 
 Last synchronized with the live repository at commit `f263a30` (`feature/maint-005-release-hygiene`),
-the MAINT-005 v1.2.0 release-hygiene sync. Where this document and the repository disagree, the
+the MAINT-005 v1.2.0 release-hygiene sync. The "Image → Strass" section was added for v2.0.0 at
+`8ec8a46`; other sections were not re-audited then. Where this document and the repository disagree, the
 repository is the source of truth — see `docs/AI_ENGINEER.md`.
 
 ---
@@ -145,15 +146,41 @@ record that the exception existed and was corrected, not merely avoided from the
 
 As of RS-1008A, `GeometryEngine.js` gained `generateImageLayout()`: it processes an already-decoded
 `imageBuffer` via `src/image/index.js`'s `prepareImageField()` (grayscale → threshold → optional
-invert → optional blur → optional resize, producing a neutral density field — the raster
-counterpart to `src/svg/**`'s vector `Contour`s) and samples it with the new
-`StoneSampler.sampleFieldFillPoints()` (grid-walk-and-keep-if-on-field, the raster counterpart to
-`sampleFillPoints()`'s grid-walk-and-keep-if-inside-polygon). `src/image/**` now has zero
-dependency on `src/geometry/**` and never constructs a `Stone`/`StoneLayout` — mirroring `src/svg/**`'s
-existing "only produces neutral input, GeometryEngine is the only caller that turns it into stones"
-rule exactly. `generateImageLayout()` is synchronous (no font provider to await), like
-`generateShapeLayout()`/`generateSvgLayout()`. See
-`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
+invert → optional transparency mask → optional blur → optional resize, producing a neutral
+multi-channel field — the raster counterpart to `src/svg/**`'s vector `Contour`s) and samples the
+field's `data` channel with the new `StoneSampler.sampleFieldFillPoints()`
+(grid-walk-and-keep-if-on-field, the raster counterpart to `sampleFillPoints()`'s
+grid-walk-and-keep-if-inside-polygon). As of IMG-001, `prepareImageField()` returns
+`{widthPx, heightPx, data, luminance, alpha, labels}`: `data` is the same binary/blurred density
+`sampleFieldFillPoints()` has always sampled (byte-identical to before IMG-001 for every existing
+caller); `luminance` is the pre-threshold grayscale, reserved for a future brightness-driven
+stone-size milestone; `alpha` is a strict 0/255 coverage mask; `labels` is reserved `null` for a
+future color-quantization milestone. The new transparency mask stage (`transparent: 'white'|'ignore'`
+param, default `'white'`) sits between invert and blur: `'ignore'` forces any pixel whose source
+alpha is below the coverage threshold off in `data`, regardless of luminance, so a saved project
+with no `transparent` field (every project saved before IMG-001) still generates byte-identical
+geometry. As of IMG-009, the mask `data`/blur/resize/color-quantization all run on is chosen by a
+`maskMode` param (default `'threshold'`, resolved everywhere through one `resolveImageMaskMode()`):
+`'threshold'` is `Threshold.js`'s original `applyThreshold()` (keeps a pixel when its luminance is
+below a cutoff — correct for a logo or black text on white); `'subject'` is
+`SubjectMask.js`'s new `computeSubjectMask()` (keeps a pixel when it is part of the photographed
+subject, via alpha coverage when the image already carries real transparency, otherwise via CIE76
+Lab distance from a border-sampled background color, reduced to its largest 4-connected component —
+correct for a photograph of a coloured object on a background, the case `applyThreshold()` cannot
+handle at any threshold value). As of IMG-018, `'whole'` is a third value: every pixel is subject
+(threshold and invert are not read), so only the `transparent` policy removes pixels — for a
+full-bleed image with no background; Line Design masks by alpha coverage alone in this mode. Every
+project saved before IMG-009 has no `maskMode` and resolves to `'threshold'`, as does any unknown
+value, generating byte-identical geometry; see `docs/specifications/IMG-009-SubjectMask.md` and
+`docs/specifications/IMG-018-WholeImageMask.md`. As of IMG-019, above 1000 px on the longer side,
+`'subject'` computes its mask on an 800 px box-resized copy and maps it back to native size by
+nearest lookup; Line Design keeps the native mask (`docs/specifications/IMG-019-SubjectMaskResized.md`).
+`src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
+`Stone`/`StoneLayout` — mirroring `src/svg/**`'s existing "only produces neutral input, GeometryEngine
+is the only caller that turns it into stones" rule exactly. `generateImageLayout()` is synchronous
+(no font provider to await), like `generateShapeLayout()`/`generateSvgLayout()`. See
+`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md` and
+`docs/specifications/IMG-001-ImageToStrass.md`.
 
 ---
 
@@ -270,7 +297,7 @@ ever triggers. `StoneLayout`/`GeometryEngine` are untouched; no exporter is touc
 existing `canvas.toBlob()` capture keeps working unmodified because the new `WebGLRenderer` is
 created with `preserveDrawingBuffer: true`. See `docs/specifications/RS-1006-Real3DPreview.md`.
 
-As of RS-1007, the 7-entry hard-coded stone-color palette is replaced by a permanent 17-color
+As of RS-1007, the 7-entry hard-coded stone-color palette is replaced by a permanent 23-color
 crystal-color catalog: `src/renderer/CrystalColors.js` (id/name/`previewColor`/optional
 `highlight`/`shadow`/`group`, plus the pre-existing `fill`/`stroke`/`shine`/`accent` render-channel
 fields, aliased 1:1 so both naming schemes always agree). `src/renderer/StoneColors.js` becomes a
@@ -287,6 +314,8 @@ Black" to "Jet" (same id/color) to match the new catalog's required name list. `
 each color's `group` field, with a live swatch (`#stoneColorSwatch`) showing the selected
 `previewColor`. `Stone.color` remains a free string; no catalog-id validation was added to
 `src/geometry/**`. See `docs/specifications/RS-1007-CrystalColorLibrary.md`.
+IMG-016 appended six neutral and brown entries after the original 17, leaving every existing id,
+value and palette index unchanged; see `docs/specifications/IMG-016-NeutralBrownStones.md`.
 
 ---
 
@@ -332,6 +361,14 @@ no new `src/export/**` module: `app.js` rasterizes the generated SVG via an offs
 `<canvas>` at a fixed DPI, the same "capture, not a standalone exporter" shape `#exportPNG`/
 `#exportCup` already use. Neither new module depends on `GeometryEngine`, `Project`, `Layer`, or a
 layer `type` — see `docs/specifications/RS-1005-ProductionSheetGenerator.md`.
+
+**Multi-page sheets.** Since RS-3041, a sheet too big for one page is no longer an export error for
+PDF. `computeProductionSheetDocument()` (`src/export/ProductionSheetExporter.js`) returns the
+single-page layout unchanged when it fits, and otherwise tiles the production area into a cover page
+(header plus a page map) and true-size tile pages with 8 mm overlap ghosts, cut lines and per-tile
+registration marks; `PdfDocument` gained `addPage()`, and single-page output is byte-identical. SVG
+and PNG stay one page and ask for a PDF export instead
+(`docs/specifications/RS-3041-MultiPageSheets.md`).
 
 As of RS-0003.5D1, `stoneLayoutToSvg()` validates its inputs (throws a clear `TypeError` for a
 malformed `stoneLayout` or a non-positive/non-finite `widthMm`/`heightMm`) and each `<circle>`
@@ -444,7 +481,7 @@ GeometryEngine
 
 `src/products/VesselProductDefinition.js` (mirroring the Round Dinner Plate's own
 `PlateProductDefinition.js`, S-112) supplies per-product mm ranges/defaults from JSON
-(`src/products/definitions/vessel-standard-{mug,tumbler,bottle}.json`); `computeCanvasFromVessel()`
+(`src/products/definitions/vessel-standard-{mug,tumbler,bottle}.js`); `computeCanvasFromVessel()`
 is the one place `project.canvas` is derived from live vessel params, called only when a fresh
 project is created, the object type is switched, or the operator edits a vessel dimension field —
 never during project load. A legacy project (saved before RS-2010, no `project.vessel`) keeps its
@@ -630,7 +667,7 @@ every layer type.
 close, focus trap, Escape-to-close, backdrop click, ARIA) with zero knowledge of `Project`/`Layer`/
 `StoneLayout`/layer type — the same "pure, consumed only through its barrel" shape every other
 permanent module already has (`src/editing/**`, `src/history/**`, ...). `app.js` is the only
-caller: it constructs one `Lightbox` per dialog (Text, Shapes, Import, Image Trace, Export,
+caller: it constructs one `Lightbox` per dialog (Text, Shapes, Import, Image Trace (titled Image → Strass since IMG-007), Export,
 Production Sheet, Shipping & Handling, Settings, Help) and wires each to its top-menu button.
 
 Every control that existed before UI-001 keeps its exact DOM `id` and its exact `app.js` wiring —
@@ -737,11 +774,13 @@ code.
 | 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
 | Stone size library (RS-1013) | `src/renderer/StoneSizes.js` | nothing else in `src/**` (pure data + validation, exactly like `src/renderer/CrystalColors.js`; a layer's `stoneSize`/a `Stone`'s `sizeMm` stay plain millimeter numbers — `src/geometry/**` never reads this file) |
 | Contour Fill inward-ring geometry (RS-1011) | `src/geometry/ContourRingSampler.js` | nothing else in `src/**` (a distance-transform + marching-squares tracer taking a plain interior-test callback; `src/geometry/StoneSampler.js` is its only caller — see `docs/specifications/RS-1011-FillAlgorithms.md`) |
+| Organic Fill Bridson Poisson-disk sampling (IMG-003, generalized IMG-004) | `src/geometry/OrganicSampler.js` | nothing else in `src/**` (a field-agnostic Poisson-disk point sampler taking a plain `insideAt()` interior-test callback, with its own private `mulberry32` PRNG copy; `src/geometry/StoneSampler.js` is its only caller — see `docs/specifications/IMG-003-OrganicPlacement.md`). IMG-004 generalized `samplePoissonDiskPoints()` with an optional per-point `radiusAt()`/`maxRadiusMm` variable-radius mode, called by `StoneSampler.js`'s new `sampleEdgeFieldFillPoints()`; `StoneSampler.js` remains its only caller — see `docs/specifications/IMG-004-EdgeAwareness.md` |
+| Edge detection for edge-aware placement (IMG-004) | `src/image/Edge.js` | nothing else in `src/**` (a pure Sobel-gradient + monotonic-deque max-filter field transform, `edgeChannel(field, bandRadiusPx)`; no `src/geometry` import, mirroring `src/image/Blur.js`; `src/image/ImageFieldPipeline.js`'s `prepareImageField()` is its only caller — see `docs/specifications/IMG-004-EdgeAwareness.md`) |
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
 | Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
-| Bitmap image trace (RS-1008, corrected RS-1008A) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/blur/resize -> a neutral density field; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
+| Bitmap image trace (RS-1008, corrected RS-1008A, extended IMG-001, IMG-004) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/optional transparency mask/blur/resize/edge-detect -> a neutral multi-channel field `{data, luminance, alpha, edge, labels}`; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
 | Alignment, distribution, snapping, selection (RS-1009; `selectMany` added RS-1010) | `src/editing/**` | nothing else in `src/**` (pure mm-geometry and `Set<string>` selection helpers only; zero dependency on `src/geometry/**`/`src/renderer/**`/`src/export/**`/`Project`/`Layer`/`StoneLayout`) |
 | Lightbox/dialog controller (UI-001) | `src/ui/**` | nothing else in `src/**` (pure DOM dialog behavior only: open/close, focus trap, Escape, backdrop click, ARIA; zero dependency on `Project`/`Layer`/`StoneLayout`/layer type) |
 | Orchestration | `app.js` | every barrel module above, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A), `src/editing/index.js` (RS-1009, alignment/snapping/selection decisions only, never geometry), and `src/ui/index.js` (UI-001, dialog open/close/focus behavior only, never geometry) |
@@ -923,7 +962,7 @@ flowchart TD
 
     MergedSL -->|"StoneLayout.toJSON()"| LayoutJSON["Export: Generated Layout JSON\n{layerId, sourceMode, count,\nboundingBox, widthMm, heightMm, stones[]}"]
     ProjectObj -->|"JSON.stringify(project)"| ProjectJSON["Export: Project JSON"]
-    MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(one <circle> per stone)"]
+    MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(grouped <circle> per stone,\nIMG-008 traced regions under them)"]
     MergedSL -->|"renderProductionLayout()"| LayoutCanvas["layoutCanvas (drawn)"]
     LayoutCanvas -->|"canvas.toBlob('image/png')"| PNG2D["Export: 2D PNG"]
     MergedSL -->|"preview3D.update()"| CupCanvasEl["cupCanvas (drawn)"]
@@ -1185,6 +1224,10 @@ style settings. See `docs/specifications/RS-3011-design-primary-view-scope.md` a
 `docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
 decision history — this section summarizes the shipped result, not the process.
 
+**Sheet framing.** Since RS-3040, Design fits the sheet in CSS px and draws the sheet outline and
+safe-area guide (a plate's design-target circles instead) from `app.js`'s `designSheetFraming()`, on
+a locked layer between the grid and the content (`docs/specifications/RS-3040-DesignFraming.md`).
+
 **Tool-mode convention.** Design's single Paper.js `Tool` routes every pointer gesture through one
 decision: hit an existing shape first (selection/move takes priority over starting a new draw), else
 draw per the current `mode`. Most tool-rail presets (Rect/Ellipse/Slot/Polygon/Pen/freehand, etc.)
@@ -1253,7 +1296,11 @@ remaining layer types and to the two placement tools:
   faithful proxy, not a placeholder: the main canvas never draws the source bitmap on `layoutCanvas`
   either, only the selection box and the generated stone dots, so the rectangle reads exactly as an
   image layer already reads everywhere else in the app. The same rectangle fallback also covers an
-  `svg` whose outline can't be resolved (missing/unparseable `svgSource`).
+  `svg` whose outline can't be resolved (missing/unparseable `svgSource`). Since IMG-020, an `image`
+  layer's stones in Design are drawn from the layout through `getImageLayerStones()`, like text's,
+  and are rebuilt when their signature, box or rotation changes. Since IMG-021, an `image` layer's
+  stones, its SVG-export regions and its Boolean trace follow `rotationDeg`, about the unrotated
+  box's centre.
 - **Step 3 — `text` layers join Select (no resize handles).** Click / drag / rotate only — font
   size is an Inspector field (`#height`), not a drag concept, so the proxy sets
   `item.data.noResizeHandles` and only the rotate handle applies. `materializeTextItemFromLayer()`
@@ -1558,6 +1605,78 @@ categories exist:
   for as unparseable). This closes a real round-trip drift bug: converting from an already-rounded
   2-decimal display value on every unit switch accumulated a few hundredths of a millimeter of error
   per round trip for fields with no canonical store to fall back on.
+
+---
+
+# Image → Strass
+
+**Implementation status (v2.0.0, `develop` @ `8ec8a46`).** Image → Strass turns a photo into a
+stone layout. Two paths exist, and a layer keeps the one it was made with (IMG-026 decision D4).
+
+**Image → Strass v2 (IMG-026, builds A–K).** Every upload is redrawn by AI and then placed by a
+separate layout service:
+
+    Browser                     Node server (tools/dev-server.mjs)       Layout service (Python)
+    upload ──POST /api/redraw──▶ job: OpenAI image ("drawing")
+           ◀──poll every 3 s──  job: POST LAYOUT_SERVICE_URL/layout ──▶ strass_layout.layout()
+                                      ("placing")                  ◀── stones, report
+           ◀── { dataUrl, layout }
+    applyRedraw(): layer.fillMode = 'ai-layout', layer.aiLayout = layout
+
+- **Server.** `server/redraw/` holds the job API (`jobs.mjs`), the prompt (`prompt.mjs`,
+  `PROMPT_VERSION` 6) and the settings (`env.mjs`: `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`,
+  `LAYOUT_SERVICE_URL`). Jobs answer 202 at once and are polled, so a slow OpenAI call or layout
+  never holds a request open. When the layout fails, the job still returns the AI image and the
+  older IMG-023 AI-stones path places the stones.
+- **Layout service.** `services/strass-layout/` is a FastAPI app (`app.py`: `POST /layout`,
+  `GET /health`) around the `strass_layout` package. It is the one place Python is allowed
+  (`CLAUDE.md`, decision D5). Nothing in `src/`, `app.js` or `server/` imports it; the Node server
+  reaches it only over HTTP. It runs natively on Alex's Mac on 127.0.0.1:8000
+  (`scripts/start_layout.sh`) until a server is rented; then the same package runs in Docker and
+  only `LAYOUT_SERVICE_URL` changes. Its tests read the research prototype kept in `prototype/`
+  for the equivalence check.
+- **Layer data.** An ai-layout image layer stores `aiLayout` (`version`, `widthMm`, `heightMm`,
+  `stones` as `[x, y, sizeId, colourId]`, `report`, `editCount`) and `colorSwaps`. The stones
+  are saved in the project, so a project reopens without the AI or the service.
+  `validateProject()` checks every field.
+- **Engine.** `GeometryEngine.generateImageLayout()` hands mode `'ai-layout'` to
+  `_generateAiLayoutStones()` before any image decoding. It builds one `Stone` per entry, applies
+  colour swaps and the layer's rotation, and flags gap violations. Every stone still comes from
+  the one GeometryEngine.
+- **Editing.** Design edits an ai-layout layer stone by stone (delete, move, recolour, resize,
+  add). `src/redraw/AiLayoutEdit.js` is the only write path, and it names stones by their index
+  in `aiLayout.stones`. The lightbox's visible controls come from the pure
+  `imageStudioState()` in `src/ui/ImageStudioState.js`.
+- **Colours.** The catalogue in `src/renderer/CrystalColors.js` has 47 colours. 20 are `aiOnly`:
+  offered by Image → Strass and the colour-swap selects, never by the standard pickers. The
+  Production Sheet lists every colour a layout uses.
+- **3D preview.** Since build K, the instanced stone in `src/preview3d/Preview3DRenderer.js` is a
+  round flat-back rhinestone (`createRhinestoneGeometry()`, 96 triangles) instead of an
+  octahedron (8). It is still one instanced draw call.
+- **View setting.** "Background: White / Product" on the 2D canvas shows the gaps on the product
+  colour. It is not saved and never changes the StoneLayout; Flat Sheet always uses white.
+
+The full specification, with measured figures, is
+`docs/specifications/IMG-026-StrassLayoutService.md`.
+
+**Image → Strass v1 (IMG-000–IMG-025).** Layers made before v2, or made where no redraw provider
+is set up, use the in-browser pipeline: image field and transparency (IMG-001), colour layers
+(IMG-002), organic placement (IMG-003), edge awareness (IMG-004), Check & fix (IMG-005),
+brightness sizes (IMG-006), the studio shell (IMG-007), subject masks (IMG-009, IMG-014,
+IMG-018, IMG-019), line design (IMG-010), catalogue colour and vividness (IMG-015–IMG-017), image
+stones in Design and under rotation (IMG-020, IMG-021), the swappable redraw provider (IMG-022),
+AI stone transfer (IMG-023) and stone clean-up (IMG-025). Each has its own specification under
+`docs/specifications/`, starting with `IMG-000-ImageToStrassAudit.md`.
+
+**Flat Sheet (RS-3037).** `src/products/SheetProductDefinition.js` adds the `sheet` object type,
+a flat 2D-only surface with no physical or 3D counterpart, 150 × 150 mm by default and editable
+from 20 to 500 mm. RS-3039 removed the array spreads that overflowed the stack on very large
+layouts and isolates each layer so one failing layer no longer blanks the canvas. RS-3040 frames
+Design on the sheet, and RS-3041 splits a sheet too big for one page into a multi-page Production
+Sheet.
+
+**Browser baseline (MAINT-007).** The oldest supported browser is Chrome 103 (macOS Sierra);
+`tools/test-browser-baseline.mjs` guards most of the rule.
 
 ---
 

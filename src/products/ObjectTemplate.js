@@ -12,6 +12,7 @@
  * describes the physical item the (unchanged) `StoneLayout` is being previewed/produced against.
  */
 import { PLATE_ROUND_DINNER_DEFINITION, getPlateDefaults } from './PlateProductDefinition.js';
+import { getSheetDefaults } from './SheetProductDefinition.js';
 
 export const WRAP_MODES = Object.freeze(['front', 'wide', 'half', 'full']);
 
@@ -20,7 +21,9 @@ export const WRAP_MODES = Object.freeze(['front', 'wide', 'half', 'full']);
 // still shares the same ObjectTemplate record shape (id/displayName/production size/safe area/
 // wrap/preview) so every generic consumer (Production Sheet, save/load, the #objectType select)
 // needs no plate-specific branch of its own.
-const PREVIEW_KINDS = new Set(['mug', 'tumbler', 'bottle', 'plate']);
+// RS-3037: 'sheet' joins plate as a second flat (non-revolved) kind -- see the exemption below and
+// the sheet TEMPLATE_DEFINITIONS entry.
+const PREVIEW_KINDS = new Set(['mug', 'tumbler', 'bottle', 'plate', 'sheet']);
 
 function assertFiniteNumber(value, label) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -108,7 +111,9 @@ export function createObjectTemplate(def) {
   // plate branch) -- so topWidthFactor/bottomWidthFactor/bodyHeightFactor do not apply and are
   // deliberately not required here. Its live mm params instead come from project.plate at runtime
   // (see src/products/PlateProductDefinition.js's normalizePlateParams()).
-  if (preview.kind !== 'plate') {
+  // RS-3037: a sheet is flat, not a revolved wall either -- same exemption, no live mm params
+  // (project.canvas is its own direct source of truth, see SheetProductDefinition.js).
+  if (preview.kind !== 'plate' && preview.kind !== 'sheet') {
     assertPositiveNumber(preview.topWidthFactor, 'preview.topWidthFactor');
     assertPositiveNumber(preview.bottomWidthFactor, 'preview.bottomWidthFactor');
     assertPositiveNumber(preview.bodyHeightFactor, 'preview.bodyHeightFactor');
@@ -221,6 +226,24 @@ const TEMPLATE_DEFINITIONS = [
     wrap: { supported: WRAP_MODES, default: 'full' },
     preview: {
       kind: 'plate',
+      hasHandle: false
+    }
+  },
+  {
+    // RS-3037: Flat Sheet. A flat, 2D-only production surface with no physical/3D counterpart --
+    // production size is the sheet's own default (getSheetDefaults(), 150x150mm), independently
+    // width/height-editable in the app (unlike plate's single derived-square outer diameter).
+    // safeAreaInsetMm is a real, non-zero rectangular inset (10mm on every side) -- unlike plate's
+    // zero inset, a sheet's printable guide is the ordinary rectangular safe-area guide every
+    // cylindrical template already draws, not a circular/annular one.
+    id: 'sheet',
+    displayName: 'Flat Sheet',
+    productionWidthMm: getSheetDefaults().widthMm,
+    productionHeightMm: getSheetDefaults().heightMm,
+    safeAreaInsetMm: { top: 10, right: 10, bottom: 10, left: 10 },
+    wrap: { supported: WRAP_MODES, default: 'full' },
+    preview: {
+      kind: 'sheet',
       hasHandle: false
     }
   }

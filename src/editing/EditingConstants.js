@@ -14,3 +14,9 @@ export const NUDGE_STEP_MM = 0.5;
 
 // Shift+Arrow-key nudge step (mm).
 export const NUDGE_STEP_LARGE_MM = 5;
+
+// IMG-026 (D): arrow-key step (mm) for a stone selection on an ai-layout layer in Design.
+export const AI_STONE_NUDGE_STEP_MM = 0.1;
+
+// IMG-026 (D): Shift+arrow-key step (mm) for a stone selection.
+export const AI_STONE_NUDGE_STEP_LARGE_MM = 1;

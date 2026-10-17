@@ -63,7 +63,7 @@
 // src/preview3d/Preview3DRenderer.js) now owns pointer interaction on that canvas natively, and
 // does strictly more (rotate, zoom, and pan, with damping). See
 // docs/specifications/RS-1006-Real3DPreview.md. RS-1007 replaced the 7-color hard-coded palette
-// with a permanent 17-color crystal catalog (src/renderer/CrystalColors.js, re-exported unchanged
+// with a permanent 23-color crystal catalog (src/renderer/CrystalColors.js, re-exported unchanged
 // as STONE_COLORS from src/renderer/StoneColors.js -- this import line is unchanged). #stoneColor
 // is now populated at startup from STONE_COLORS (grouped into <optgroup>s by each color's `group`
 // field) instead of index.html's previous hardcoded 7 <option>s, and a live swatch next to it
@@ -92,14 +92,14 @@ import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStep
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, listAllStoneSizes, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
-import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
+import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
-import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } from './src/products/index.js';
-import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
+import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm, SHEET_MAX_MM } from './src/products/index.js';
+import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile, chooseAutoColorCount, prepareAutoColorField, detectAiStones } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
 // dependency on src/geometry/**/StoneLayout/Stone and never generates stone positions itself;
@@ -107,12 +107,14 @@ import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeData
 // names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
 // docs/specifications/RS-1009-AlignmentSnapping.md.
 import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection, selectMany, computeTextPlacementOffsetMm, computeTextLayerPositionForTargetCenterMm } from './src/editing/index.js';
+// IMG-026 (D): the arrow-key steps for a stone selection on an ai-layout layer in Design.
+import { AI_STONE_NUDGE_STEP_MM, AI_STONE_NUDGE_STEP_LARGE_MM } from './src/editing/index.js';
 // UI-001 (Complete Application Redesign): src/ui/** is a new, pure, DOM-only module -- a generic
 // Lightbox/dialog controller (open/close, focus trap, Escape, backdrop click). It has no knowledge
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
-import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
+import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows } from './src/ui/index.js';
 import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
@@ -137,6 +139,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -228,18 +231,31 @@ const DEFAULT_IMAGE_MAX_DIMENSION_PX=400;
 // page session (no eviction) -- acceptable at this milestone's scope, see
 // docs/specifications/RS-1008-ImageTrace.md, "Out of Scope".
 const imageBufferCache=new Map();
+// IMG-023 (D1): detectAiStones() result per imageSrc (~1-2 s on a 1024 px image), so a regenerate of
+// an AI stones layer only re-runs placement. 2-entry LRU, like imageColorFieldCache.
+const aiStoneDetectionCache=new Map();
+function aiStoneDetectionFor(imageSrc,buffer){
+  let detection=aiStoneDetectionCache.get(imageSrc);
+  if(detection){aiStoneDetectionCache.delete(imageSrc);aiStoneDetectionCache.set(imageSrc,detection);return detection}
+  detection=detectAiStones(buffer);
+  aiStoneDetectionCache.set(imageSrc,detection);
+  if(aiStoneDetectionCache.size>2)aiStoneDetectionCache.delete(aiStoneDetectionCache.keys().next().value);
+  return detection;
+}
 // RS-0003.5D2: resolves a <select>'s value by nearest numeric match instead of an exact string
 // match. Fixes the #stoneSize dropdown showing blank on load: a layer's stoneSize is a plain JS
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
 // like "2.0"), so the browser rendered no selection even though the underlying mm value was
 // valid. Never mutates the numeric value itself, only the displayed selection.
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
-// RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
+// RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (23 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
 // string keys STONE_COLORS is built from). Called once at startup for #stoneColor, and again
 // (RS-3014 Step 1) for each of Stamp/Trace/Paint's own #stampColor/#traceColor/#paintColor selects
-// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected.
-function populateStoneColorOptions(targetId='stoneColor'){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected. IMG-026F: the
+// aiOnly colours are listed only with includeAiOnly (the AI layout's #aiStoneColor and its
+// colour-swap selects).
+function populateStoneColorOptions(targetId='stoneColor',includeAiOnly=false){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(c.aiOnly&&!includeAiOnly)continue;if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 // RS-1013: builds the #stoneSize <option> list from the Stone Library (src/renderer/StoneSizes.js)
 // -- each option's value is the size's plain millimeter diameter (the same raw number a layer's
 // stoneSize / a Stone's sizeMm has always been; see src/geometry/GeometryEngine.js's stoneSizeMm
@@ -262,7 +278,7 @@ function ensureStoneSizeOption(select,diameterMm){
   const existing=select.querySelector('option[data-custom="1"]');
   if(existing)existing.remove();
   const catalogMatch=findStoneSizeByDiameterMm(diameterMm);
-  if(catalogMatch)return;
+  if(catalogMatch&&!catalogMatch.imageOnly)return;
   const opt=document.createElement('option');
   opt.value=String(diameterMm);opt.dataset.custom='1';
   opt.textContent=`Custom — ${(Math.round(diameterMm*100)/100)} mm`;
@@ -271,7 +287,14 @@ function ensureStoneSizeOption(select,diameterMm){
 // RS-1007: keeps the small swatch next to #stoneColor showing the currently selected color's
 // actual previewColor. Called from updateStats() (itself called at the end of every updateAll()),
 // so the swatch always reflects the live selection after an edit, undo/redo, or import.
-function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];el('stoneColorSwatch').style.background=c?c.previewColor:'transparent'}
+function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];el('stoneColorSwatch').style.background=c?c.previewColor:'transparent';
+  // IMG-002: per-stone color comes entirely from layer.colorMap while a multi-colour image is
+  // active -- #stoneColor's single value has no effect then, so it's disabled with an explanatory
+  // title rather than left live-but-ignored.
+  const sel=selectedLayer();const multiColorImage=sel&&sel.type==='image'&&resolveImageColorCount(sel)>1;
+  el('stoneColor').disabled=multiColorImage;
+  el('stoneColor').title=multiColorImage?'Per-stone color is set in the Colours group while this image has more than one colour.':'';
+}
 // RS-2002 (Typography & Font Library) -- everything below builds the font picker on top of the
 // same fontManager.listFonts() call used to derive TEXT_ENGINE_FONT_IDS above. No font data lives
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
@@ -656,7 +679,8 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // #textMode value); every other layer type's stored value already equals the engine's own mode name
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
-const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour']);
+const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic','edge','line-design','ai-stones','ai-layout']);
+const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
 // own normalizeTextParams() validates it strictly (throws for non-finite/non-positive), but this
@@ -685,6 +709,191 @@ function invalidateAuthoredScaleForGeometryChange(layer,changedField){
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// IMG-023 (D2): layer.aiStoneShrink, the #imgAiStoneShrink step (1, 0.9 or 0.8). Missing/invalid -> 1,
+// so a layer without the field keeps one AI stone per real stone. Plain literals.
+function resolveAiStoneShrink(value){return value===0.9||value===0.8?value:1}
+// IMG-003: layer.seed/layer.spread -- read-site permissive defaults, the same precedent
+// layer.transparent (IMG-001) and layer.colorCount (IMG-002) already established. Default seed is a
+// fixed 1 (not random), so a pre-IMG-003 layer with no stored seed/spread regenerates identically to
+// a fresh Organic-mode layer -- see docs/specifications/IMG-003-OrganicPlacement.md decision 3.
+function resolveImageSeed(value){return Number.isInteger(value)&&value>=0?value:1}
+function resolveImageSpread(value){return typeof value==='number'&&Number.isFinite(value)&&value>=1?value:1}
+function resolveImageEdgeWidth(value){return typeof value==='number'&&Number.isFinite(value)&&value>0?value:6}
+function resolveImageEdgeThinning(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:1}
+// IMG-006: layer.brightnessThinning -- read-site permissive default, the same precedent
+// resolveImageEdgeThinning() (IMG-004) already established, but with a 0 fallback (no thinning) not
+// 1, since brightnessThinning applies even to a plain 'uniform' image layer and must be a true
+// no-op there by default.
+function resolveImageBrightnessThinning(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:0}
+// IMG-001: 'white' (flatten alpha onto white, the pre-IMG-001 only behavior) or 'ignore' (alpha<128
+// pixels never become stones, regardless of luminance). Missing/invalid -> 'white', matching every
+// other resolve*() fallback's permissive-default convention -- see IMG-001-ImageToStrass.md.
+function resolveImageTransparentMode(value){return IMAGE_TRANSPARENT_MODES.has(value)?value:'white'}
+// IMG-009: 'threshold' (applyThreshold(), the pre-IMG-009 only behavior) or 'subject'
+// (computeSubjectMask()). Missing/invalid -> 'threshold', matching every other resolve*() fallback's
+// permissive-default convention -- see docs/specifications/IMG-009-SubjectMask.md decision 3. This is
+// the one function every one of the five sites in decision 6's table resolves maskMode through.
+// IMG-018: 'whole' (every pixel is subject) is the third value -- see
+// docs/specifications/IMG-018-WholeImageMask.md decision 6. Plain literals: this span is
+// new Function()-evaluated by several test harnesses.
+function resolveImageMaskMode(value){return value==='subject'?'subject':value==='whole'?'whole':'threshold'}
+// IMG-017: layer.vividness, the chroma factor applied before catalogue matching. Exactly one of the
+// four Studio steps, anything else (missing, a string, an off-step number) -> 1, which is the
+// shipped arithmetic -- see docs/specifications/IMG-017-Vividness.md decision 3. Plain literals: this
+// span is new Function()-evaluated by several test harnesses (see imageColorPalette() below).
+const IMAGE_VIVIDNESS_STEPS=[1,1.2,1.4,1.6];
+function resolveImageVividness(value){return IMAGE_VIVIDNESS_STEPS.includes(value)?value:1}
+// IMG-002: {id, hex} palette entries GeometryEngine.generateImageLayout()'s quantizer clusters
+// against -- built once from STONE_COLORS (the same re-exported CRYSTAL_COLORS catalog data
+// populateStoneColorOptions() already crosses the src/renderer -> app.js boundary with), in the
+// same catalog order. src/image/** and src/geometry/** never see CrystalColors.js directly.
+// Constants in this region of app.js must not evaluate imports at load time, because several test
+// harnesses new Function()-evaluate this span. IMG-026G: the hex is legacyFill, the colour before the
+// catalogue re-measure, so legacy image layers keep their stones.
+let imageColorPaletteCache=null;
+function imageColorPalette(){if(!imageColorPaletteCache){const legacyIds=['crystal-clear','crystal','jet','siam','light-siam','rose','fuchsia','amethyst','sapphire','light-sapphire','aquamarine','emerald','peridot','topaz','citrine','gold','silver','hematite','black-diamond','grey','smoked-topaz','light-colorado','light-peach'];imageColorPaletteCache=Object.values(STONE_COLORS).filter(c=>legacyIds.includes(c.id)).map(c=>({id:c.id,hex:c.legacyFill||c.previewColor}))}return imageColorPaletteCache}
+// IMG-012: layer.colorCount === 'auto' (the sentinel, see docs/specifications/IMG-012-AutoColourCount.md
+// section B) resolves to a concrete integer 1-8 through this function alone -- every numeric read
+// site (this file's own multiColorImage flag, computeImageColorField(), generateImageStonesLive(),
+// resolveImageExportRegions()) calls this instead of reading layer.colorCount raw. A number or an
+// absent value passes through byte-identically (decision 4); only 'auto' triggers the count below.
+// IMG-015 (decisions 3 and 7): that count is one pass of direct catalog labelling, max(2, n) where n
+// is the number of catalog colours clearing the 1.2% share floor (capped at 8), or 1 with no subject
+// pixels -- no longer IMG-012's k=2..8 sweep.
+//
+// D3 (this milestone's own cache-key audit): computeSubjectMask() (maskMode:'subject') reads only
+// the source imageBuffer and a fixed default toleranceDe -- no layer-stored parameter, so
+// `threshold` has zero effect in 'subject' mode. applyThreshold() (maskMode:'threshold') reads
+// `threshold` directly. `invert`, `blurRadiusPx`, `maxWidthPx`/`maxHeightPx` (working resolution)
+// and `transparent` are read unconditionally by prepareImageField() after either mask route, in
+// both modes -- so the key below includes `threshold` only for 'threshold' mode. This is a flat
+// key->resolvedCount cache mirroring imageColorFieldCache's own shape/2-entry LRU cap exactly: a
+// key hit never re-runs the count, a key miss always does -- seed/spread/stoneSize/gap/fillMode/a
+// colorMap pick are deliberately absent from the key, so editing them never invalidates it (decision
+// 5's "recomputes once per change of image, mask parameters, or working resolution").
+//
+// D3 UI-perf follow-up (freeze, not the "not built" note this comment used to carry): #imgThreshold
+// is a range input firing 'input' on every drag tick, and each tick's threshold value is technically
+// a distinct key -- so letting Auto's labelling pass (a full-field per-pixel catalog labelling, on
+// top of imageColorFieldCache's own quantizeColors() call) run on every drag tick would be a real
+// per-frame cost. autoColorCountFrozen
+// (set true on 'pointerdown', false on 'pointerup'/'change' -- wired below, near
+// HISTORY_TRACKED_CONTROL_IDS) freezes resolveImageColorCount() to whatever it last actually
+// resolved for that layer (autoColorCountLastResolved) while a mask-slider drag is in progress,
+// regardless of what the key would compute to mid-drag; the trailing 'change' clears the freeze and
+// triggers one real recompute against the now-settled value. A keyboard edit to a number input fires
+// 'change' on every step (no drag in between), so it recomputes once per step -- accepted, since
+// there's no in-between value to freeze against.
+function autoColorCountKeyParts(layer){
+  const maskMode=resolveImageMaskMode(layer.maskMode);
+  const transparent=resolveImageTransparentMode(layer.transparent);
+  const parts=[layer.imageSrc,maskMode,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,resolveImageVividness(layer.vividness),layer.paletteRule==='error'?'error':''];
+  if(maskMode==='threshold')parts.push(layer.threshold);
+  return parts.join('|');
+}
+const autoColorCountCache=new Map();
+// layer.id -> the last count actually resolved for it (fresh count or cache hit), read while frozen.
+const autoColorCountLastResolved=new Map();
+let autoColorCountFrozen=false;
+function resolveImageColorCount(layer){
+  if(!layer||layer.type!=='image')return 1;
+  const raw=layer.colorCount;
+  if(raw==null)return 1;
+  if(typeof raw==='number')return Math.max(1,Math.min(8,raw));
+  if(raw!=='auto')return 1;
+  if(autoColorCountFrozen&&autoColorCountLastResolved.has(layer.id))return autoColorCountLastResolved.get(layer.id);
+  const buffer=imageBufferCache.get(layer.imageSrc);
+  if(!buffer)return 1;
+  const key=autoColorCountKeyParts(layer);
+  const cached=autoColorCountCache.get(key);
+  if(cached!=null){autoColorCountLastResolved.set(layer.id,cached);return cached}
+  const field=prepareAutoColorField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
+  const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette(),{chromaScale:resolveImageVividness(layer.vividness),paletteRule:layer.paletteRule});
+  autoColorCountCache.set(key,resolvedCount);
+  if(autoColorCountCache.size>2)autoColorCountCache.delete(autoColorCountCache.keys().next().value);
+  autoColorCountLastResolved.set(layer.id,resolvedCount);
+  return resolvedCount;
+}
+// IMG-002: recomputes the quantized color field (labels + colorGroups) for an image layer, purely
+// from its own already-cached decoded buffer and its own stored params -- deterministic, so this is
+// safe to call both when populating the Studio's Colours rows/view (renderImageStudio()) and when
+// resolving each row's stable colorMap key at write time (writeSelectedControlsToLayer()), rather
+// than caching a row->nearestId mapping between the two, which could drift stale if e.g. threshold
+// changed between renders. Returns null (no quantization) for colorCount<=1 or before the source
+// image has been decoded/cached at least once.
+// IMG-002 follow-up: quantization has a measured real cost at larger working resolutions -- +312ms
+// at 1000x1000, +218ms at 2000x2000, +575ms at 4000x4000, all measured on top of the shipped 400px
+// default, when it was median cut + 8 k-means passes; IMG-015's direct per-pixel catalog labelling
+// replaced that and was not re-measured at those sizes. This function alone already runs up to three times per
+// updateAll() (writeSelectedControlsToLayer(), generateImageLayout()'s own prepareImageField() call
+// inside the engine, and renderImageStudio()), and #imgThreshold is a range input firing on every
+// 'input' event while dragging -- so imageColorFieldCache below caches the last couple of results,
+// keyed on every param quantizeColors()' own output depends on: imageSrc (which image), threshold/
+// invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent (which determine the density/R/G/B fields
+// it reads), and colorCount (how many colour groups it keeps). Omitting any one of these from the key
+// would let an edit to that param silently reuse a stale quantization. Deliberately NOT cached inside
+// src/image or src/geometry -- prepareImageField() itself stays pure and uncached, the same as every
+// other pure pipeline stage; this is app.js's own UI-latency concern, not the engine's.
+const imageColorFieldCache=new Map();
+function computeImageColorField(layer){
+  if(!layer||layer.type!=='image')return null;
+  const colorCount=resolveImageColorCount(layer);
+  if(colorCount<=1)return null;
+  const buffer=imageBufferCache.get(layer.imageSrc);
+  if(!buffer)return null;
+  const transparent=resolveImageTransparentMode(layer.transparent);
+  // IMG-012 (D2): forwards maskMode -- and keys on it -- so the Studio's Colours rows/colorMap keys
+  // quantize against the same mask the production path (generateImageStonesLive()/
+  // resolveImageExportRegions(), both already maskMode-aware) uses, instead of always quantizing
+  // against the threshold mask regardless of the layer's actual maskMode (a pre-existing gap this
+  // function's own prior version had -- see docs/specifications/IMG-012-AutoColourCount.md section A).
+  const maskMode=resolveImageMaskMode(layer.maskMode);
+  const vividness=resolveImageVividness(layer.vividness);
+  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,colorCount,maskMode,vividness,layer.paletteRule==='error'?'error':''].join('|');
+  const cached=imageColorFieldCache.get(key);
+  if(cached)return cached;
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount,maskMode,vividness,paletteRule:layer.paletteRule,palette:imageColorPalette()});
+  imageColorFieldCache.set(key,field);
+  if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
+  return field;
+}
+// IMG-010 (D4): a line-design layer's own stone list is expensive (~0.6-0.8s measured on a
+// realistic fixture) and LineDesignSampler.js reads the full-resolution decoded buffer directly,
+// ignoring threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent/colorCount/
+// seed/spread/edgeWidthMm/edgeThinning/brightnessThinning/stoneSize/sizeMode entirely for this mode
+// -- see its own doc comment -- so none of those belong in the cache key below. colorMap IS read
+// (IMG-010 follow-up: colour overrides) and so IS in the key, via lineDesignColorMapKey()'s stable
+// serialization below. `palette` (IMG-010 second follow-up) is also read now -- LineDesignSampler.js
+// no longer imports src/renderer/CrystalColors.js directly (src/geometry/** may never import
+// src/renderer/**) -- but stays OUT of the key: imageColorPalette() below is a cached, static read
+// of the never-mutated STONE_COLORS catalog, so it always returns the exact same array and can never
+// be the reason a cached entry goes stale. Mirrors imageColorFieldCache's own shape/2-entry LRU cap
+// exactly. Keyed on layer.id too (unlike imageColorFieldCache) because the cached value already
+// carries stones stamped with a specific layerId, so two different layers must never share a slot.
+const lineDesignStoneCache=new Map();
+// IMG-010 follow-up: a plain object's key order is insertion order, not a canonical one (l.colorMap
+// is rebuilt via `{...l.colorMap}` in writeSelectedControlsToLayer(), so two calls with the same
+// overrides could in principle insert them in a different order) -- sorting the override entries'
+// own keys before joining makes the same set of overrides always serialize identically, regardless
+// of insertion order, so the cache key is stable across calls.
+function lineDesignColorMapKey(colorMap){
+  const keys=Object.keys(colorMap||{}).sort();
+  return keys.map(k=>`${k}=${colorMap[k]}`).join(',');
+}
+// Set true on pointerdown/false on pointerup for a line-design image layer's own resize drag (the
+// resize-drag branch of layoutCanvas's pointermove handler mutates x/y/w/h every tick and, unlike a
+// move drag -- see the M14 translate fast path -- has no cheaper preview path, so it calls
+// updateAll(true) -- and therefore generateImageStonesLive() -- on every tick); while frozen, a
+// cache MISS for this layer falls back to whatever is already cached for it (any key) rather than
+// recomputing. endActiveDrag() clears the freeze and forces one real recompute at drag end. (The
+// AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS drag controls IMG-012 freezes never touch this flag: none of
+// those four controls are in the cache key above, so a drag on one of them already hits the cache
+// unchanged, freeze or not.)
+let lineDesignFrozen=false;
+function invalidateLineDesignCache(layerId){
+  if(!layerId)return;
+  for(const k of[...lineDesignStoneCache.keys()])if(k.startsWith(layerId+'|'))lineDesignStoneCache.delete(k);
+}
 // S-200 (Mixed Stone-Size Layouts): Generation Mode -- 'uniform' (every stone in the layer is the
 // same size, unchanged pre-S-200 behavior) or 'mixed' (GeometryEngine.js's MixedSizeGenerator.js
 // may additively fill gaps with smaller stones). Mirrors resolveVectorFillMode()'s own "unrecognized
@@ -693,7 +902,9 @@ function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'f
 // MONO-015 adds 'weight' (weight-following stone size). resolveSizeMode() still falls back to
 // 'uniform' for any unrecognized/missing value, so a pre-MONO-015 project is untouched; app.js
 // only ever offers 'weight' for an outline-mode text layer (updateWeightSizeCapabilityUI()).
-const SIZE_MODES=new Set(['uniform','mixed','weight']);
+// IMG-006 adds 'brightness' (brightness-following stone size), offered only for an image layer
+// (updateBrightnessSizeCapabilityUI()).
+const SIZE_MODES=new Set(['uniform','mixed','weight','brightness']);
 function resolveSizeMode(value){return SIZE_MODES.has(value)?value:'uniform'}
 // The Mixed Stone Size inspector section's five Allowed Sizes checkboxes are static markup (see
 // index.html's #sharedMixedSizeFields comment for why, vs. #stoneSize's dynamically populated
@@ -733,6 +944,23 @@ function weightStepsOptionsHtml(baseStoneSizeMm){
 // The rung count a stored weightSizesMm array represents (step 1 -> 2 entries, step 2 -> 3); 0 for
 // an empty/absent array (weight mode on, step "Off").
 function weightStepForSizes(weightSizesMm){return Array.isArray(weightSizesMm)&&weightSizesMm.length>1?weightSizesMm.length-1:0}
+// IMG-006: the graduated brightness-step <select> option list (#imgBrightnessSteps in the Image
+// Studio). Same idiom as weightStepsOptionsHtml() just above (option value is the rung count,
+// labels built live from the base stone size), but loops every rung the catalog can supply from
+// this base -- brightness sizing has no product reason to cap at two extra rungs the way the
+// weight-following step deliberately does, so every option here is always enabled.
+function brightnessStepsOptionsHtml(baseStoneSizeMm){
+  const available=stoneSizeRungsAvailable(baseStoneSizeMm);
+  const html=['<option value="0">Off</option>'];
+  for(let step=1;step<=available;step++){
+    const label=stoneSizesFromBaseMm(baseStoneSizeMm,step).map(d=>formatStoneSizeLabel(d).replace(/\s*\(.*\)$/,'')).join(' → ');
+    html.push(`<option value="${step}">${escapeHtml(label)}</option>`);
+  }
+  return html.join('');
+}
+// The rung count a stored brightnessSizesMm array represents -- same convention as
+// weightStepForSizes() above.
+function brightnessStepForSizes(brightnessSizesMm){return Array.isArray(brightnessSizesMm)&&brightnessSizesMm.length>1?brightnessSizesMm.length-1:0}
 // S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
 // generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
 // ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
@@ -809,7 +1037,7 @@ function shapeLayerResolveParams(layer){
 // minSizeMm/maxSizeMm, so a mode-switched layer round-trips unambiguously. normalizeMixedSizeParams()
 // ignores it unless sizeMode==='weight' and the caller allows weight (text layers only). Empty
 // default mirrors allowedSizesMm's, and reduces weight mode to uniform output.
-function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[]}}
+function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[],brightnessSizesMm:layer.brightnessSizesMm??[]}}
 // MONO-006B: every field generateTextStonesLive() passes to permanentEngine.generateTextLayout()
 // except authoredScale itself -- factored out so recoverStaleAuthoredScales() below can generate
 // the exact same *natural* (unscaled) layout to validate a persisted authoredScale against, without
@@ -869,7 +1097,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     if(!scaleResult.ok)delete l.authoredScale;
   }
  }
- async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ // RS-3039: each visible layer's Live call runs in its own try/catch, so one failing layer contributes
+ // no stones instead of blanking every layer; its failure is logged and returned in `failures`
+ // ({layerId,layer,error}, in project.layers order) for updateAll()'s status line. Stones are appended
+ // one-by-one, not spread: a large layer's array overflows the JS call stack as call arguments.
+ // recoverStaleAuthoredScales() stays outside the per-layer try (see its own comment).
+ async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];const failures=[];for(const l of project.layers){if(!l.visible)continue;try{if(l.type==='text')for(const s of await this.generateTextStonesLive(l,project))raw.push(s);if(SHAPE_LAYER_TYPES.has(l.type))for(const s of await this.generateShapeStonesLive(l))raw.push(s);if(l.type==='svg')for(const s of await this.generateSvgStonesLive(l))raw.push(s);if(l.type==='image')for(const s of await this.generateImageStonesLive(l))raw.push(s);if(l.type==='path')for(const s of await this.generatePathStonesLive(l))raw.push(s);}catch(error){console.error(`Layer ${l.id} generation failed`,error);failures.push({layerId:l.id,layer:l,error})}}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId,metadata:s.metadata}));return{layout:new StoneLayout({layerId:'project',stones}),failures}}
  // Stone Size overlap guard: the same per-type Live dispatch generate() uses just above, factored
  // out (not shared with generate() itself, to avoid touching that method's tested source shape) so
  // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
@@ -923,7 +1156,46 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
+ // IMG-002: colorCount/palette/colorMap forwarded alongside every other stored param -- this is the
+ // one call site that produces the real, everywhere-consumed StoneLayout for an image layer (2D
+ // canvas, exports, Production Sheet), so it must carry the same quantized-color params
+ // renderImageStudio()'s own preview-only prepareImageField() calls use, or Studio Colours edits
+ // would only ever affect the Studio's own preview, never the actual production layout. palette is
+ // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
+ // never reads it).
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];
+  // IMG-026 (C1): an ai-layout layer is placed from layer.aiLayout and needs no decoded image, so it
+  // branches before the decode below and still shows its stones when the image fails to decode.
+  if(resolveImageFillMode(layer.fillMode)==='ai-layout'){
+    const result=this.permanentEngine.generateImageLayout({mode:'ai-layout',layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,rotationDeg:layer.rotationDeg??0,aiLayout:layer.aiLayout,colorSwaps:layer.colorSwaps??{}});
+    // IMG-026 (D): metadata carries aiIndex and gapViolation on to engine.generate() and Design.
+    const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId,metadata:s.metadata}));
+    return includeStats?{stones,outlineStats:null,aiLayoutStats:result.aiLayoutStats}:stones;
+  }
+  let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
+  const mode=resolveImageFillMode(layer.fillMode);
+  // IMG-010 (D4): see lineDesignStoneCache's own doc comment for the cache-key rationale and the
+  // freeze fallback below.
+  if(mode==='line-design'){
+    const key=[layer.id,layer.imageSrc,layer.x,layer.y,layer.w,layer.h,layer.gap,lineDesignColorMapKey(layer.colorMap),resolveImageVividness(layer.vividness),resolveImageMaskMode(layer.maskMode),layer.rotationDeg??0].join('|');
+    let cached=lineDesignStoneCache.get(key);
+    if(!cached&&lineDesignFrozen){
+      for(const[k,v]of lineDesignStoneCache)if(k.startsWith(layer.id+'|')){cached=v;break}
+    }
+    if(!cached){
+      // maxWidthPx/maxHeightPx are still required here even though LineDesignSampler.js itself
+      // ignores them (it reads the full-resolution buffer directly) -- generateImageLayout() always
+      // calls prepareImageField() first, unconditionally, regardless of mode, and that call has no
+      // default for either field.
+      const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,colorMap:layer.colorMap??{},palette:imageColorPalette(),maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,vividness:resolveImageVividness(layer.vividness),maskMode:resolveImageMaskMode(layer.maskMode)};
+      const result=this.permanentEngine.generateImageLayout(params);
+      cached={stones:result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId})),outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null};
+      lineDesignStoneCache.set(key,cached);
+      if(lineDesignStoneCache.size>2)lineDesignStoneCache.delete(lineDesignStoneCache.keys().next().value);
+    }
+    return includeStats?cached:cached.stones;
+  }
+  const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),fillGaps:Boolean(layer.fillGaps),cleanup:layer.cleanup,jetOutline:layer.jetOutline,aiStoneDetection:mode==='ai-stones'?aiStoneDetectionFor(layer.imageSrc,buffer):null,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null,cleanupStats:result.cleanupStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -1036,6 +1308,22 @@ function validateProject(obj){
     // plain boolean UI toggle, not strictly validated here, matching this function's existing
     // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
+    if(l.type==='image'&&l.redraw!==undefined&&!(l.redraw&&typeof l.redraw==='object'&&!Array.isArray(l.redraw)&&typeof l.redraw.originalImageSrc==='string'&&l.redraw.originalImageSrc.startsWith('data:image/')))throw new Error(`Image layer "${l.id}" has an invalid 'redraw' record: originalImageSrc must be a data:image/ URL.`);
+    // IMG-026 (C1): an ai-layout layer's stone list and colour swaps. Size ids cover all six sizes
+    // (SS4 included), colour ids all of STONE_COLORS. Coordinates outside the box are allowed.
+    if(l.type==='image'&&l.aiLayout!==undefined){
+      const a=l.aiLayout;
+      if(!a||typeof a!=='object'||Array.isArray(a)||a.version!==1)throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': version must be 1.`);
+      if(![a.widthMm,a.heightMm].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': widthMm/heightMm must be positive numbers.`);
+      if(!Array.isArray(a.stones)||a.stones.length>20000)throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': stones must be an array of at most 20000 entries.`);
+      a.stones.forEach((t,i)=>{if(!(Array.isArray(t)&&t.length===4&&typeof t[0]==='number'&&Number.isFinite(t[0])&&typeof t[1]==='number'&&Number.isFinite(t[1])&&isValidStoneSizeId(t[2])&&typeof t[3]==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,t[3])))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout' stone ${i}: expected [x, y, size id, colour id].`)});
+      if(!(Number.isInteger(a.editCount)&&a.editCount>=0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': editCount must be a non-negative integer.`);
+      // IMG-026 (C2): offsetMm and mmPerPx are optional (layers made with C1 have neither).
+      const r=a.report&&typeof a.report==='object'?a.report:{};
+      if(r.offsetMm!==undefined&&!(Array.isArray(r.offsetMm)&&r.offsetMm.length===2&&r.offsetMm.every(n=>typeof n==='number'&&Number.isFinite(n))))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': report.offsetMm must be two finite numbers.`);
+      if(r.mmPerPx!==undefined&&!(typeof r.mmPerPx==='number'&&Number.isFinite(r.mmPerPx)&&r.mmPerPx>0))throw new Error(`Image layer "${l.id}" has an invalid 'aiLayout': report.mmPerPx must be a positive number.`);
+    }
+    if(l.type==='image'&&l.colorSwaps!==undefined&&!(l.colorSwaps&&typeof l.colorSwaps==='object'&&Object.getPrototypeOf(l.colorSwaps)===Object.prototype&&Object.entries(l.colorSwaps).every(([from,to])=>Object.prototype.hasOwnProperty.call(STONE_COLORS,from)&&typeof to==='string'&&Object.prototype.hasOwnProperty.call(STONE_COLORS,to))))throw new Error(`Image layer "${l.id}" has an invalid 'colorSwaps': expected an object of known colour id to known colour id.`);
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
     if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
     if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
@@ -1401,6 +1689,16 @@ function isPointInActiveSelection(pointAbsoluteMm,selection){
 // instant it finalizes (freehand stroke end, a preset's drag-end, polygon close) without touching
 // project state itself -- app.js stays the only owner of `project`, matching this file's own
 // "never touches project state" doc comment on the old commit()/DrawingBoard.js.
+// IMG-020: one layerId's stones from the `layout` global, in DrawingCanvasTool.js's {x,y,d,color}
+// shape -- the single filter behind both the getTextLayerStones and getImageLayerStones hooks.
+// IMG-026 (D): an ai-layout stone also carries aiIndex and gapViolation; every other stone does not.
+function layoutStonesForLayer(layerId){return layout.stones.filter(s=>s.layerId===layerId).map(s=>{const o={x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color};if(s.metadata&&Number.isInteger(s.metadata.aiIndex)){o.aiIndex=s.metadata.aiIndex;o.gapViolation=s.metadata.gapViolation===true}return o})}
+// RS-3040: the sheet Design fits and outlines, and its guides, from the same project.canvas,
+// getSafeAreaRectMm() and getPlateDesignTargetGuide() calls drawLayout() makes for the 2D canvas.
+function designSheetFraming(){const t=currentObjectTemplate(),W=project.canvas.width,H=project.canvas.height;const guides=[];if(t.preview.kind==='plate'){const g=getPlateDesignTargetGuide(project.plate.designTarget,project.plate,W,H);if(g.kind==='annulus'){guides.push({role:'plateOuter',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.outerRadiusMm,dashed:false,label:g.label},{role:'plateInner',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.innerRadiusMm,dashed:false,label:g.label})}else{guides.push({role:'plateTarget',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.radiusMm,dashed:false,label:g.label});if(g.transitionRadiusMm!=null)guides.push({role:'plateTransition',kind:'circle',cxMm:g.cxMm,cyMm:g.cyMm,radiusMm:g.transitionRadiusMm,dashed:true,label:g.label})}}else{guides.push({role:'sheet',kind:'rect',xMm:0,yMm:0,widthMm:W,heightMm:H,dashed:false});if(showSafeArea){const r=getSafeAreaRectMm(t,W,H);guides.push({role:'safeArea',kind:'rect',xMm:r.xMm,yMm:r.yMm,widthMm:r.widthMm,heightMm:r.heightMm,dashed:true})}}return{canvasMm:{width:W,height:H},guides}}
+// RS-3040: #fitNotice while Design is open -- drawLayout() writes it only outside Design. Names the current
+// template and only the guides the framing gave Design.
+function designFitNotice(framing){const name=currentObjectTemplate().displayName,plate=framing.guides.find(g=>g.label);if(plate)return`${name}: keep stones inside the blue ${plate.label} guide.`;return framing.guides.some(g=>g.role==='safeArea')?`${name}: keep stones inside the dashed safe-area guide.`:`${name}: keep stones inside the sheet outline.`}
 const drawingTool=createDrawingTool(layoutCanvas,{
   // stoneSize/gap/color default from the currently-selected layer, the same convention
   // createShapeLayer()/the SVG-import handler elsewhere in this file already use for a brand-new
@@ -1672,6 +1970,14 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // 'path' nor 'text' -- after RS-3015 the resolver skips ineligible proxies, so this is now only
     // the narrow race where the layer was deleted or changed type between resolution and here.
     if(!layerId){el('status').textContent='Stamp: nothing here to place a stone on.';return;}
+    // IMG-026 (D): an ai-layout image gets one stone added to its layout at the click, at the nearest
+    // catalogue size.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const size=nearestAiLayoutStoneSize(stampSettings.sizeMm);
+      await editAiLayoutStones(aiTarget.id,[{op:'add',stones:[{xMm,yMm,sizeId:size.id,colorId:stampSettings.color}]}],`Stamped ${aiLayoutMarkSizeText(size,stampSettings.sizeMm,aiTarget)}`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer){
       const owner=project.layers.find(l=>l.id===layerId);
@@ -1765,6 +2071,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // only as a defensive guard against the narrow race where the layer was deleted between
     // resolution and here.
     if(!placements.length)return;
+    // IMG-026 (D): an ai-layout image gets the spaced placements added to its layout, in order, at
+    // the nearest catalogue size.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const size=nearestAiLayoutStoneSize(traceSettings.sizeMm);
+      const n=placements.length;
+      const skipped=droppedCount>0?` (${droppedCount} outside selection, skipped)`:'';
+      await editAiLayoutStones(aiTarget.id,[{op:'add',stones:placements.map(p=>({xMm:p.xMm,yMm:p.yMm,sizeId:size.id,colorId:traceSettings.color}))}],`Traced ${n} stone${n===1?'':'s'}${skipped} at ${aiLayoutMarkSizeText(size,traceSettings.sizeMm,aiTarget)}`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
     let naturalPoints;
@@ -1856,6 +2172,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // with an empty sweep). `if(!targetLayer)` stays as a defensive race guard (the layer was
     // deleted or changed type between resolution and here).
     if(!daubsAbsoluteMm.length)return;
+    // IMG-026 (D): an ai-layout image loses the stones whose centre is under the sweep -- in Stones
+    // mode within the brush radius of a daub (eraseStonesWithinTest()'s rule), in Outline mode inside
+    // the swept corridor (nothing to cut, as for text). Stones are named by aiIndex.
+    const aiTarget=aiLayoutLayerById(layerId);
+    if(aiTarget){
+      const rMm=eraserSettings.radiusMm;
+      const withinSweep=mode==='outline'
+        ?(xMm,yMm)=>isPointInsidePolygons({xMm,yMm},corridorPolygonsAbsoluteMm||[])
+        :(xMm,yMm)=>daubsAbsoluteMm.some(d=>{const dx=xMm-d.xMm,dy=yMm-d.yMm;return dx*dx+dy*dy<=rMm*rMm;});
+      const indices=layoutStonesForLayer(aiTarget.id).filter(s=>withinSweep(s.x,s.y)).map(s=>s.aiIndex);
+      if(!indices.length){el('status').textContent=`Nothing to erase on ${layerLabel(aiTarget)}.`;return;}
+      await editAiLayoutStones(aiTarget.id,[{op:'delete',indices}],`Erased ${indices.length} stone${indices.length===1?'':'s'} on ${layerLabel(aiTarget)}.`);
+      return;
+    }
     const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
     if(targetLayer.type==='text'){
@@ -2035,6 +2365,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // own Math.max(2,...) radius floor (see the drag.kind==='resize' l.type==='circle' branch); cx/cy
     // stay untouched.
     if(l.type==='circle'){l.r=Math.max(2,boundsMm.width/2);updateAll(true);return}
+    // IMG-026 (D, S14): an ai-layout image keeps the layout's aspect and never shrinks below it. The
+    // edited dimension is the one that differs more from the layer's (ties go to width); the box
+    // keeps the reported left and top.
+    if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const byWidth=Math.abs(boundsMm.width-l.w)>=Math.abs(boundsMm.height-l.h);const box=aiLayoutBoxSize(l.aiLayout,byWidth?{widthMm:boundsMm.width}:{heightMm:boundsMm.height});l.x=boundsMm.left;l.y=boundsMm.top;l.w=box.w;l.h=box.h;updateAll(true);return}
     l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
     updateAll(true);
   },
@@ -2044,6 +2378,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // contract). rotationDeg arrives already normalized into [0,360) (see that file's own onMouseUp
   // 'rotate' branch), the same convention #rotationDeg/#shapeRotationDeg's own writeSelectedControlsToLayer()
   // normalization already establishes for the main canvas's rotate handle.
+  // IMG-026 (D): a stone drag in Design released after moving -- one move edit for the selection.
+  onStonesMoved:(layerId,indices,dxMm,dyMm)=>{
+    editAiLayoutStones(layerId,[{op:'move',indices,dxMm,dyMm}],`Moved ${indices.length} stone${indices.length===1?'':'s'}.`);
+  },
+  // IMG-026 (D): stone editing started, ended or changed its selection -- the panel follows.
+  onStoneSelectionChanged:()=>updateDrawToolButtons(),
   onShapeRotated:(layerId,rotationDeg)=>{
     const l=project.layers.find(x=>x.id===layerId);
     if(!l)return;
@@ -2181,7 +2521,13 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // tick (Design-active or not, per that function's own unconditional per-layer loop), so Design's
   // own canvas never becomes a second place stones can be computed. Mirrors generatePathLayout()'s
   // own {x,y,d,color} return shape exactly, from the real Stone.xMm/yMm/sizeMm/color fields.
-  getTextLayerStones:(layerId)=>layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))
+  getTextLayerStones:(layerId)=>layoutStonesForLayer(layerId),
+  // IMG-020: the same layout filter for an 'image' layer, so Design draws its stones from the
+  // layout rather than asking getLayerStoneParams() (which is 'path'-only) and drawing none.
+  getImageLayerStones:(layerId)=>layoutStonesForLayer(layerId),
+  // RS-3040: Design frames and outlines the current sheet from the same template data drawLayout() uses,
+  // and #fitNotice describes what Design draws (drawLayout() is a no-op while Design is open).
+  getSheetFraming:()=>{const framing=designSheetFraming();el('fitNotice').textContent=designFitNotice(framing);return framing}
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
 // automated verification of the Design canvas's background grid layering -- same "read-only,
@@ -2248,6 +2594,12 @@ function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||
 // ObjectTemplate record. getObjectTemplate() itself falls back to 'mug' for any unknown/missing id,
 // so this never throws.
 function currentObjectTemplate(){return getObjectTemplate(project.product)}
+// RS-3037: the one shared predicate every "this is a flat, non-revolved template" gate reads (Front
+// View Frame hit-testing, the too-long-to-wrap-around-a-circumference check, and any future one) --
+// true for Plate and Sheet, matching this codebase's existing preference for one shared gate over
+// duplicated `kind==='plate'` conditions drifting out of sync across call sites (see
+// isAuthoredStoneFontId()'s own "one shared predicate" precedent).
+function isFlatObjectTemplate(t){return t.preview.kind==='plate'||t.preview.kind==='sheet'}
 // RS-1002: undo/redo history. HistoryManager (src/history/**) stores only serialized
 // {project,selectedLayerId} snapshots -- never the generated StoneLayout -- so history never
 // duplicates geometry, and geometry is always regenerated fresh from the restored project via
@@ -2385,14 +2737,17 @@ function syncSelectedControlsFromLayer(){
   if(showSidesField)el('shapeSides').value=l.sides??6;
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
-  if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
+  // IMG-026 (C1): the ai-layout option is enabled only for a layer that has a layout to place.
+  if(l.type==='image'){el('imageFillMode').querySelector('option[value="ai-layout"]').disabled=!l.aiLayout;el('imageFillMode').value=resolveImageFillMode(l.fillMode)}
+  // IMG-026 (C2, S14): while an ai-layout layer is selected, W and H cannot go below the layout size.
+  if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){el('shapeW').min=String(formatLengthDisplay(l.aiLayout.widthMm,project.units));el('shapeH').min=String(formatLengthDisplay(l.aiLayout.heightMm,project.units))}else{el('shapeW').removeAttribute('min');el('shapeH').removeAttribute('min')}
   if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';ensureTextModeOptionForLayer(l.textMode);el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgMaskMode').value=resolveImageMaskMode(l.maskMode);el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgVividness').value=resolveImageVividness(l.vividness);el('imgAiStoneShrink').value=String(resolveAiStoneShrink(l.aiStoneShrink));el('imgCleanup').checked=l.cleanup===true;el('imgJetOutline').checked=l.jetOutline===true;el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread);setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2431,6 +2786,11 @@ function syncSelectedControlsFromLayer(){
   // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
   // these inputs showing a stale value that a later edit would silently write back).
   setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);setLengthField('plateOverallHeight',project.plate.overallHeightMm);setLengthField('plateCenterDepth',project.plate.centerDepthMm);el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
+  // RS-3037: project.canvas is likewise project-level -- while Flat Sheet is active, resync
+  // #sheetWidth/#sheetHeight from it for the same reason (undo/redo restore, Project JSON import,
+  // or a template switch away-and-back must never leave these inputs showing a stale value that a
+  // later writeSelectedControlsToLayer() would silently write back).
+  if(currentObjectTemplate().id==='sheet'){setLengthField('sheetWidth',project.canvas.width);setLengthField('sheetHeight',project.canvas.height)}
   // RS-2010: project.vessel is likewise project-level -- resync for the same reason as project.plate
   // just above.
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
@@ -2478,6 +2838,41 @@ function syncSelectedControlsFromLayer(){
 // the EXACT post-write regen call the existing 'path'-layer branch below already uses (see
 // `if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id)` further down) -- no updateAll()
 // call here, since this function is itself already running from inside one.
+// IMG-023 (D2): the four values an AI stones layer's size follows.
+function aiStoneSizingKey(l){return[resolveImageFillMode(l.fillMode),resolveAiStoneShrink(l.aiStoneShrink),l.stoneSize,l.gap].join('|')}
+// IMG-023 (D2(b)): sizes an AI stones layer from its AI stone pitch (one AI stone = one real stone,
+// times the shrink), keeping its centre; on a Flat Sheet the sheet grows first. Skipped until the
+// image is decoded, and when no AI stones are found. Writes the Position & size (and sheet) fields
+// too: the next write reads w/h back from them.
+function resizeAiStoneLayer(l){
+  const buffer=imageBufferCache.get(l.imageSrc);if(!buffer)return;
+  const detection=aiStoneDetectionFor(l.imageSrc,buffer);if(!detection.ok)return;
+  const isSheet=currentObjectTemplate().id==='sheet';
+  const box=fitAiStoneBox({centerXMm:l.x+l.w/2,centerYMm:l.y+l.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx:detection.pitchPx,stoneSizeMm:l.stoneSize,gapMm:l.gap,shrink:resolveAiStoneShrink(l.aiStoneShrink),canvas:project.canvas,sheetMaxMm:isSheet?SHEET_MAX_MM:null});
+  if(isSheet){project.canvas=box.canvas;setLengthField('sheetWidth',box.canvas.width);setLengthField('sheetHeight',box.canvas.height)}
+  l.x=box.x;l.y=box.y;l.w=box.w;l.h=box.h;
+  setLengthField('shapeX',l.x);setLengthField('shapeY',l.y);setLengthField('shapeW',l.w);setLengthField('shapeH',l.h);
+}
+// IMG-023 (D2): the Studio hint under #imgAiStoneShrink ('' hides it).
+function aiStoneShrinkHintText(l){
+  if(resolveImageFillMode(l.fillMode)!=='ai-stones')return '';
+  const buffer=imageBufferCache.get(l.imageSrc);if(!buffer)return '';
+  const detection=aiStoneDetectionFor(l.imageSrc,buffer);
+  if(!detection.ok)return 'No AI stones were found in this image. AI stones works on images redrawn with AI.';
+  return aiStoneEffectiveShrink({w:l.w,h:l.h,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx:detection.pitchPx,stoneSizeMm:l.stoneSize,gapMm:l.gap})<0.8-1e-9?'This design is smaller than the AI drew it, so fine lines may break.':'';
+}
+// IMG-026 (C2, S14): an ai-layout layer's W and H fields keep the layout's aspect and never go below
+// its size. The field whose shown value differs from the layer is the one the user edited; the other
+// field follows at once, and both snap back on 'change' (the shapeW/shapeH listener below).
+function writeAiLayoutBoxFromFields(l){
+  const shown=mm=>formatLengthDisplay(mm,project.units),fw=readLengthField('shapeW'),fh=readLengthField('shapeH');
+  const wEdited=parseFloat(el('shapeW').value)!==shown(l.w)&&Number.isFinite(fw);
+  const hEdited=!wEdited&&parseFloat(el('shapeH').value)!==shown(l.h)&&Number.isFinite(fh);
+  const box=aiLayoutBoxSize(l.aiLayout,wEdited?{widthMm:fw}:hEdited?{heightMm:fh}:{widthMm:l.w});
+  l.w=box.w;l.h=box.h;
+  if(wEdited)setLengthField('shapeH',l.h);
+  if(hEdited)setLengthField('shapeW',l.w);
+}
 function writeSelectedControlsToLayer(){
   const regionSelection=drawingTool.activeSelection;
   if(regionSelection&&regionSelection.kind==='region'){
@@ -2493,6 +2888,9 @@ function writeSelectedControlsToLayer(){
     }
   }
   const l=selectedLayer();
+  // IMG-023 (D2(b)): an AI stones layer is re-sized at the end of this function when its mode, shrink,
+  // stone size or gap changed in this write.
+  const aiStoneSizingBefore=l.type==='image'?aiStoneSizingKey(l):null;
   // S-112A: detected here, before project.plate is overwritten further down in this same function
   // (project.plate.designTarget still holds the *previous* target, el('plateDesignTarget').value the
   // one the user just picked) -- true exactly once, on the edit that switches Design Target to Rim
@@ -2543,7 +2941,50 @@ function writeSelectedControlsToLayer(){
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
+}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;if(l.fillMode==='ai-layout'&&l.aiLayout)writeAiLayoutBoxFromFields(l);else{l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10)}l.maskMode=resolveImageMaskMode(el('imgMaskMode').value);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value);
+  // IMG-003: seed/spread, resolved the same permissive way every other optional image param is.
+  l.seed=resolveImageSeed(parseIntOr(el('imgSeed').value,1));l.spread=resolveImageSpread(parseFloat(el('imgSpread').value));l.edgeWidthMm=resolveImageEdgeWidth(readLengthField('imgEdgeWidth'));l.edgeThinning=resolveImageEdgeThinning(parseFloat(el('imgEdgeThinning').value));l.brightnessThinning=resolveImageBrightnessThinning(parseFloat(el('imgBrightnessThinning').value));
+  // IMG-002: colorCount first (colorMap's own write below depends on the NEW colorCount, not
+  // whatever it was before this edit); computeImageColorField() re-quantizes from l's own
+  // now-current params, so each visible row's nearestId is resolved fresh rather than trusted from
+  // a possibly-stale prior render -- see computeImageColorField()'s own doc comment.
+  // IMG-012: 'auto' must be special-cased before parseIntOr() below -- parseIntOr('auto',1) parses
+  // to NaN and falls back to 1, which would silently store colorCount:1 (single colour) for a
+  // dropdown pick of "Auto (best fit)", the opposite of what was asked.
+  l.colorCount=el('imgColorCount').value==='auto'?'auto':Math.max(1,Math.min(8,parseIntOr(el('imgColorCount').value,1)));
+  // IMG-017: Number() first -- a select value is a string, and resolveImageVividness() accepts only
+  // the four numeric steps, so the raw string would read back as 1 and the control would do nothing.
+  l.vividness=resolveImageVividness(Number(el('imgVividness').value));
+  // IMG-023 (D2/D5): written only for a layer that uses AI stones or already has the key, so no other
+  // layer gains it.
+  if(resolveImageFillMode(l.fillMode)==='ai-stones'||l.aiStoneShrink!==undefined)l.aiStoneShrink=resolveAiStoneShrink(Number(el('imgAiStoneShrink').value));
+  // IMG-025 (D6): same rule as aiStoneShrink above -- a key is written only once ticked or already
+  // present, so an unrelated edit never adds cleanup/jetOutline to an older layer.
+  if(l.cleanup!==undefined||el('imgCleanup').checked)l.cleanup=el('imgCleanup').checked;
+  if(l.jetOutline!==undefined||el('imgJetOutline').checked)l.jetOutline=el('imgJetOutline').checked;
+  const colorField=computeImageColorField(l);
+  if(colorField){
+    const colorMap={...l.colorMap};
+    for(let i=0;i<colorField.colorGroups.length;i++){
+      const pickEl=el(`imgColorPick${i}`);
+      // IMG-002: a row's <select> only reflects a real (default-or-override) value for THIS layer
+      // once renderImageStudio() has populated it for l.id at least once (dataset.syncedLayer, set
+      // there). Reading it back before that would capture the browser's own arbitrary first-<option>
+      // default (identical across every row, since every row is populated from the same catalog
+      // list) and silently collapse every cluster onto that one color the moment colorCount first
+      // grows past whatever has ever been rendered. IMG-002 follow-up: keyed by layer id, not a bare
+      // '1' flag -- renderImageStudio() early-returns while the Studio Lightbox is closed, so a flag
+      // that only meant "synced once, for whichever layer was selected back then" would survive a
+      // layer switch made with the Lightbox closed and let this loop write the PREVIOUS layer's
+      // stale picks into the NEWLY selected layer's colorMap. Skipping a row not synced for l.id
+      // leaves l.colorMap untouched for it; the renderImageStudio() call later in this same
+      // updateAll() populates and marks it, so the next edit reads back correctly.
+      if(!pickEl||pickEl.dataset.syncedLayer!==l.id)continue;
+      colorMap[colorField.colorGroups[i].nearestId]=pickEl.value;
+    }
+    l.colorMap=colorMap;
+  }
+}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
   const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
   const nextGap=readLengthField('gap')||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
   l.color=el('stoneColor').value;
@@ -2571,6 +3012,12 @@ function writeSelectedControlsToLayer(){
   // the <option> for the same cases; this is the belt-and-braces write-side guard.
   if(l.sizeMode==='weight'&&(l.type!=='text'||isAuthoredStoneFontId(l.font)||resolveTextFillMode(l.textMode)!=='outline')){
     l.sizeMode='uniform';el('sizeMode').value='uniform';
+  }else if(l.sizeMode==='brightness'&&l.type!=='image'){
+    // IMG-006: brightness-following stone size is valid only for an image layer --
+    // GeometryEngine.generateImageLayout() throws otherwise. Same belt-and-braces write-side guard
+    // as the weight coercion just above; updateBrightnessSizeCapabilityUI() disables the <option>
+    // for the same case.
+    l.sizeMode='uniform';el('sizeMode').value='uniform';
   }
   // Live disclosure like #mixedSizeDetailFields above.
   el('weightSizeDetailFields').style.display=l.sizeMode==='weight'?'block':'none';
@@ -2586,6 +3033,21 @@ function writeSelectedControlsToLayer(){
     l.weightSizesMm=step>0?stoneSizesFromBaseMm(l.stoneSize,step):[];
     el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
     el('weightSteps').value=String(step);
+  }
+  if(l.sizeMode==='brightness'){
+    // IMG-006: #imgBrightnessSteps carries the rung count, same convention as #weightSteps above,
+    // but with no 2-rung cap (brightnessStepsOptionsHtml() loops every rung the catalog can supply).
+    const brightnessAvailable=stoneSizeRungsAvailable(l.stoneSize);
+    const brightnessStep=l.brightnessSizesMm==null?Math.min(2,brightnessAvailable):Math.min(parseInt(el('imgBrightnessSteps').value,10)||0,brightnessAvailable);
+    l.brightnessSizesMm=brightnessStep>0?stoneSizesFromBaseMm(l.stoneSize,brightnessStep):[];
+    // Explicitly picking "Off" in the Studio (not merely never having configured a step) turns
+    // brightness mode back off from the one control an operator actually uses for it, mirroring
+    // #sizeMode's own value -- so a layer already in brightness mode never round-trips as
+    // "brightness, but Off", which normalizeMixedSizeParams() would otherwise silently reduce to
+    // uniform output anyway (decision 2) while the inspector kept showing "Brightness-following".
+    if(brightnessStep===0){l.sizeMode='uniform';el('sizeMode').value='uniform'}
+    el('imgBrightnessSteps').innerHTML=brightnessStepsOptionsHtml(l.stoneSize);
+    el('imgBrightnessSteps').value=String(brightnessStep);
   }
   // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
   // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
@@ -2619,6 +3081,15 @@ function writeSelectedControlsToLayer(){
     project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:readLengthField('vesselBodyDiameter'),topDiameterMm:readLengthField('vesselTopDiameter'),bodyHeightMm:readLengthField('vesselBodyHeight')});
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
+  // RS-3037: sheet fields only read/written while Flat Sheet is active, mirroring the plate/vessel
+  // blocks above. project.canvas IS the sheet's production size (no project.sheet object -- see
+  // docs/specifications/RS-3037-FlatSheet.md, "Schema decision"); clampSheetDimensionMm() keeps a
+  // malformed typed value inside [20,500]mm.
+  if(currentObjectTemplate().id==='sheet'){
+    project.canvas={width:clampSheetDimensionMm(readLengthField('sheetWidth')),height:clampSheetDimensionMm(readLengthField('sheetHeight'))};
+  }
+  // IMG-023 (D2(b)): after the sheet block above, so a grown Flat Sheet is not read back from stale fields.
+  if(l.type==='image'&&resolveImageFillMode(l.fillMode)==='ai-stones'&&aiStoneSizingKey(l)!==aiStoneSizingBefore)resizeAiStoneLayer(l);
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 // M14 (perf/move-drag-translate-fast-path): pure translation of an existing StoneLayout for the
 // move-drag fast path. Returns a NEW StoneLayout whose stones are fresh Stone copies of baseLayout's:
@@ -2656,17 +3127,20 @@ function translateLayoutForMoveDrag(baseLayout,movedLayerIds,dxMm,dyMm){
 // entry points (createShapeLayer(), addText(), the #fitTextToShapeBtn click) -- never from
 // engine.generate() or generateTextStonesLive(). So a move drag can never invalidate a stored fit,
 // and the fast path needs no fit-related fallback.
-async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
-  // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
-  // leaves this exact status message behind -- once generation succeeds again, it must not keep
-  // reading as broken even though the canvas has already recovered.
-  if(el('status').textContent.startsWith('Text generation failed'))el('status').textContent='Ready';
+async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated,failures;try{({layout:generated,failures}=await engine.generate(project))}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Layout generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
+  // RS-3039: a layer that failed inside generate() is named via layerLabel() (the Layers list's own
+  // label); the other layers' stones are already in `layout` and the rest of this pass runs normally.
+  // MONO-006A: otherwise a prior failure message (a stale authoredScale rejected by GeometryEngine,
+  // or an earlier layer failure) is cleared once generation succeeds again, so the status line does
+  // not keep reading as broken after the canvas has recovered.
+  if(failures.length>0){const first=failures[0];el('status').textContent=`Layer "${layerLabel(first.layer)}" could not be generated: ${first.error.message}`+(failures.length>1?` (and ${failures.length-1} more)`:'')}
+  else if(/^(Layout generation failed|Layer ".*" could not be generated: )/.test(el('status').textContent))el('status').textContent='Ready';
   // RS-3010 Step 1: while drawing mode owns layoutCanvas, drawLayout() itself is a no-op (see its
   // own guard below) -- calling it here would do nothing useful, and every real trigger that lands
   // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
   // any other edit that happens to run updateAll() concurrently) still needs layoutCanvas's *size*
   // kept in sync, just through drawingTool's own resync path instead of the normal renderer.
-  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1));
+  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38);
   // Canvas-desync fix: reconciles Design's live Paper.js shapes against project.layers on every
   // updateAll() call while Design is active -- resize() above only keeps the viewport in sync, it
   // never did this. Covers undo/redo (applyHistorySnapshot() swaps `project` wholesale) and the
@@ -2693,7 +3167,10 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // 'circle' it IS a plain x/y/w/h/rotationDeg box, so it needs no new interaction machinery at all --
   // syncFromProjectLayers() materializes it as a rotated rectangle proxy and every drag/resize/rotate
   // reuses the shared XYWH machinery (onShapeResized's generic l.x/y/w/h write-back covers it too).
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}
+  // IMG-007: renderImageStudio() must run regardless of which branch above ran -- the Image Studio
+  // Lightbox is non-modal, so Design can be entered (drawingTool.isActive) while it stays open.
+  renderImageStudio();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
@@ -2719,6 +3196,13 @@ function updateScaleBar(s,dpr){
   el('scaleBarTrack').style.width=barPx+'px';
   el('scaleBarLabel').textContent=`${formatLengthDisplay(stepMm,project.units)} ${unitSuffix(project.units)}`;
 }
+// IMG-026I: the design canvas can show the stones on the product colour, so the gaps between
+// image stones read as they will on the real piece. A view-only choice like the safe-area guide:
+// it is not saved in the project and never changes the StoneLayout. Flat Sheet has no product
+// colour and keeps the white background. In Design, Paper.js draws on the transparent canvas, so
+// drawLayout() also sets the canvas element's CSS background; White clears it back to the
+// stylesheet's --color-canvas-bg.
+function canvasBackgroundColor(){return el('canvasBackground').value==='product'&&currentObjectTemplate().preview.kind!=='sheet'?project.cupColor:'#fbfdff'}
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
   // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
@@ -2729,15 +3213,20 @@ function drawLayout(){
   // ...) means every existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
   // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
   // blocked by this guard.
+  layoutCanvas.style.background=canvasBackgroundColor()==='#fbfdff'?'':canvasBackgroundColor();
   if(drawingTool.isActive)return;
-  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units});layoutTransform={s,ox,oy,dpr};
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor()});layoutTransform={s,ox,oy,dpr};
   updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
   const isPlate=currentObjectTemplate().preview.kind==='plate';
-  if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
-  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
+  // RS-3037: Flat Sheet is a third guide case -- flat like plate (no Front View Frame), but its
+  // printable boundary is the ordinary rectangular safe-area guide (like every cylindrical
+  // template), not plate's circular/annular Design Target guide.
+  const isSheet=currentObjectTemplate().preview.kind==='sheet';
+  if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else if(isSheet){if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
+  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':(isSheet?'Flat Sheet: keep stones inside the dashed safe-area guide.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.')}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -2837,9 +3326,10 @@ function drawFrontViewFrame(ctx,s,ox,oy,dpr){
 // View Frame band -- the same wrap-aware angular window drawFrontViewFrame() renders, expressed as
 // an angular distance so it needs no per-segment mm math and handles the edge-wrap case for free.
 function isPointerOnFrontViewFrame(mm){
-  // S-112: the plate has no Front View Frame (drawLayout() never draws one for it -- see
-  // drawPlateDesignTargetGuide()'s header comment), so it can never be the target of a frame drag.
-  if(currentObjectTemplate().preview.kind==='plate')return false;
+  // S-112/RS-3037: a plate/sheet has no Front View Frame (drawLayout() never draws one for either
+  // -- see drawPlateDesignTargetGuide()'s header comment), so neither can ever be the target of a
+  // frame drag.
+  if(isFlatObjectTemplate(currentObjectTemplate()))return false;
   if(mm.y<0||mm.y>project.canvas.height)return false;
   const canvasWidthMm=project.canvas.width;
   const pointerAzimuthRad=azimuthRadForCanvasXMm(mm.x,canvasWidthMm);
@@ -2966,10 +3456,11 @@ function isTextOutsidePrintableArea(l){
 function printableCircumferenceMm(){return circumferenceMm(project.canvas.width)}
 function isTextTooLongForObject(l){
   if(!l||l.type!=='text'||!l.text)return false;
-  // S-112: a plate is a flat surface, never wrapped around a circumference -- "too long to wrap
-  // around the object" is not a real manufacturing limitation for it (see printableCircumferenceMm()'s
-  // own header comment: this check exists only for cylindrical/revolved-vessel templates).
-  if(currentObjectTemplate().preview.kind==='plate')return false;
+  // S-112/RS-3037: a plate/sheet is a flat surface, never wrapped around a circumference -- "too
+  // long to wrap around the object" is not a real manufacturing limitation for either (see
+  // printableCircumferenceMm()'s own header comment: this check exists only for
+  // cylindrical/revolved-vessel templates).
+  if(isFlatObjectTemplate(currentObjectTemplate()))return false;
   return getLayerBBox(l).width>printableCircumferenceMm();
 }
 // Builds the too-long warning's detail copy (requirement 5: "must describe a real manufacturing
@@ -3068,10 +3559,34 @@ async function resolveLayerShapeSource(layer){
     if(!layer.imageSrc||!(layer.w>0)||!(layer.h>0))return null;
     let buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
-    const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx});
-    return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h};
+    const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
+    return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0};
   }
   return null;
+}
+
+// IMG-008 (Vector-first SVG): resolves every visible image layer's traced per-colour silhouette
+// regions for the 2D SVG export's underlying `<g id="regions">` paths -- see
+// docs/specifications/IMG-008-VectorFirstSvg.md decisions 3/4. Synchronous (unlike
+// resolveLayerShapeSource(), which awaits text/font resolution) because permanentEngine.resolveImagePolygons()
+// is synchronous and this only ever runs from the exportSVG handler's own synchronous try block.
+// The params object duplicates generateImageStonesLive()'s field-shaping keys on purpose -- the
+// field these regions are traced from must be the exact field the stones were sampled from, or the
+// silhouettes won't match the stones (see that function at app.js:1018 for the source of truth this
+// mirrors); a source-text guard (tools/test-img-008-vector-first-svg.mjs) pins the key set so the
+// two cannot silently drift, the IMG-003 -> IMG-006 lesson (docs/BACKLOG.md:54).
+function resolveImageExportRegions(project){
+  const regions=[];
+  for(const layer of project.layers){
+    // IMG-026 (C1): an ai-layout layer has no traced regions; its stones export as circles.
+    if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0)||layer.fillMode==='ai-layout')continue;
+    const buffer=imageBufferCache.get(layer.imageSrc);
+    if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,rotationDeg:layer.rotationDeg??0,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode),vividness:resolveImageVividness(layer.vividness),colorCount:resolveImageColorCount(layer),palette:imageColorPalette(),paletteRule:layer.paletteRule,colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
+    for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
+  }
+  return regions;
 }
 
 function showBooleanOpsError(message){
@@ -3179,6 +3694,8 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
   updateWeightSizeCapabilityUI();
+  updateBrightnessSizeCapabilityUI();
+  updateLineDesignSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
   updateStoneSizeOverlapCapabilityUI();
   // FONT-LIB-004: deliberately last, and NOT between updateTextFontCapabilityUI() and
@@ -3383,6 +3900,45 @@ function updateWeightSizeCapabilityUI(){
   if(weightMode&&l){
     el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
     el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
+  }
+}
+// IMG-006: brightness-following stone size is valid only for an image layer --
+// GeometryEngine.generateImageLayout() throws sizeMode 'brightness' for every other layer type.
+// Same disable+explain idiom and coerce-back-to-uniform guard as updateWeightSizeCapabilityUI()
+// above; #imgBrightnessSteps/#imgBrightnessThinning are Studio-only controls, kept in sync by
+// renderImageStudio(), not here.
+function updateBrightnessSizeCapabilityUI(){
+  const l=selectedLayer();
+  const eligible=Boolean(l&&l.type==='image');
+  const brightnessOption=el('sizeMode').querySelector('option[value="brightness"]');
+  if(brightnessOption){
+    brightnessOption.disabled=!eligible;
+    brightnessOption.title=eligible?'':'Brightness-following stone size is only available for image layers.';
+  }
+  if(!eligible&&resolveSizeMode(el('sizeMode').value)==='brightness'){
+    el('sizeMode').value='uniform';
+    if(l)l.sizeMode='uniform';
+  }
+}
+// IMG-010 (D3): Line design's own geometry ignores the layer's Stone size and Mixed Stone Size
+// entirely -- LineDesignSampler.js always places LINE_DESIGN_CHAIN_STONE_SIZE_MM/
+// LINE_DESIGN_FILL_STONE_SIZE_MM stones regardless, and GeometryEngine.generateImageLayout()'s
+// mixedOptions guard skips S-200 infill for this mode outright (see its own comment). Disables both
+// controls (same disable+explain idiom updateWeightSizeCapabilityUI()/updateBrightnessSizeCapabilityUI()
+// already use) with #lineDesignFixedSizeHint's own explanation, and forces a layer already on
+// 'mixed'/'weight'/'brightness' back to 'uniform' -- silent and safe, since none of those would ever
+// have had any effect on this mode's own fixed-size output anyway.
+function updateLineDesignSizeCapabilityUI(){
+  const l=selectedLayer();
+  const isLineDesign=Boolean(l&&l.type==='image'&&resolveImageFillMode(l.fillMode)==='line-design');
+  el('stoneSize').disabled=isLineDesign;
+  el('stoneSize').title=isLineDesign?'Line design uses fixed 2.0mm/2.8mm stones -- this control has no effect.':'';
+  el('sizeMode').disabled=isLineDesign;
+  el('sizeMode').title=isLineDesign?'Line design does not support Mixed Stone Size.':'';
+  el('lineDesignFixedSizeHint').style.display=isLineDesign?'block':'none';
+  if(isLineDesign&&resolveSizeMode(el('sizeMode').value)!=='uniform'){
+    el('sizeMode').value='uniform';
+    if(l)l.sizeMode='uniform';
   }
 }
 // FONT-LIB-004: the readability check the font library was missing. An audit of all 29 enabled
@@ -3849,7 +4405,10 @@ function rotatedHandlesFor(b,rotationDeg){
 // position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
 // still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
 // the 2D canvas, unchanged.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
+// RS-3037: Flat Sheet has no 3D preview (no physical/3D counterpart, decision 4) -- returning here
+// before preview3D.update() is the one gate that keeps ObjectDimensions.js/ObjectGeometryBuilder.js
+// from ever seeing preview.kind==='sheet' (neither module learns a new kind for this milestone).
+function drawCup(){if(currentObjectTemplate().id==='sheet')return;preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
@@ -3880,7 +4439,7 @@ function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry()
 // presence on Design's own canvas (drawingTool only draws/tracks 'path' layers). Falls back to a
 // neutral canvas/safe-area-only summary in that one case; every other view+selection combination,
 // including a 'path' layer selected and visible while Design is active, keeps the full stats.
-function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
+function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):(t.preview.kind==='sheet'?'':cylindricalCupStatsHtml(t));updateStoneColorSwatch()}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
 // regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
@@ -3981,6 +4540,35 @@ function deleteRegionFromPathLayer(layerId,regionId){
 // Returns null and mutates nothing when withinTest matches no stone at all (the no-op guard the
 // original branch already had); otherwise commits history, mutates targetLayer, refreshes the canvas,
 // and returns {removedCount} so each caller can word its own status message.
+// IMG-026 (D): the stone selection panel's size list -- every catalogue size an AI layout uses
+// (listAllStoneSizes(), SS4-SS30), valued by size id.
+function populateAiStoneSizeOptions(){el('aiStoneSize').innerHTML=listAllStoneSizes().map(s=>`<option value="${s.id}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+// IMG-026 (D): an ai-layout image layer by id, or null -- the layers Design edits stone by stone.
+function aiLayoutLayerById(layerId){return project.layers.find(l=>l.id===layerId&&l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout)||null}
+// IMG-026 (D): the only code that writes layer.aiLayout after a redraw. Every Design gesture on an
+// ai-layout layer (drag, arrow keys, Delete, the selection panel, Stamp, Trace, Eraser) comes here.
+// applyAiLayoutEdits() runs first: it is pure and throws on bad input, so a refused edit makes no
+// history step and changes nothing. Then one commitHistory(), the write, updateAll() and the Design
+// stone group refresh in the order the path-layer hooks use. A delete clears the stone selection,
+// because aiIndex values after it name other stones; a move, recolour or resize keeps it.
+async function editAiLayoutStones(layerId,ops,statusText){
+  const l=aiLayoutLayerById(layerId);
+  if(!l)return false;
+  let result;
+  try{result=applyAiLayoutEdits(l,ops)}catch(error){el('status').textContent=`Edit not applied: ${error.message}`;return false}
+  commitHistory();
+  l.aiLayout=result.aiLayout;l.colorSwaps=result.colorSwaps;
+  if(ops.some(o=>o.op==='delete'))drawingTool.clearStoneSelection();
+  drawingTool.refreshStoneGroupForLayer(l.id);
+  await updateAll(true);
+  if(statusText)el('status').textContent=statusText;
+  return true;
+}
+// IMG-026 (D): an ai-layout layer holds catalogue sizes only, so a Stamp or Trace size snaps to the
+// nearest of listAllStoneSizes() (SS4-SS30).
+function nearestAiLayoutStoneSize(sizeMm){let best=null;for(const s of listAllStoneSizes())if(!best||Math.abs(s.diameterMm-sizeMm)<Math.abs(best.diameterMm-sizeMm))best=s;return best}
+// IMG-026 (D): names the size a Stamp or Trace used on an ai-layout layer, and says when it was snapped.
+function aiLayoutMarkSizeText(size,sizeMm,targetLayer){const label=formatStoneSizeLabel(size.diameterMm);return findStoneSizeByDiameterMm(sizeMm)?`${label} on ${layerLabel(targetLayer)}.`:`${label}, the nearest size an AI layout uses.`}
 async function eraseStonesWithinTest(targetLayer,withinTest){
   const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
   const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
@@ -4157,6 +4745,13 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     const anchorLocal={x:cx0-off.x*(hit.b0.width/2),y:cy0-off.y*(hit.b0.height/2)};
     const anchorAbs=rotationDeg0?rotatePointDeg(anchorLocal.x,anchorLocal.y,cx0,cy0,rotationDeg0):anchorLocal;
     drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer)),rotationDeg:rotationDeg0,anchorAbs,handleOffset:off};
+    // IMG-010 follow-up: a resize drag mutates l.x/l.y/l.w/l.h on every pointermove tick (below) and
+    // has no fast path (unlike a move drag -- see the M14 translate fast path), so it calls
+    // updateAll(true) every tick -- an expensive line-design regenerate on every tick for a
+    // line-design image layer, since x/y/w/h are in lineDesignStoneCache's own key. Freezing only
+    // for that case (not every resize) keeps every other resize -- shapes, other image modes --
+    // exactly as before.
+    if(hit.layer.type==='image'&&resolveImageFillMode(hit.layer.fillMode)==='line-design')lineDesignFrozen=true;
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(hit.kind==='rotate'){
@@ -4175,6 +4770,7 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     // (`rawDx=mm.x-drag.start.x`) runs unconditionally before branching on drag.kind, exactly like
     // it already does for 'resize' (whose branch also ignores rawDx/rawDy in favor of raw mm).
     drag={kind:'rotate',layerId:hit.layer.id,start:mm,center:hit.center,startRotationDeg:hit.layer.rotationDeg||0,startPointerAngleDeg};
+    if(hit.layer.type==='image'&&resolveImageFillMode(hit.layer.fillMode)==='line-design')lineDesignFrozen=true;
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(e.shiftKey){
@@ -4261,7 +4857,12 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;
+      // IMG-026 (C2, S14): an ai-layout image keeps its aspect and never shrinks below the layout. n/s set
+      // the height, every other handle the width; a corner keeps the opposite corner, an edge the
+      // midpoint of the opposite edge.
+      if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const hd=drag.handle,b=drag.b0,box=aiLayoutBoxSize(l.aiLayout,hd==='n'||hd==='s'?{heightMm:Math.abs(y1-y0)}:{widthMm:Math.abs(x1-x0)});l.w=box.w;l.h=box.h;l.x=hd.includes('w')?b.x2-box.w:hd.includes('e')?b.x:b.x+b.width/2-box.w/2;l.y=hd.includes('n')?b.y2-box.h:hd.includes('s')?b.y:b.y+b.height/2-box.h/2}
+      else{l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}
     else if(XYWH_SHAPE_TYPES.has(l.type)){
       // RS-3030: rotated resize -- drag the handle along the shape's own LOCAL (rotated) axes, per
       // the Illustrator/Figma convention, keeping the opposite corner/edge (anchorAbs, fixed at
@@ -4273,6 +4874,8 @@ layoutCanvas.addEventListener('pointermove',e=>{
       let newW=drag.b0.width,newH=drag.b0.height;
       if(off.x!==0)newW=Math.max(2,Math.abs(local.x));
       if(off.y!==0)newH=Math.max(2,Math.abs(local.y));
+      // IMG-026 (C2, S14): an ai-layout image takes the locked box; the anchor formula below is unchanged.
+      if(l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){const box=aiLayoutBoxSize(l.aiLayout,off.x!==0?{widthMm:Math.abs(local.x)}:{heightMm:Math.abs(local.y)});newW=box.w;newH=box.h}
       // New center sits newW/2,newH/2 (signed by the dragged handle's own unit offset) away from the
       // anchor in local space; rotate that offset forward back into absolute space and add to the
       // anchor's fixed absolute position to get the new absolute center.
@@ -4334,11 +4937,24 @@ window.addEventListener('pointercancel',endActiveDrag);
 // updateAll(true) commits no history (that happened once at drag start), so there is no double-commit
 // on any path; a plain click with no pointermove is already canonical from pointerdown's own
 // updateAll(true) and the extra regeneration here is idempotent.
+//
+// IMG-010 follow-up: a resize drag that froze lineDesignFrozen (pointerdown above) spent its whole
+// drag showing stale, frozen-fallback stones -- every pointermove's updateAll(true) hit the freeze
+// fallback instead of a real recompute -- so release must unfreeze and force exactly one real
+// recompute at the drag's final x/y/w/h, reusing the invalidateLineDesignCache() + updateAll(true)
+// pattern IMG-012's own drag-control freeze already established. Guarded on lineDesignFrozen so an
+// ordinary resize (a shape, or an image layer not in line-design mode) never pays this extra call --
+// pointermove's own per-tick updateAll(true) already left it fully up to date.
 function endActiveDrag(){
   const ended=drag;
   drag=null;
   if(activeGuides.length){activeGuides=[];drawLayout()}
   if(ended&&ended.kind==='move')updateAll(true);
+  else if(ended&&(ended.kind==='resize'||ended.kind==='rotate')&&lineDesignFrozen){
+    lineDesignFrozen=false;
+    invalidateLineDesignCache(ended.layerId);
+    updateAll(true);
+  }
 }
 window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
@@ -4355,6 +4971,17 @@ window.addEventListener('keydown',e=>{
   // the current drawn-shape selection instead of just being blocked, so it must not fall through
   // to the project.layers deleteLayer() path below.
   if(drawingTool.isActive){
+    // IMG-026 (D): a stone selection takes the arrow keys first -- one move edit per key press,
+    // AI_STONE_NUDGE_STEP_MM (Shift: AI_STONE_NUDGE_STEP_LARGE_MM). Delete/Backspace reach it through
+    // deleteCurrentSelection() just below.
+    const stoneSel=drawingTool.stoneSelection;
+    if(stoneSel&&ARROW_KEY_DELTAS[e.key]){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
+      e.preventDefault();
+      const step=e.shiftKey?AI_STONE_NUDGE_STEP_LARGE_MM:AI_STONE_NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];
+      editAiLayoutStones(stoneSel.layerId,[{op:'move',indices:stoneSel.indices,dxMm:ux*step,dyMm:uy*step}],`Moved ${stoneSel.indices.length} stone${stoneSel.indices.length===1?'':'s'}.`);
+      return;
+    }
     if(e.key==='Delete'||e.key==='Backspace'){
       const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
@@ -4491,7 +5118,7 @@ el('stoneSize').addEventListener('input',()=>{
   const l=selectedLayer();
   if(!l||l.type!=='text'||isAuthoredStoneFontId(l.font))return;
   const size=findStoneSizeByDiameterMm(parseFloat(el('stoneSize').value));
-  if(!size)return;
+  if(!size||size.imageOnly)return;
   applyStoneSizeHeightAutoSet(l,size);
 });
 // PERF-005: updateStoneSizeOptionAvailabilityUI()'s per-option-disabled sweep is otherwise only
@@ -4649,8 +5276,29 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgVividness','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning','imgAiStoneShrink','imgCleanup','imgJetOutline'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
+// IMG-026 (C2, S14): a finished W or H edit of an ai-layout layer shows the locked box, so a value below
+// the layout size snaps back.
+for(const id of['shapeW','shapeH'])el(id).addEventListener('change',()=>{const l=selectedLayer();if(l&&l.type==='image'&&l.fillMode==='ai-layout'&&l.aiLayout){setLengthField('shapeW',l.w);setLengthField('shapeH',l.h)}});
+// IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
+// #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
+// fire together, no drag in between, so there's nothing to freeze) -- freezes Auto's resolved count
+// at its last real value for the duration of a drag, and forces one real recompute on release. See
+// resolveImageColorCount()'s own doc comment.
+const AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS=['imgThreshold','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
+for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
+  el(id).addEventListener('pointerdown',()=>{autoColorCountFrozen=true});
+  el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});
+  el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});
+}
+// IMG-010 follow-up: this same wiring used to also freeze lineDesignFrozen on these 4 controls, but
+// none of imgThreshold/imgBlurRadius/imgMaxWidth/imgMaxHeight are in the line-design cache key (see
+// lineDesignStoneCache's own doc comment) -- a drag on any of them already hits the cache unchanged,
+// with or without the freeze flag, so that wiring achieved nothing and has been removed. What
+// actually forces an expensive line-design recompute per drag tick is a resize drag on the 2D
+// canvas (x/y/w/h are in the key) -- see lineDesignFrozen's own doc comment and layoutCanvas's own
+// pointerdown/pointermove/endActiveDrag() wiring below.
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
 // which fontId #font's native 'input'/'change' events -- wired above via HISTORY_TRACKED_CONTROL_IDS
@@ -4666,7 +5314,8 @@ el('fontLibraryList').addEventListener('change',e=>{const styleSel=e.target.clos
 // Browse Fonts panel) -- a second, independent listener on the same 'change' event
 // HISTORY_TRACKED_CONTROL_IDS already listens to above, not a replacement for it.
 el('font').addEventListener('change',()=>recordRecentFont(el('font').value));
-el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
+// IMG-026 (D): picking another layer here also ends stone editing, as a Layers-list click does.
+el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);if(drawingTool.stoneEditLayerId&&drawingTool.stoneEditLayerId!==selectedLayerId)drawingTool.exitStoneEdit();syncSelectedControlsFromLayer();updateAll(true)});
 // RS-1004: switching the object template is one discrete, undoable action (matching addCircle/
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
@@ -4682,6 +5331,12 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   // project.cupColor from the plate's default color id so the Object Preview immediately shows
   // the approved White, not whatever cupColor the previous template left behind.
   if(template.id==='plate'){project.plate=getPlateDefaults();project.cupColor=getPlateColor(project.plate.colorId).hex}
+  // RS-3037: switching to Flat Sheet resets project.canvas to the sheet's own default (150x150mm)
+  // -- the flat-sheet counterpart of the plate/vessel resets above. getSheetDefaults() is the
+  // canonical source (matching the else branch above, which already computes the same 150x150 from
+  // the template's own productionWidthMm/HeightMm) rather than duplicating the 150 default in two
+  // places.
+  if(template.id==='sheet'){project.canvas={width:getSheetDefaults().widthMm,height:getSheetDefaults().heightMm}}
   syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;
   // RS-3013 Step 5 follow-up: a selected REGION (drawingTool.activeSelection) is Design-canvas-local
   // state that must be cleared here too whenever this row click actually MOVES the selection --
@@ -4708,6 +5363,8 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   if(action==='duplicate'){if(drawingTool.activeSelection)drawingTool.clearActiveSelection();duplicateLayer(id);return}
   if(action==='delete'){if(drawingTool.activeSelection&&drawingTool.activeSelection.layerId===id)drawingTool.clearActiveSelection();deleteLayer(id);return}
   if(drawingTool.activeSelection)drawingTool.clearActiveSelection();
+  // IMG-026 (D): picking another layer in the list ends stone editing on the current one.
+  if(drawingTool.stoneEditLayerId&&drawingTool.stoneEditLayerId!==id)drawingTool.exitStoneEdit();
   // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
   // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
   // one layer, preserving pre-existing single-selection behavior.
@@ -4719,7 +5376,7 @@ el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 // S-104: the workspace warning's own "Center Text" button -- same shared function, so it can only
 // ever move x/y (never any other property), exactly like the Text Lightbox's Center on Object.
 el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
-el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();el('status').textContent=el('canvasBackground').value==='product'?'Background: product colour':'Background: white'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');
 // S-110: singleOtherSelectedLayer() looks at the selection as it stood *before* the layer about to
@@ -5067,46 +5724,20 @@ el('importSvg').onclick=()=>el('importSvgFile').click();
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
 el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
 // RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
-// this opens a "preview before commit" panel first -- the milestone brief's own required control --
-// since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
-// before adding a layer. pendingImageImport holds the decoded buffer + persisted data: URL +
-// default placement between file-select and Import/Cancel; nothing is written to `project` until
-// Import is clicked.
-let pendingImageImport=null;
+// this creates the layer immediately on file selection, at the six trace params' documented
+// defaults (see computeDefaultImagePlacement() for placement) -- see docs/specifications/
+// IMG-007-StudioShell.md. The Studio's own Trace group lets the operator adjust the six params
+// afterward, live against the real layer (no separate pre-commit preview state to keep in sync).
+// IMG-022: src/redraw/RedrawLayerTransform.js restates this function's canvas clamp for the redraw box.
 function computeDefaultImagePlacement(naturalWidthPx,naturalHeightPx){
-  const PX_PER_MM=96/25.4; // CSS px/inch, the same fallback src/svg/** uses for unitless SVG sizing
+  // IMG-011: default an imported image to 200mm on its longer side, preserving aspect ratio, then
+  // clamp to the canvas (minus a 20mm margin) the same way a too-large image always has.
+  const TARGET_LONG_SIDE_MM=200;
   const maxW=project.canvas.width-20,maxH=project.canvas.height-20;
-  let w=naturalWidthPx/PX_PER_MM,h=naturalHeightPx/PX_PER_MM;
+  const scale=TARGET_LONG_SIDE_MM/Math.max(naturalWidthPx,naturalHeightPx);
+  let w=naturalWidthPx*scale,h=naturalHeightPx*scale;
   if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}
   return{x:(project.canvas.width-w)/2,y:(project.canvas.height-h)/2,w,h}
-}
-function currentImagePreviewParams(){
-  return{
-    threshold:Math.max(0,Math.min(255,parseIntOr(el('imgPreviewThreshold').value,DEFAULT_IMAGE_THRESHOLD))),
-    invert:el('imgPreviewInvert').value==='on',
-    blurRadiusPx:Math.max(0,parseIntOr(el('imgPreviewBlur').value,0)),
-    maxWidthPx:Math.max(8,parseIntOr(el('imgPreviewMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX)),
-    maxHeightPx:Math.max(8,parseIntOr(el('imgPreviewMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))
-  }
-}
-// RS-1008A: recomputes the live density preview canvas (prepareImageField() -- src/image/**'s
-// pure field-preparation only, never a re-decode) and an approximate stone count (via the real
-// permanent engine's generateImageLayout(), the exact code path a real commit uses, with a
-// throwaway 'preview' layerId). This stays fast enough to call on every slider 'input' event even
-// at the full documented working resolution.
-function updateImagePreview(){
-  if(!pendingImageImport)return;
-  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const field=prepareImageField(pendingImageImport.buffer,{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
-  const canvas=el('imageImportPreviewCanvas');
-  canvas.width=field.widthPx;canvas.height=field.heightPx;
-  canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
-  const base=selectedLayer();
-  const{x,y,w,h}=pendingImageImport.placement;
-  try{
-    const result=permanentEngine.generateImageLayout({imageBuffer:pendingImageImport.buffer,layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
-    el('imageImportStoneCount').textContent=`${result.count} stones (approx.)`;
-  }catch(error){console.error('Image preview trace failed',error);el('imageImportStoneCount').textContent='—'}
 }
 el('importImage').onclick=()=>el('importImageFile').click();
 el('importImageFile').addEventListener('change',async e=>{
@@ -5116,32 +5747,178 @@ el('importImageFile').addEventListener('change',async e=>{
     const buffer=await decodeImageFileToBuffer(file);
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
-    pendingImageImport={buffer,dataUrl,fileName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,placement:computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx)};
-    el('imgPreviewThreshold').value=DEFAULT_IMAGE_THRESHOLD;el('imgPreviewInvert').value='off';el('imgPreviewBlur').value=0;el('imgPreviewMaxWidth').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgPreviewMaxHeight').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;
-    updateImagePreview();
-    el('imageImportPanel').style.display='block';
-    el('status').textContent=`Previewing ${file.name} (${buffer.widthPx}×${buffer.heightPx}px)`;
+    const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1.4,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true,cleanup:true};
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;
+    selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    el('status').textContent=`Imported ${file.name}`;
+    // IMG-026 (C2): every upload starts the redraw at once; without a provider the classic placement stays.
+    if(redrawAvailability===null){redrawAvailabilityRequested=true;redrawAvailability=await getRedrawAvailability()}
+    if(redrawAvailability.available)startImageRedraw();
+    else setImageRedrawStatus('Redraw with AI is not available on this server, so the image was placed with the classic method.');
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
-for(const id of['imgPreviewThreshold','imgPreviewInvert','imgPreviewBlur','imgPreviewMaxWidth','imgPreviewMaxHeight'])el(id).addEventListener('input',updateImagePreview);
-el('imageImportCancel').onclick=()=>{pendingImageImport=null;el('imageImportPanel').style.display='none';el('status').textContent='Image import cancelled'};
-el('imageImportCommit').onclick=async()=>{
-  if(!pendingImageImport)return;
-  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const base=selectedLayer();
-  const{x,y,w,h}=pendingImageImport.placement;
-  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
-  const importedName=layer.imageName;
+el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;if(redrawRun&&runningLayerId===selectedLayer().id)redrawRun.abort();deleteLayer(selectedLayer().id);if(!lightboxes.imagetrace.isOpen)lightboxes.imagetrace.open()};
+// IMG-022: Redraw with AI (docs/specifications/IMG-022-RedrawProvider.md D8, D9, D11). All provider
+// work goes through src/redraw/index.js; this code owns only the consent dialog, the remembered
+// access code, the history step and the Studio's buttons. syncImageRedrawControls() is called from
+// renderImageStudio(), and its first call asks src/redraw/index.js whether a provider is available.
+const REDRAW_ACCESS_CODE_STORAGE_KEY='rhinestoneStudio.redrawAccessCode';
+function loadRedrawAccessCode(){try{return localStorage.getItem(REDRAW_ACCESS_CODE_STORAGE_KEY)||''}catch{return''}}
+function saveRedrawAccessCode(code){try{if(code)localStorage.setItem(REDRAW_ACCESS_CODE_STORAGE_KEY,code);else localStorage.removeItem(REDRAW_ACCESS_CODE_STORAGE_KEY)}catch{}}
+const REDRAW_STYLE_STORAGE_KEY='rhinestoneStudio.redrawStyle';
+function loadRedrawStyle(){try{return localStorage.getItem(REDRAW_STYLE_STORAGE_KEY)==='flat'?'flat':'stones'}catch{return'stones'}}
+function saveRedrawStyle(style){try{localStorage.setItem(REDRAW_STYLE_STORAGE_KEY,style)}catch{}}
+let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
+// IMG-026 (C2): the layer of the running redraw, and the layers whose last run in this session failed,
+// was declined or cancelled, or fell back to the old method. See imageStudioState().
+let runningLayerId=null;
+const redrawFailedLayerIds=new Set();
+function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id)})}
+function setImageStudioView(value){const input=el('imageStudioView').querySelector(`input[value="${value}"]`);if(input)input.checked=true}
+const REDRAW_ERROR_MESSAGES={
+  'not-configured':'AI redraw is not set up on this server.',
+  'unauthorized':'The access code was not accepted. Enter it again to continue.',
+  'rate-limited':'The redraw limit has been reached. Try again later.',
+  'network':'Could not reach the redraw service. Check your connection and try again.',
+  'provider-failed':'The redraw service could not process this image.',
+  'invalid-output':'The redrawn image came back unusable, so nothing was changed. Try again.',
+  // IMG-023 (D7): prefixed with the provider's recipient name, since app.js never names the service.
+  'declined':' declined to redraw this image. This often happens with well-known cartoon characters or brands. Try again or use a different image; your design is unchanged.'
+};
+function setImageRedrawStatus(text,detail=''){el('imageRedrawStatus').textContent=text;el('imageRedrawStatusDetail').textContent=detail;el('status').textContent=text}
+// IMG-023 (D7): the secondary "Details: <request ID>" line for a declined redraw, '' otherwise.
+function redrawErrorDetail(error){
+  const match=error instanceof RedrawError&&error.code==='declined'?/\breq_[A-Za-z0-9]+/.exec(error.detail||''):null;
+  return match?`Details: ${match[0]}`:'';
+}
+function redrawErrorMessage(error){
+  if(error&&error.name==='AbortError')return 'Redraw cancelled.';
+  if(error instanceof RedrawError&&error.code==='declined')return `${(redrawAvailability&&redrawAvailability.consent&&redrawAvailability.consent.recipientName)||'The redraw service'}${REDRAW_ERROR_MESSAGES.declined}`;
+  const code=error instanceof RedrawError&&REDRAW_ERROR_MESSAGES[error.code]?error.code:'provider-failed';
+  return code==='provider-failed'&&error&&error.detail?`${REDRAW_ERROR_MESSAGES[code]} ${error.detail}`:REDRAW_ERROR_MESSAGES[code];
+}
+function syncImageRedrawControls(l){
+  if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
+  const busy=redrawRun!==null,state=imageStudioStateFor(l);
+  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawButton;
+  el('imageRedraw').disabled=busy;
+  el('imageRedrawCancel').hidden=!busy;
+  el('imageRedrawUseOriginal').hidden=!state.useOriginal;
+  el('imageRedrawUseOriginal').disabled=busy;
+}
+const redrawConsentLightbox=new Lightbox('lightboxRedrawConsent',{onClose(){if(redrawConsentResolve){const resolve=redrawConsentResolve;redrawConsentResolve=null;resolve(false)}}});
+function askRedrawConsent(consent){
+  el('redrawConsentRecipient').textContent=consent.recipientName||'';
+  el('redrawConsentCost').textContent=consent.costLabel?`Cost: ${consent.costLabel}.`:'';
+  el('redrawConsentCost').style.display=consent.costLabel?'':'none';
+  el('redrawAccessCodeField').style.display=consent.needsAccessCode?'':'none';
+  el('redrawAccessCode').value=loadRedrawAccessCode();
+  el('redrawConsentError').textContent='';
+  return new Promise(resolve=>{redrawConsentResolve=resolve;redrawConsentLightbox.open()});
+}
+function confirmRedrawConsent(){
+  const consent=redrawAvailability&&redrawAvailability.consent,code=el('redrawAccessCode').value.trim();
+  if(consent&&consent.needsAccessCode&&!code){el('redrawConsentError').textContent='Enter the access code to continue.';el('redrawAccessCode').focus();return}
+  if(consent&&consent.needsAccessCode){saveRedrawAccessCode(code);setRedrawAccessCode(code)}
+  redrawConsentGiven=true;
+  const resolve=redrawConsentResolve;redrawConsentResolve=null;redrawConsentLightbox.close();if(resolve)resolve(true);
+}
+el('redrawConsentContinue').onclick=confirmRedrawConsent;
+el('redrawAccessCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmRedrawConsent()}});
+function syncImageRedrawControlsForSelection(){const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)}
+async function startImageRedraw(){
+  // A second click while the consent dialog is open would open a second consent wait; ignore it.
+  if(redrawConsentResolve!==null)return;
+  if(redrawRun||!redrawAvailability||!redrawAvailability.available)return;
+  if(selectedLayer().type!=='image')return;
+  if(redrawAvailability.consent&&!redrawConsentGiven&&!(await askRedrawConsent(redrawAvailability.consent))){redrawFailedLayerIds.add(selectedLayer().id);setImageRedrawStatus('Redraw cancelled.');syncImageRedrawControlsForSelection();return}
+  const layer=selectedLayer();
+  if(!layer||layer.type!=='image'||redrawRun)return;
+  // The request is bound to this layer and the source it started from (a re-redraw always starts
+  // from the original image); a result that no longer matches is dropped, not applied.
+  const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
+  // IMG-026 (C2, D3): always the stone picture; the flat style stays dormant.
+  const style='stones';
+  redrawRun=new AbortController();
+  runningLayerId=layerId;
+  setImageRedrawStatus('Redrawing… this can take up to five minutes.');
+  setImageStudioView('source');
+  syncImageRedrawControls(layer);
+  renderImageStudio();
+  try{
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])}});
+    const buffer=await decodeDataUrlToBuffer(result.dataUrl);
+    const current=project.layers.find(x=>x.id===layerId);
+    if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
+    // IMG-026 (C1): a stones redraw that came back with a layout becomes an ai-layout layer, its box
+    // exactly the layout's size; on a Flat Sheet the sheet grows first to the box plus 20 mm.
+    const layout=style==='stones'&&result.layout?result.layout:null;
+    // IMG-023 (D2(a)): otherwise the redrawn image becomes an AI stones layer sized from its own stone
+    // pitch; on a Flat Sheet the sheet grows first (the size then fits without shrinking).
+    const detection=layout?null:style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
+    const aiPitchPx=detection&&detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
+    const grownCanvas=layout?(currentObjectTemplate().id==='sheet'?fitAiLayoutCanvas({canvas:project.canvas,widthMm:layout.widthMm,heightMm:layout.heightMm,sheetMaxMm:SHEET_MAX_MM}):null):aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
+    commitHistory();
+    if(grownCanvas)project.canvas=grownCanvas;
+    const next=applyRedraw(current,result,{canvas:project.canvas,layout,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
+    imageBufferCache.set(next.imageSrc,buffer);
+    project.layers[project.layers.indexOf(current)]=next;
+    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('template')}else redrawFailedLayerIds.add(layerId);
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style==='stones'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
+  }catch(error){
+    if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
+    if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
+    redrawFailedLayerIds.add(layerId);
+    setImageRedrawStatus(redrawErrorMessage(error),redrawErrorDetail(error));
+  }finally{
+    redrawRun=null;
+    runningLayerId=null;
+    syncImageRedrawControlsForSelection();
+    renderImageStudio();
+  }
+}
+// IMG-026 (C2): "Try again" first asks before it discards manual edits to the layout. The app has no
+// confirm dialog of its own, so this is window.confirm.
+el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0;if(imageStudioStateFor(l&&l.type==='image'?l:null).redrawButton==='Try again'&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
+el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');
+el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
+el('imageRedrawUseOriginal').onclick=async()=>{
+  const layer=selectedLayer();
+  if(!layer||layer.type!=='image'||!layer.redraw||redrawRun)return;
+  const next=restoreOriginal(layer);
   commitHistory();
-  project.layers.push(layer);
-  selectedLayerId=layer.id;
-  selectedLayerIds=selectOnly(layer.id);
-  pendingImageImport=null;
-  el('imageImportPanel').style.display='none';
+  project.layers[project.layers.indexOf(layer)]=next;
   syncSelectedControlsFromLayer();
   await updateAll(true);
-  el('status').textContent=`Imported ${importedName}`;
+  setImageRedrawStatus('Restored the original image.');
+  syncImageRedrawControlsForSelection();
 };
+// RS-3037: reuses the #objectType change handler's own reset logic (dispatching a real change
+// event) rather than duplicating it -- matches this codebase's stated preference for reuse over
+// duplication.
+el('imageStudioSwitchToSheet').onclick=()=>{el('objectType').value='sheet';el('objectType').dispatchEvent(new Event('change'))};
+// IMG-002: clears every row's colorMap override back to each cluster's own auto-detected nearestId.
+// Not part of the generic HISTORY_TRACKED_CONTROL_IDS 'input'/'change' wiring below (a button click
+// fires neither), so it commits its own history step and regenerates directly, the same pattern
+// imageStudioRemove's own onclick above uses.
+// updateAll(true) -- l.colorMap is already directly mutated here, unlike a normal control edit;
+// updateAll()'s default (skipWrite=false) would run writeSelectedControlsToLayer() first, which
+// (correctly, per its own IMG-002 comment) reads every already-synced row's still-showing-the-old-
+// override <select> value straight back into l.colorMap, undoing this reset before it ever renders.
+el('imgColorReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image')return;commitHistory();l.colorMap={};updateAll(true)};
+// IMG-026 (C2, S17): Reset colours clears the ai-layout colour swaps, as its own history step.
+el('aiLayoutColourReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image'||l.fillMode!=='ai-layout')return;commitHistory();l.colorSwaps={};updateAll(true)};
+// IMG-003: re-rolls the Organic placement without touching any other param -- a discrete action that
+// commits its own history entry, the same reason #imgColorReset does above, rather than the generic
+// HISTORY_TRACKED_CONTROL_IDS input/change session coalescing.
+el('imgShuffle').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image')return;commitHistory();l.seed=resolveImageSeed(l.seed)+1;updateAll(true)};
 el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI();
   // RC-005: a manual Save/Export is now the authoritative saved copy -- clear the autosave
   // recovery slot so a later refresh never reports "restored unsaved changes" for work that was
@@ -5153,10 +5930,10 @@ el('exportProject').onclick=()=>{try{download('rhinestone-project.json','applica
   }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCup').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCup').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
 // only options (like rotation/zoom) -- read live from their controls at click time, not part of
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one
@@ -5185,13 +5962,43 @@ function updateProdSheetReadabilityValidation(){
     const items=hits.map(({layer,heightMm,minHeightMm})=>`"${layerLabel(layer)}" (${formatLengthDisplay(heightMm,project.units,1)} ${u}, needs ${formatLengthDisplay(minHeightMm,project.units,1)} ${u} or taller)`).join('; ');
     message=`${hits.length} text layer${hits.length===1?'':'s'} on this sheet ${hits.length===1?'is':'are'} below the readability minimum for its stone size: ${items}. This will still export — consider a taller height or a smaller stone size before printing.`;
   }
+  // RS-3038: stones outside project.canvas are silently dropped off the printed template with no
+  // signal today (repro: import an image on a 200x200 Flat Sheet, then shrink the sheet to
+  // 150x150). Warn-only, same as the readability check above -- appended, never replacing it.
+  if(layout){
+    // IMG-026 (D): ai-layout stones closer than 0.1 mm to a neighbour (the engine's gapViolation).
+    // Warn-only, like the checks around it: editing and export are never blocked.
+    const gapViolationCount=layout.stones.filter(s=>s.metadata&&s.metadata.gapViolation===true).length;
+    if(gapViolationCount>0){
+      const gapMessage=`${gapViolationCount} stones in AI layouts are closer than 0.1 mm to a neighbour. They have a red ring in Design.`;
+      message=message?`${message} ${gapMessage}`:gapMessage;
+    }
+    const outsideCount=countStonesOutsideProductionArea(layout,project.canvas.width,project.canvas.height);
+    if(outsideCount>0){
+      const w=formatLengthDisplay(project.canvas.width,project.units,1);
+      const h=formatLengthDisplay(project.canvas.height,project.units,1);
+      const outsideMessage=`${outsideCount} stone${outsideCount===1?' lies':'s lie'} partly or fully outside the ${w} × ${h} ${u} production area and will not be on the template. Move or resize the design, or enlarge the sheet.`;
+      message=message?`${message} ${outsideMessage}`:outsideMessage;
+    }
+    // RS-3041 D12: a sheet too big for one page exports as a multi-page PDF. Warn-only, appended
+    // after the outside-area warning; a sheet that cannot be tiled at all throws here, and that
+    // error is left to the export handlers' own catch blocks to report.
+    try{
+      const sheetDocument=computeProductionSheetDocument(layout,currentProductionSheetOptions());
+      if(sheetDocument.multiPage){
+        const tileCount=sheetDocument.cols*sheetDocument.rows;
+        const multiPageMessage=`Spans ${tileCount} ${tileCount===1?'page':'pages'} on ${sheetDocument.pageSize} (${sheetDocument.cols} × ${sheetDocument.rows}) plus a cover page; export as PDF.`;
+        message=message?`${message} ${multiPageMessage}`:multiPageMessage;
+      }
+    }catch(error){}
+  }
   validation.textContent=message;
   validation.classList.toggle('visible',Boolean(message));
 }
 function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
 // READ-010's readability floor is warn-only: a throw inside updateProdSheetReadabilityValidation()'s sweep must be caught and reported via the existing #status catch, not escape uncaught and silently disable the export button -- so the call sits inside try, after the !layout guard.
-el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
+el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
 // not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
 // via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
@@ -5210,7 +6017,14 @@ el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent=
   const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
   URL.revokeObjectURL(svgUrl);
   exportCanvas('rhinestone-production-sheet.png',c)
-}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
+// RS-3038: option-change refresh -- none of these four controls had a change listener before (they
+// were read-only-at-export-time, via currentProductionSheetOptions()); this both keeps the outside-
+// area/readability warning from going stale while the lightbox stays open across an edit, and clears
+// a stale "Export failed" message (written into #prodSheetValidation by the catch blocks above) once
+// the operator changes an option, per this milestone's "until the next export attempt or option
+// change" contract.
+for(const id of['prodSheetPageSize','prodSheetMargin','prodSheetMirror','prodSheetRegMarks']){el(id).addEventListener('change',()=>updateProdSheetReadabilityValidation())}
 // RS-1006: the previous custom pointerdown/pointermove drag-to-rotate handler on cupCanvas is
 // removed here -- OrbitControls (inside src/preview3d/Preview3DRenderer.js) now owns pointer
 // interaction on that canvas natively, and does strictly more (rotate, zoom, and pan, with
@@ -5264,7 +6078,7 @@ const lightboxes={
   text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();renderImageStudio()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
   // can never go stale from an edit made while it was closed (matching shipping/settings' own
@@ -5316,6 +6130,17 @@ function revealDualWorkspaceForLightbox(){
     persistActiveView('dual');
   }
 }
+// IMG-011: the Image menu shows only the 2D canvas (no 3D Object Preview) -- unlike every other
+// design-content Lightbox, which reveals Dual Workspace. Same structure as
+// revealDualWorkspaceForLightbox() above, just targeting '2d' instead of 'dual'.
+function revealCanvasOnlyForLightbox(){
+  const exitingDesign=drawingTool.isActive;
+  if(exitingDesign)setDrawMode(false);
+  if(exitingDesign||workspaceMode!=='2d'){
+    if(workspaceMode!=='2d')setWorkspaceMode('2d');
+    persistActiveView('2d');
+  }
+}
 el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open();setActiveTopMenuButton('menuText')};
 el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open();setActiveTopMenuButton('menuShapes')};
 el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open();setActiveTopMenuButton('menuMonogram')};
@@ -5325,7 +6150,7 @@ el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.mono
 // in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
 el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open();setActiveTopMenuButton('menuGallery')};
 el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open();setActiveTopMenuButton('menuImport')};
-el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
+el('menuImageTrace').onclick=()=>{revealCanvasOnlyForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
 el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
 el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
 el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open();setActiveTopMenuButton('menuProdSheet')};
@@ -5948,6 +6773,7 @@ el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
 function updateObjectTemplateDetail(){
   const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
   const isPlate=t.preview.kind==='plate';
+  const isSheet=t.preview.kind==='sheet';
   const isVessel=VESSEL_PRODUCT_IDS.includes(t.id);
   const detailEl=el('objectTemplateDetail');
   const u=unitSuffix(project.units);
@@ -5959,11 +6785,29 @@ function updateObjectTemplateDetail(){
   // Dinner Plate template is active -- every other template's fields are unaffected.
   el('plateFields').style.display=isPlate?'block':'none';
   el('plateColorField').style.display=isPlate?'flex':'none';
-  el('cupColorField').style.display=isPlate?'none':'flex';
-  // S-112A: Wrap mode is a cylindrical-only concept (it sizes the Front View Frame band, which the
-  // plate never draws -- see drawLayout()) -- hidden whenever the Round Dinner Plate is the active
-  // template, unchanged for every other template.
-  el('wrapField').style.display=isPlate?'none':'flex';
+  // RS-3037: there is no Object Preview to color for a Flat Sheet either (decision 4, no 3D
+  // preview) -- #cupColorField is hidden for both flat kinds.
+  el('cupColorField').style.display=(isPlate||isSheet)?'none':'flex';
+  // S-112A/RS-3037: Wrap mode is a cylindrical-only concept (it sizes the Front View Frame band,
+  // which neither plate nor sheet ever draws -- see drawLayout()) -- hidden for both flat kinds,
+  // unchanged for every other template.
+  el('wrapField').style.display=(isPlate||isSheet)?'none':'flex';
+  // RS-3037: the sheet-only Width/Height field group, shown only while Flat Sheet is active --
+  // same pattern as #plateFields/#vesselFields above.
+  el('sheetFields').style.display=isSheet?'block':'none';
+  // RS-3037: the Image panel's "Switch to Flat Sheet" action is only useful while some other
+  // template is active -- also refreshed independently from renderImageStudio() itself (see its own
+  // comment), since either function can run next depending on which Lightbox's onOpen fires.
+  // RS-3037 2nd follow-up: button.btn is display:inline-flex in the stylesheet -- an explicit
+  // 'block'/'inline-block' show-value here would override it and visibly change these buttons'
+  // layout on every non-sheet project. '' hands display back to the stylesheet.
+  el('imageStudioSwitchToSheet').style.display=isSheet?'none':'';
+  // RS-3037 follow-up: drawCup() no longer redraws #cup while Flat Sheet is active, so both PNG
+  // exports that capture its pixels (cupCanvas directly, or via composeCombinedPreviewCanvas())
+  // would otherwise ship a stale or blank image -- hide both while Flat Sheet is active.
+  el('exportCup').style.display=isSheet?'none':'';
+  el('exportCombined').style.display=isSheet?'none':'';
+  updateWorkspaceTabAvailability();
   if(isPlate){
     const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);
     const targetName=getPlateDesignTargetMeta(project.plate.designTarget).name;
@@ -5999,16 +6843,269 @@ function setImportTab(tab){
 el('importTabSvg').onclick=()=>setImportTab('svg');
 el('importTabProject').onclick=()=>setImportTab('project');
 
-// ---- Image Trace Lightbox: "new trace" vs "edit selected image layer" sections. Reuses the
-// pre-existing pendingImageImport state and imageImportCommit/imageImportCancel handlers verbatim
-// -- these two listeners only decide which section of the same dialog is visible. ----
-function updateImageTraceSections(){
-  const isImageLayer=selectedLayer().type==='image'&&!pendingImageImport;
-  el('imageTraceEditSection').style.display=isImageLayer?'block':'none';
-  el('imageTraceNewSection').style.display=pendingImageImport||!isImageLayer?'block':'none';
+// ---- Image Studio: four-view canvas (source/mask/template/overlay) + stats column for the
+// selected image layer. No-op unless the Image Studio Lightbox is open. See docs/specifications/
+// IMG-007-StudioShell.md. ----
+const imageStudioImageElements=new Map();
+let imageStudioRenderToken=0;
+function loadStudioImageElement(src){
+  let img=imageStudioImageElements.get(src);
+  if(!img){img=new Image();img.src=src;imageStudioImageElements.set(src,img)}
+  return img;
 }
-el('imageImportCommit').addEventListener('click',updateImageTraceSections);
-el('imageImportCancel').addEventListener('click',updateImageTraceSections);
+const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones','imageStudioGroupColors','imageStudioGroupOrganic','imageStudioGroupEdges'];
+// IMG-023 (D8): draws `img` contained (aspect kept, centred) in a canvas of the box's aspect, so a
+// redrawn layer's original is not stretched to the square redraw's box. Outside renderImageStudio()
+// on purpose -- see docs/specifications/IMG-023-AiStoneTransfer.md, "Existing tests".
+function letterboxToBoxAspect(img,boxW,boxH){
+  if(!img||!img.naturalWidth||!img.naturalHeight||!(boxW>0)||!(boxH>0))return img;
+  const long=Math.max(img.naturalWidth,img.naturalHeight);
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(boxW>=boxH?long:long*boxW/boxH));out.height=Math.max(1,Math.round(boxW>=boxH?long*boxH/boxW:long));
+  const f=Math.min(out.width/img.naturalWidth,out.height/img.naturalHeight),w=img.naturalWidth*f,h=img.naturalHeight*f;
+  out.getContext('2d').drawImage(img,(out.width-w)/2,(out.height-h)/2,w,h);
+  return out;
+}
+// IMG-026 (C2): applies imageStudioState() to the lightbox groups, the four ai-layout stats rows and
+// the Mask/Colours views; a hidden view that was checked falls back to Template.
+const AI_LAYOUT_STAT_IDS=['imageStudioStatMinGap','imageStudioStatViolations','imageStudioStatCoverage','imageStudioStatScale'];
+function applyImageStudioState(state){
+  el('legacyImageControls').hidden=!state.legacy;
+  el('imageStudioGroupAiColours').hidden=!state.aiColours;
+  for(const id of AI_LAYOUT_STAT_IDS){el(id).hidden=!state.aiStats;el(`${id}Label`).hidden=!state.aiStats}
+  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;
+  const view=el('imageStudioView').querySelector('input:checked')?.value;
+  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours))setImageStudioView('template');
+}
+// IMG-026 (C2, S17): the "Colours used" rows of an ai-layout layer, rebuilt on every render. A change
+// writes layer.colorSwaps as its own history step; neither control is in HISTORY_TRACKED_CONTROL_IDS.
+function renderAiLayoutColourRows(l){
+  const host=el('aiLayoutColourRows');host.textContent='';
+  if(!l||l.fillMode!=='ai-layout'||!l.aiLayout)return;
+  for(const row of aiLayoutColourRows(l.aiLayout,l.colorSwaps)){
+    const item=document.createElement('div');item.className='ai-colour-row';
+    const swatch=document.createElement('span');swatch.className='color-swatch';swatch.style.background=STONE_COLORS[row.toId]?.previewColor||'#ffffff';
+    const name=document.createElement('span');name.className='ai-colour-name';name.textContent=STONE_COLORS[row.fromId]?.name||row.fromId;
+    const count=document.createElement('span');count.className='hint';count.textContent=String(row.count);
+    const pick=document.createElement('select');pick.id=`aiLayoutColourPick-${row.fromId}`;
+    item.append(swatch,name,count,pick);host.appendChild(item);
+    populateStoneColorOptions(pick.id,true);pick.value=row.toId;
+    pick.onchange=()=>{const target=selectedLayer();if(!target||target.id!==l.id)return;commitHistory();if(!target.colorSwaps)target.colorSwaps={};if(pick.value===row.fromId)delete target.colorSwaps[row.fromId];else target.colorSwaps[row.fromId]=pick.value;updateAll(true)};
+  }
+}
+// IMG-026 (D): a red ring on every stone flagged metadata.gapViolation, in the canvas transform `t`
+// renderStoneLayout() used, at the drawn stone radius.
+function drawGapViolationRings(ctx,stones,t,lineWidthPx){
+  const flagged=stones.filter(s=>s.metadata&&s.metadata.gapViolation===true);
+  if(!flagged.length)return;
+  ctx.save();ctx.strokeStyle='#d92b2b';ctx.lineWidth=lineWidthPx;
+  for(const s of flagged){ctx.beginPath();ctx.arc(t.ox+s.xMm*t.s,t.oy+s.yMm*t.s,Math.max(2,s.sizeMm*t.s/2),0,Math.PI*2);ctx.stroke()}
+  ctx.restore();
+}
+async function renderImageStudio(){
+  const token=++imageStudioRenderToken;
+  if(!lightboxes.imagetrace.isOpen)return;
+  // RS-3037: also refreshed from updateObjectTemplateDetail() -- both functions run independently
+  // of each other (this one from the Image Trace Lightbox's own onOpen, that one from the Shapes
+  // Lightbox's), so refreshing the toggle in only one would leave it stale whenever the other path
+  // is what actually re-renders next.
+  el('imageStudioSwitchToSheet').style.display=currentObjectTemplate().id==='sheet'?'none':'';
+  const l=selectedLayer();
+  const canvas=el('imageStudioCanvas'),ctx=canvas.getContext('2d');
+  if(!l||l.type!=='image'){
+    el('imageStudioEmpty').hidden=false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    el('imageStudioFileName').textContent='';
+    for(const id of['imageStudioStatImage','imageStudioStatCount','imageStudioStatSizes','imageStudioStatColors','imageStudioStatBox'])el(id).textContent='—';
+    for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=true;
+    el('imageStudioRemove').disabled=true;
+    applyImageStudioState(imageStudioStateFor(null));renderAiLayoutColourRows(null);
+    syncImageRedrawControls(null);
+    return;
+  }
+  el('imageStudioEmpty').hidden=true;
+  for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=false;
+  el('imageStudioRemove').disabled=false;
+  const state=imageStudioStateFor(l);
+  applyImageStudioState(state);renderAiLayoutColourRows(l);
+  syncImageRedrawControls(l);
+  el('imageStudioFileName').textContent=l.imageName||'';
+  // IMG-003/IMG-004: Organic's and Edge's shared Poisson-disk controls (seed/shuffle/spread) only
+  // matter once one of those two modes is selected -- disabled with an explanatory title otherwise,
+  // the same treatment #stoneColor gets while colorCount>1 (IMG-002 decision 4). Edge's own
+  // edgeWidth/edgeThinning controls gate on Edge specifically.
+  const mode=resolveImageFillMode(l.fillMode);
+  const isPoisson=mode==='organic'||mode==='edge';
+  const isEdge=mode==='edge';
+  const poissonDisabledTitle=isPoisson?'':'Only used when Fill style is set to Organic or Edge.';
+  const edgeDisabledTitle=isEdge?'':'Only used when Fill style is set to Edge.';
+  for(const id of['imgSeed','imgShuffle','imgSpread','imgBrightnessThinning']){el(id).disabled=!isPoisson;el(id).title=poissonDisabledTitle}
+  for(const id of['imgEdgeWidth','imgEdgeThinning']){el(id).disabled=!isEdge;el(id).title=edgeDisabledTitle}
+  // IMG-023 (D2, D3, F3): AI stones picks its own colours, so colour count, vividness and the colour
+  // rows do nothing for it; its size follows the AI's stone pitch and the shrink step.
+  const isAiStones=mode==='ai-stones';
+  const aiStonesUnusedTitle=isAiStones?'Not used by AI stones: it picks up to 8 colours from the stones the AI drew.':'';
+  for(const id of['imgColorCount','imgVividness','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7']){el(id).disabled=isAiStones;el(id).title=aiStonesUnusedTitle}
+  el('imgAiStoneShrink').disabled=!isAiStones;el('imgAiStoneShrink').title=isAiStones?'':'Only used when Fill style is set to AI stones.';
+  const aiStoneHint=aiStoneShrinkHintText(l);
+  el('imgAiStoneShrinkHint').textContent=aiStoneHint;el('imgAiStoneShrinkHint').hidden=!aiStoneHint;
+  // IMG-025 (D8): the same rule as the engine gate (D2); Jet outline also needs Clean up ticked.
+  const cleanupEligible=mode==='ai-stones'||(mode==='staggered'&&resolveSizeMode(l.sizeMode)==='uniform');
+  el('imgCleanup').disabled=!cleanupEligible;
+  el('imgJetOutline').disabled=!cleanupEligible||l.cleanup!==true;
+  el('imgCleanupHint').hidden=cleanupEligible;
+  // IMG-023 (D8): the AI image view exists only for a redrawn layer.
+  el('imageStudioViewAi').hidden=!state.views.ai;
+  el('imgSeed').value=resolveImageSeed(l.seed);
+  el('imgSpread').value=resolveImageSpread(l.spread);
+  el('imgSpreadValue').textContent=String(resolveImageSpread(l.spread));
+  setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));
+  el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning);
+  el('imgEdgeThinningValue').textContent=String(resolveImageEdgeThinning(l.edgeThinning));
+  // IMG-006: #imgBrightnessSteps/#imgBrightnessThinning, the Studio controls for brightness-following
+  // stone size -- same "rebuild options from the live stone size, then set from the stored value"
+  // idiom #weightSteps' own sync uses (syncSelectedControlsFromLayer()).
+  el('imgBrightnessSteps').innerHTML=brightnessStepsOptionsHtml(l.stoneSize);
+  el('imgBrightnessSteps').value=String(brightnessStepForSizes(l.brightnessSizesMm));
+  el('imgBrightnessThinning').value=resolveImageBrightnessThinning(l.brightnessThinning);
+  el('imgBrightnessThinningValue').textContent=String(resolveImageBrightnessThinning(l.brightnessThinning));
+  const studioRotationDeg=l.rotationDeg??0;
+  const studioBox=rotatedCornersAABB(l.x,l.y,l.w,l.h,studioRotationDeg);
+  const bbox={minXmm:studioBox.x,minYmm:studioBox.y,widthMm:studioBox.width,heightMm:studioBox.height};
+  const dpr=Math.max(1,window.devicePixelRatio||1);
+  canvas.width=Math.max(1,Math.round(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.round(canvas.clientHeight*dpr));
+  const t=fitTransform(bbox,canvas.width,canvas.height,16*dpr);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const stones=(layout?.stones||[]).filter(s=>s.layerId===l.id);
+  const templateLayout=new StoneLayout({layerId:l.id,stones});
+  // Resolves with the loaded <img> without drawing it -- the overlay branch below needs the load
+  // awaited to complete BEFORE it touches ctx.globalAlpha, so the alpha set/draw/reset sequence can
+  // stay fully synchronous (no await between them) and never leak a .35 alpha into the next render.
+  const drawSource=(src=l.imageSrc)=>new Promise(resolve=>{
+    const img=loadStudioImageElement(src);
+    if(img.complete&&img.naturalWidth){resolve(img);return}
+    img.onload=()=>resolve(img);img.onerror=()=>resolve(img);
+  });
+  // IMG-026 (C2): `b` is the box to draw into (the layer box unless given); under rotation it still
+  // turns about the layer box's centre, so an ai-layout AI image (aiLayoutImageBox()) stays under its stones.
+  const drawInBox=(src,b=l)=>{if(!studioRotationDeg){ctx.drawImage(src,t.ox+b.x*t.s,t.oy+b.y*t.s,b.w*t.s,b.h*t.s);return}ctx.save();ctx.translate(t.ox+(l.x+l.w/2)*t.s,t.oy+(l.y+l.h/2)*t.s);ctx.rotate(studioRotationDeg*Math.PI/180);ctx.drawImage(src,(b.x-l.x-l.w/2)*t.s,(b.y-l.y-l.h/2)*t.s,b.w*t.s,b.h*t.s);ctx.restore()};
+  const paintSource=(img,b)=>drawInBox(img,b);
+  const aiImageBox=mode==='ai-layout'?aiLayoutImageBox(l)||undefined:undefined;
+  const drawMask=async()=>{
+    let buffer=imageBufferCache.get(l.imageSrc);
+    if(!buffer){buffer=await decodeDataUrlToBuffer(l.imageSrc);imageBufferCache.set(l.imageSrc,buffer)}
+    if(token!==imageStudioRenderToken)return;
+    const field=prepareImageField(buffer,{threshold:l.threshold,invert:l.invert,blurRadiusPx:l.blurRadiusPx,maxWidthPx:l.maxWidthPx,maxHeightPx:l.maxHeightPx,transparent:resolveImageTransparentMode(l.transparent)});
+    const scratch=document.createElement('canvas');scratch.width=field.widthPx;scratch.height=field.heightPx;
+    scratch.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
+    drawInBox(scratch);
+  };
+  // IMG-026 (D): Template and Overlay ring the ai-layout stones flagged gapViolation in red, after
+  // renderStoneLayout(); no other layer's stones carry the flag.
+  const drawTemplate=()=>{renderStoneLayout(ctx,templateLayout,t);drawGapViolationRings(ctx,stones,t,1.5*dpr)};
+  // IMG-002: re-quantized fresh from l's own current (already-committed) params -- see
+  // computeImageColorField()'s own doc comment for why this isn't cached between renders. Drives
+  // both the "Colours" canvas view below and the Colours group's per-row swatch/share/select.
+  const colorField=computeImageColorField(l);
+  // IMG-012 (decision 3): shows the count next to the control while Auto is selected. IMG-015
+  // (decision 7): it is the number of groups in colorField, the Colours rows rendered below, not the
+  // resolved count (a one-group Auto layer resolves to 2). computeImageColorField() returns null when
+  // the count resolves to <=1 (no subject pixels) or before the source is decoded, so the hint then
+  // falls back to resolveImageColorCount() directly.
+  const autoHintEl=el('imgColorCountAuto');
+  if(l.colorCount==='auto'){const autoResolvedCount=colorField?colorField.colorGroups.length:resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
+  for(let i=0;i<8;i++){
+    const row=el(`imgColorGroup${i}`);
+    const group=colorField?.colorGroups?.[i];
+    if(!group){row.hidden=true;continue}
+    row.hidden=false;
+    el(`imgColorSwatch${i}`).style.background=`rgb(${group.rgb[0]},${group.rgb[1]},${group.rgb[2]})`;
+    el(`imgColorShare${i}`).textContent=`${Math.round(group.pixelShare*100)}%`;
+    const pickEl=el(`imgColorPick${i}`);
+    pickEl.value=(l.colorMap&&l.colorMap[group.nearestId])||group.nearestId;
+    // IMG-002 follow-up: marks this row's select as holding a real value FOR THIS LAYER (l.id, not a
+    // bare '1') -- see writeSelectedControlsToLayer()'s own doc comment for why the write-back must
+    // trust a row's DOM value only once it has been synced for the currently selected layer
+    // specifically, not merely synced at some point for whichever layer was selected earlier.
+    pickEl.dataset.syncedLayer=l.id;
+  }
+  const drawColors=()=>{
+    if(!colorField||!colorField.labels){drawTemplate();return}
+    const fillsByLabel=colorField.colorGroups.map(group=>{
+      const pickedId=(l.colorMap&&l.colorMap[group.nearestId])||group.nearestId;
+      return STONE_COLORS[pickedId]?.previewColor||'#ffffff';
+    });
+    const scratch=document.createElement('canvas');scratch.width=colorField.widthPx;scratch.height=colorField.heightPx;
+    scratch.getContext('2d').putImageData(new ImageData(labelsFieldToRgba(colorField,fillsByLabel),colorField.widthPx,colorField.heightPx),0,0);
+    drawInBox(scratch);
+  };
+  const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
+  // IMG-023 (D8): for a redrawn layer Source shows the original (aspect kept inside the box) and AI
+  // image shows the redraw; without a redraw both show the layer's own image.
+  if(view==='source'||(view==='ai'&&!l.redraw)){
+    const img=await drawSource(l.redraw?l.redraw.originalImageSrc:l.imageSrc);
+    if(token!==imageStudioRenderToken)return;
+    paintSource(l.redraw?letterboxToBoxAspect(img,l.w,l.h):img);
+  }else if(view==='ai'){
+    const img=await drawSource();
+    if(token!==imageStudioRenderToken)return;
+    paintSource(img,aiImageBox);
+  }else if(view==='mask'){
+    await drawMask();
+    if(token!==imageStudioRenderToken)return;
+  }else if(view==='colors'){
+    drawColors();
+  }else if(view==='template'){
+    drawTemplate();
+  }else{
+    const img=await drawSource();
+    if(token!==imageStudioRenderToken)return;
+    ctx.globalAlpha=.35;paintSource(img,aiImageBox);ctx.globalAlpha=1;
+    drawTemplate();
+  }
+  el('imageStudioStatImage').textContent=`${l.imageName||''} — ${l.naturalWidthPx}×${l.naturalHeightPx}px`;
+  el('imageStudioStatCount').textContent=String(stones.length);
+  const sizeCounts=new Map();
+  for(const s of stones)sizeCounts.set(s.sizeMm,(sizeCounts.get(s.sizeMm)||0)+1);
+  el('imageStudioStatSizes').textContent=[...sizeCounts.entries()].sort((a,b)=>a[0]-b[0]).map(([size,count])=>`${formatStoneSizeLabel(size)} × ${count}`).join(', ')||'—';
+  const colorCounts=new Map();
+  for(const s of stones)colorCounts.set(s.color,(colorCounts.get(s.color)||0)+1);
+  el('imageStudioStatColors').textContent=[...colorCounts.entries()].map(([color,count])=>`${STONE_COLORS[color]?.name||color} × ${count}`).join(', ')||'—';
+  el('imageStudioStatBox').textContent=`${formatLengthDisplay(l.w,project.units,1)}×${formatLengthDisplay(l.h,project.units,1)} ${unitSuffix(project.units)}`;
+  // IMG-005: its own additional generateImageStonesLive() call, the same "preview-only... calls"
+  // pattern the Mask/Source drawMask()/drawSource() above already establish -- the cached global
+  // layout carries no per-call checkFixStats, so the report needs a fresh regenerate.
+  const checkFixResult=await engine.generateImageStonesLive(l,{includeStats:true});
+  if(token!==imageStudioRenderToken)return;
+  const checkFixStats=checkFixResult.checkFixStats;
+  const checkFixEl=el('imageStudioStatCheckFix');
+  if((mode==='contour'||mode==='radial')&&checkFixStats){
+    checkFixEl.textContent=checkFixStats.violationsFound===0?'No spacing violations found.':`${checkFixStats.violationsFound} spacing violations found, ${checkFixStats.repaired} repaired, ${checkFixStats.dropped} dropped`;
+  }else{
+    checkFixEl.textContent='Only applies to Contour Fill and Radial Fill.';
+  }
+  // IMG-025 (D9): one line under the stats, hidden when clean-up did not run.
+  const cleanupText=imageCleanupStatsText(checkFixResult.cleanupStats);
+  el('imageStudioStatCleanup').textContent=cleanupText;el('imageStudioStatCleanup').hidden=!cleanupText;
+  // IMG-026 (C2): the ai-layout rows, from the same includeStats call. .validation-message needs
+  // .visible to show (index.html), so both are toggled.
+  const aiStats=state.aiStats?checkFixResult.aiLayoutStats:null;
+  if(aiStats){
+    el('imageStudioStatMinGap').textContent=typeof aiStats.minGapMm==='number'?`${formatLengthDisplay(aiStats.minGapMm,project.units,3)} ${unitSuffix(project.units)}`:'—';
+    el('imageStudioStatViolations').textContent=String(aiStats.violations);
+    for(const cls of['validation-message','visible'])el('imageStudioStatViolations').classList.toggle(cls,aiStats.violations>0);
+    const coverage=l.aiLayout.report?l.aiLayout.report.coverage:undefined;
+    el('imageStudioStatCoverage').textContent=typeof coverage==='number'?`${Math.round(coverage*100)}%`:'—';
+    el('imageStudioStatScale').textContent=`×${aiStats.k.toFixed(2)}`;
+  }
+}
+// IMG-025 (D9, audit note A7): the studio's clean-up stats line; '' when clean-up did not run.
+function imageCleanupStatsText(stats){
+  if(!stats)return'';
+  if(stats.skipped)return'Clean-up: skipped (stones are not on one lattice)';
+  return`Clean-up: +${stats.filled} filled, ${stats.recoloured} recoloured, ${stats.removed} removed`+(stats.outlined>0?`, ${stats.outlined} outlined`:'');
+}
+el('imageStudioView').addEventListener('change',renderImageStudio);
 
 // ---- Workspace view mode (UI-001B: Dual Workspace). Three modes: 'dual' (2D Canvas and Object
 // Preview shown together -- the default desktop layout), '2d' (2D Canvas only), 'preview' (Object
@@ -6019,7 +7116,14 @@ el('imageImportCancel').addEventListener('click',updateImageTraceSections);
 // sizing fix keeps applying unchanged. updateAll(true) after a switch lets whichever canvas(es)
 // just became visible/resized pick up their real box size via resizeCanvas()/ResizeObserver.
 let workspaceMode='dual';
+// RS-3037: the single guard covering every path that can request Dual/Object Preview while Flat
+// Sheet is active (the two tabs, revealDualWorkspaceForLightbox(), setDrawMode(false) restoring
+// workspaceModeBeforeDrawing, and the boot-time bootActiveView resolution call below) -- Flat Sheet
+// has no 3D preview (decision 4), so either request resolves to '2d' instead. Runs before any of
+// this function's own DOM-toggle logic, and never calls persistActiveView() itself, so a saved
+// 'dual'/'preview' preference in localStorage survives untouched for the next non-sheet project.
 function setWorkspaceMode(mode,skipUpdate){
+  if(currentObjectTemplate().id==='sheet'&&(mode==='dual'||mode==='preview'))mode='2d';
   workspaceMode=mode;
   const show2D=mode==='dual'||mode==='2d',show3D=mode==='dual'||mode==='preview';
   el('viewTabDual').classList.toggle('active',mode==='dual');el('viewTabDual').setAttribute('aria-selected',String(mode==='dual'));
@@ -6030,6 +7134,22 @@ function setWorkspaceMode(mode,skipUpdate){
   el('toolbar2D').style.display=show2D?'flex':'none';el('toolbar3D').style.display=show3D?'flex':'none';
   el('layoutStats').style.display=show2D?'flex':'none';el('cupStats').style.display=show3D?'flex':'none';
   if(!skipUpdate)updateAll(true);
+}
+// RS-3037: disables the Dual Workspace/Object Preview tabs while Flat Sheet is active (a disabled
+// <button> doesn't fire its onclick, so no change to the tab handlers themselves is needed) and, if
+// the workspace is already showing Dual/Preview when sheet becomes active, forces it back to 2D.
+// Called from updateObjectTemplateDetail(), which already runs on every selection change, undo/redo
+// and import via renderLayerUI() -- no separate wiring needed for those paths. Must never call
+// updateAll() synchronously: this function itself runs INSIDE updateAll() (via renderLayerUI()), so
+// a synchronous updateAll() here would recurse; requestAnimationFrame() defers the redraw one frame.
+function updateWorkspaceTabAvailability(){
+  const isSheet=currentObjectTemplate().id==='sheet';
+  el('viewTabDual').disabled=isSheet;
+  el('viewTab3D').disabled=isSheet;
+  if(isSheet&&workspaceMode!=='2d'){
+    setWorkspaceMode('2d',true);
+    requestAnimationFrame(()=>updateAll(true));
+  }
 }
 // RS-3011 Step 4: which of Design/Dual Workspace/2D Canvas/Object Preview was last active, so a
 // page reload lands back where the user left off -- a client-side UI preference, not project data,
@@ -6110,7 +7230,7 @@ function setDrawMode(active,mode){
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
-    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38,mode);
     el('status').textContent='Drawing mode: drag on the canvas to draw a shape. It becomes a Path layer immediately.';
   }else{
     drawingTool.exit();
@@ -6216,6 +7336,24 @@ function updateDrawToolButtons(){
   el('paintColorField').style.display=showPaintStyle?'':'none';
   el('paintColor').style.display=showPaintStyle?'':'none';
   if(showPaintStyle){setLengthField('paintSizeMm',paintSettings.sizeMm);setLengthField('paintGapMm',paintSettings.gapMm);el('paintColor').value=paintSettings.color}
+  // IMG-026 (D): the stone selection panel, shown while Design has stones of an ai-layout layer
+  // selected. syncAiStonePanel() fills it from the layer's own layout.
+  const stoneSel=active?drawingTool.stoneSelection:null;
+  for(const id of['aiStoneCount','aiStoneColorField','aiStoneColor','aiStoneSizeField','aiStoneSize','aiStoneDelete'])el(id).style.display=stoneSel?'':'none';
+  if(stoneSel)syncAiStonePanel(stoneSel);
+}
+// IMG-026 (D): shows the selection's count, and its colour and size when every selected stone shares
+// one. Otherwise the select is left blank (no option chosen), titled "Mixed". The colour is the one
+// drawn, colorSwaps applied.
+function syncAiStonePanel(stoneSel){
+  const l=aiLayoutLayerById(stoneSel.layerId);
+  if(!l)return;
+  const n=stoneSel.indices.length;
+  el('aiStoneCount').textContent=`${n} stone${n===1?'':'s'} selected`;
+  const swaps=l.colorSwaps||{};
+  const colours=new Set(),sizes=new Set();
+  for(const i of stoneSel.indices){const t=l.aiLayout.stones[i];if(!t)continue;colours.add(Object.prototype.hasOwnProperty.call(swaps,t[3])?swaps[t[3]]:t[3]);sizes.add(t[2])}
+  for(const[id,values]of[['aiStoneColor',colours],['aiStoneSize',sizes]]){const mixed=values.size!==1;el(id).value=mixed?'':[...values][0];if(mixed)el(id).selectedIndex=-1;el(id).title=mixed?'Mixed':''}
 }
 // RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
 // stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
@@ -6369,6 +7507,21 @@ el('paintGapMm').oninput=()=>{
 el('paintColor').oninput=()=>{
   paintSettings.color=el('paintColor').value;
 };
+// IMG-026 (D): the stone selection panel. A colour or size change is one edit for the whole
+// selection; neither select is a history-tracked control, and writeSelectedControlsToLayer() reads
+// neither. Choosing the blank "Mixed" state is not possible, so a change always carries a value.
+el('aiStoneColor').onchange=()=>{
+  const sel=drawingTool.stoneSelection;const colorId=el('aiStoneColor').value;
+  if(!sel||!colorId)return;
+  editAiLayoutStones(sel.layerId,[{op:'recolour',indices:sel.indices,colorId}],`Recoloured ${sel.indices.length} stone${sel.indices.length===1?'':'s'} ${STONE_COLORS[colorId]?.name||colorId}.`);
+};
+el('aiStoneSize').onchange=()=>{
+  const sel=drawingTool.stoneSelection;const sizeId=el('aiStoneSize').value;
+  if(!sel||!sizeId)return;
+  const size=listAllStoneSizes().find(s=>s.id===sizeId);
+  editAiLayoutStones(sel.layerId,[{op:'resize',indices:sel.indices,sizeId}],`Resized ${sel.indices.length} stone${sel.indices.length===1?'':'s'} to ${size?formatStoneSizeLabel(size.diameterMm):sizeId}.`);
+};
+el('aiStoneDelete').onclick=()=>deleteCurrentSelection();
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
 // existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
@@ -6461,9 +7614,12 @@ layoutCanvas.addEventListener('wheel',e=>{if(!drawingTool.isActive)return;drawin
 // RS-3011 Step 9 follow-up: double-click finishes an in-progress Pen path as an open shape, an
 // alternative to clicking back on the first anchor (which closes it). hasInProgressPen already
 // folds in the interactionKind==='pen' check, so this doesn't duplicate it.
+// IMG-026 (D): otherwise, with the Select tool, a double-click on an ai-layout image layer starts
+// stone editing on it (drawingTool.handleDoubleClick()); on anything else it does nothing new.
 layoutCanvas.addEventListener('dblclick',e=>{
-  if(!drawingTool.isActive||!drawingTool.hasInProgressPen)return;
-  drawingTool.finishOpenPenPath();
+  if(!drawingTool.isActive)return;
+  if(drawingTool.hasInProgressPen){drawingTool.finishOpenPenPath();return}
+  drawingTool.handleDoubleClick(e);
 });
 
 // ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
@@ -6511,6 +7667,13 @@ el('actionDuplicate').onclick=()=>{
 // this never needs to reason about multiple targets. Clears the selection afterward either way --
 // nothing is left "selected" once its contents are gone, same as the region branch above.
 async function deleteCurrentSelection(){
+  // IMG-026 (D): a stone selection on an ai-layout layer goes first -- one delete edit.
+  const stoneSel=drawingTool.stoneSelection;
+  if(stoneSel){
+    const n=stoneSel.indices.length;
+    await editAiLayoutStones(stoneSel.layerId,[{op:'delete',indices:stoneSel.indices}],`Deleted ${n} stone${n===1?'':'s'}.`);
+    return;
+  }
   const selection=drawingTool.activeSelection;
   if(selection&&selection.kind==='region'){
     deleteRegionFromPathLayer(selection.layerId,selection.regionId);
@@ -6545,7 +7708,9 @@ const LIBRARY_THUMB_WIDTH_PX=260,LIBRARY_THUMB_HEIGHT_PX=170;
 
 async function generateProjectThumbnail(tempProject){
   try{
-    const stoneLayout=await engine.generate(tempProject);
+    // RS-3039: per-layer failures are ignored here (generate() already logged them); the thumbnail
+    // shows the layers that did generate.
+    const {layout:stoneLayout}=await engine.generate(tempProject);
     const canvas=document.createElement('canvas');
     canvas.width=LIBRARY_THUMB_WIDTH_PX;canvas.height=LIBRARY_THUMB_HEIGHT_PX;
     renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12,units:tempProject.units||'mm'});
@@ -6732,6 +7897,8 @@ el('settingsApply').onclick=()=>{
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
   snapToleranceMm=Math.min(5,Math.max(0.5,readLengthField('settingsSnapDistance')||SNAP_TOLERANCE_MM));
   showSnapGuides=el('settingsShowGuides').checked;
+  // RS-3040: drawLayout() is a no-op in Design, so Design's safe-area guide is refreshed here.
+  if(drawingTool.isActive)drawingTool.resize(38);
   drawLayout();
 };
 
@@ -6797,6 +7964,11 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
   setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
   setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
+  // RS-3037: unlike plate/vessel (their own project-level state objects, always present regardless
+  // of the active template), project.canvas is shared by every template -- only meaningful as
+  // "sheet width/height" while Flat Sheet is actually active, so this re-display is gated the same
+  // way syncSelectedControlsFromLayer()'s own sheet branch is.
+  if(currentObjectTemplate().id==='sheet'){setLengthField('sheetWidth',project.canvas.width);setLengthField('sheetHeight',project.canvas.height)}
   for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','monogramSizeMarginMm','drawSlotWidthMm']){
     const stashedMm=parseFloat(el(id).dataset.mmValue);
     if(Number.isFinite(stashedMm)){
@@ -6853,7 +8025,7 @@ async function applyUnitsChange(newUnits){
 el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
 el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
 
-populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneColorOptions('aiStoneColor',true);for(let i=0;i<8;i++)populateStoneColorOptions(`imgColorPick${i}`);populateStoneSizeOptions();populateMixedSizeSelectOptions();populateAiStoneSizeOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)

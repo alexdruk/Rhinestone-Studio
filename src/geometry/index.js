@@ -41,12 +41,16 @@ export {
   sampleRadialFieldFillPoints,
   sampleContourFillPoints,
   sampleContourFieldFillPoints,
+  sampleOrganicFieldFillPoints,
+  sampleEdgeFieldFillPoints,
   sampleShapeFillPoints,
   sampleFieldByMode,
   dedupeStonePoints,
+  nudgeOrDropStonePoints,
   dedupeStonesByRadius,
   dropOverlappingSizedStones,
-  findCrossGroupCollisions
+  findCrossGroupCollisions,
+  fieldLabelAt
 } from './StoneSampler.js';
 
 // MONO-015: weight-following stone size (opt-in).
@@ -66,6 +70,10 @@ export {
   ELONGATION_MIN_ISOPERIMETRIC,
   ContourFillPrecisionError
 } from './ContourRingSampler.js';
+
+export {
+  samplePoissonDiskPoints
+} from './OrganicSampler.js';
 
 export {
   groupCongruentContours,

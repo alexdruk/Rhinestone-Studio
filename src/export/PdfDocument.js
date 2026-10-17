@@ -1,5 +1,6 @@
 /**
- * PdfDocument — minimal, dependency-free, deterministic single-page vector PDF writer.
+ * PdfDocument — minimal, dependency-free, deterministic vector PDF writer. One page by default;
+ * addPage() appends more (RS-3041).
  *
  * Generic: no knowledge of Stone/StoneLayout/production sheets. Supports lines, stroked/filled
  * rectangles, stroked/filled circles (four-Bezier approximation), and left-aligned text set in the
@@ -38,11 +39,22 @@ function escapePdfText(value) {
 // Latin-1 have no representation in that encoding and are replaced with '?' rather than silently
 // corrupting the byte stream (see docs/specifications/RS-1005-ProductionSheetGenerator.md, "Out of
 // Scope" — full Unicode PDF text is an explicitly documented limitation, not a bug).
+// IMG-026F: the punctuation WinAnsiEncoding places in 0x80-0x9F (the em dash the Production Sheet
+// prints for an empty field, curly quotes, the bullet, the ellipsis and so on) maps to its
+// WinAnsi byte instead of '?'.
+const WIN_ANSI_EXTRAS = new Map([
+  [0x20ac, 0x80], [0x201a, 0x82], [0x0192, 0x83], [0x201e, 0x84], [0x2026, 0x85], [0x2020, 0x86],
+  [0x2021, 0x87], [0x02c6, 0x88], [0x2030, 0x89], [0x0160, 0x8a], [0x2039, 0x8b], [0x0152, 0x8c],
+  [0x017d, 0x8e], [0x2018, 0x91], [0x2019, 0x92], [0x201c, 0x93], [0x201d, 0x94], [0x2022, 0x95],
+  [0x2013, 0x96], [0x2014, 0x97], [0x02dc, 0x98], [0x2122, 0x99], [0x0161, 0x9a], [0x203a, 0x9b],
+  [0x0153, 0x9c], [0x017e, 0x9e], [0x0178, 0x9f]
+]);
+
 function latin1Bytes(str) {
   const bytes = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) {
     const code = str.charCodeAt(i);
-    bytes[i] = code <= 0xff ? code : 0x3f;
+    bytes[i] = code <= 0xff ? code : (WIN_ANSI_EXTRAS.get(code) ?? 0x3f);
   }
   return bytes;
 }
@@ -67,11 +79,23 @@ function assertPositiveFiniteNumber(value, name) {
 
 export class PdfDocument {
   constructor({ widthPt, heightPt } = {}) {
+    this.pages = [];
+    this.addPage({ widthPt, heightPt });
+  }
+
+  /**
+   * RS-3041: starts a new page; every draw call after this goes to it. widthPt/heightPt/ops always
+   * describe the current (last) page.
+   */
+  addPage({ widthPt, heightPt } = {}) {
     assertPositiveFiniteNumber(widthPt, 'widthPt');
     assertPositiveFiniteNumber(heightPt, 'heightPt');
+    const page = { widthPt, heightPt, ops: [] };
+    this.pages.push(page);
     this.widthPt = widthPt;
     this.heightPt = heightPt;
-    this.ops = [];
+    this.ops = page.ops;
+    return this;
   }
 
   setLineWidth(pt) {
@@ -86,6 +110,12 @@ export class PdfDocument {
 
   setFillColor([r, g, b]) {
     this.ops.push(`${n(r)} ${n(g)} ${n(b)} rg`);
+    return this;
+  }
+
+  // RS-3041: stroke dash pattern in points; setDash([]) restores a solid line.
+  setDash(dashPt = [], phasePt = 0) {
+    this.ops.push(`[${dashPt.map(n).join(' ')}] ${n(phasePt)} d`);
     return this;
   }
 
@@ -131,29 +161,38 @@ export class PdfDocument {
   }
 
   /**
-   * Serializes a single-page PDF document (Catalog, Pages, Page, content stream, standard
-   * Helvetica font — five objects total) with a correct cross-reference table, tracking byte
-   * offsets by construction instead of guessing/measuring after the fact.
+   * Serializes the document (Catalog, Pages, then a Page object and its content stream per page,
+   * then the one standard Helvetica font every page shares) with a correct cross-reference table,
+   * tracking byte offsets by construction instead of guessing/measuring after the fact. Page i
+   * (0-based) is object 3+2i and its content stream 4+2i; the font is last, at 3+2N. For one page
+   * that is exactly the pre-RS-3041 five objects, byte for byte.
    *
    * @returns {Uint8Array}
    */
   toBytes() {
-    const contentBytes = latin1Bytes(this.ops.join('\n'));
+    const pageCount = this.pages.length;
+    const fontObjectNumber = 3 + 2 * pageCount;
+    const kids = this.pages.map((_, i) => `${3 + 2 * i} 0 R`).join(' ');
 
     const objectBodies = [
       latin1Bytes('<< /Type /Catalog /Pages 2 0 R >>'),
-      latin1Bytes('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
-      latin1Bytes(
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(this.widthPt)} ${n(this.heightPt)}] ` +
-          '/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>'
-      ),
-      concatBytes([
-        latin1Bytes(`<< /Length ${contentBytes.length} >>\nstream\n`),
-        contentBytes,
-        latin1Bytes('\nendstream')
-      ]),
-      latin1Bytes('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>')
+      latin1Bytes(`<< /Type /Pages /Kids [${kids}] /Count ${pageCount} >>`)
     ];
+    this.pages.forEach((page, i) => {
+      const contentBytes = latin1Bytes(page.ops.join('\n'));
+      objectBodies.push(
+        latin1Bytes(
+          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(page.widthPt)} ${n(page.heightPt)}] ` +
+            `/Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${4 + 2 * i} 0 R >>`
+        ),
+        concatBytes([
+          latin1Bytes(`<< /Length ${contentBytes.length} >>\nstream\n`),
+          contentBytes,
+          latin1Bytes('\nendstream')
+        ])
+      );
+    });
+    objectBodies.push(latin1Bytes('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'));
 
     const chunks = [latin1Bytes('%PDF-1.4\n')];
     const objectOffsets = [];

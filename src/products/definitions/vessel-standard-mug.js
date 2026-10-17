@@ -1,4 +1,13 @@
-{
+/**
+ * Standard Mug product definition data.
+ *
+ * MAINT-007: converted from a JSON module import to a plain .js module. Chrome 103
+ * (this project's minimum supported browser, see docs/specifications/MAINT-007-BrowserBaseline.md)
+ * predates the JS import-attributes syntax used for JSON modules, so the data below -- unchanged
+ * in meaning from the original vessel-standard-mug.json -- is exported as a plain ES module default export
+ * instead.
+ */
+export default {
   "schemaVersion": 1,
   "id": "vessel-standard-mug",
   "name": "Standard Mug",
@@ -42,4 +51,4 @@
       "printableMarginMm is the combined top+bottom band (rim curvature, handle-adjacent distortion) excluded from the printable/wrap height, not a customer-facing spec."
     ]
   }
-}
+};

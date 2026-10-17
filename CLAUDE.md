@@ -184,6 +184,35 @@ Do not create parallel implementations.
 
 ------------------------------------------------------------------------
 
+# Browser baseline (MAINT-007)
+
+Minimum supported browser is Chrome 103 (the last Chrome available on macOS
+Sierra 10.12.6).
+
+Do not use:
+
+-   JSON module imports (the JS import-attributes syntax for importing a
+    `.json` file directly). Product definitions are plain `.js` modules with
+    a `default` export instead.
+-   JS or CSS features newer than Chrome 103, including Set methods such as
+    `.union()`/`.intersection()`, CSS nesting, `:has()`, and container
+    queries.
+
+`tools/test-browser-baseline.mjs` enforces most of this automatically; it
+does not cover every possible newer feature (see
+docs/specifications/MAINT-007-BrowserBaseline.md for what it deliberately
+does not check, such as Set methods and CSS nesting).
+
+------------------------------------------------------------------------
+
+# Layout service (IMG-026)
+
+CLAUDE.md says "JavaScript only". D5 makes an exception for this one
+service: Python lives only in `services/strass-layout/`. Nothing in `src/`,
+`app.js` or `server/` imports it, and the app reaches it only over HTTP.
+
+------------------------------------------------------------------------
+
 # UI Principles
 
 Preferred appearance:

@@ -40,9 +40,9 @@ function validDef(overrides = {}) {
   };
 }
 
-await test('1. the registry contains exactly mug, tumbler, bottle, plate', () => {
-  assert.deepEqual([...OBJECT_TEMPLATE_IDS].sort(), ['bottle', 'mug', 'plate', 'tumbler']);
-  assert.equal(listObjectTemplates().length, 4);
+await test('1. the registry contains exactly mug, tumbler, bottle, plate, sheet', () => {
+  assert.deepEqual([...OBJECT_TEMPLATE_IDS].sort(), ['bottle', 'mug', 'plate', 'sheet', 'tumbler']);
+  assert.equal(listObjectTemplates().length, 5);
 });
 
 await test('2. DEFAULT_OBJECT_TEMPLATE_ID is mug, and getObjectTemplate() defaults to it', () => {
@@ -63,7 +63,7 @@ await test('4. every registered template has a positive production size, a non-e
     assert.ok(t.displayName.length > 0, `${id}: displayName must be non-empty`);
     assert.ok(t.productionWidthMm > 0 && Number.isFinite(t.productionWidthMm), `${id}: productionWidthMm`);
     assert.ok(t.productionHeightMm > 0 && Number.isFinite(t.productionHeightMm), `${id}: productionHeightMm`);
-    assert.ok(['mug', 'tumbler', 'bottle', 'plate'].includes(t.preview.kind), `${id}: preview.kind`);
+    assert.ok(['mug', 'tumbler', 'bottle', 'plate', 'sheet'].includes(t.preview.kind), `${id}: preview.kind`);
   }
 });
 

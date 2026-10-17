@@ -93,6 +93,9 @@ button.icon-btn[aria-pressed="true"][data-shortcut]::after{background:var(--colo
 .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
 .color-pick-row select{flex:1}
+.ai-colour-row{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.ai-colour-row .ai-colour-name{flex:1;font-size:var(--font-size-sm)}
+.ai-colour-row select{flex:1;min-width:0}
 .color-swatch{width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);border-radius:var(--radius-sm);border:1px solid var(--color-border-strong);box-shadow:inset 0 0 0 1px #fff}
 .status-message{font-size:var(--font-size-sm);color:var(--color-success);margin-top:var(--space-2)}
 
@@ -275,6 +278,31 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .lightbox-overlay.non-modal .lightbox{pointer-events:auto}
 .lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
 .lightbox.wide{width:760px}
+/* IMG-007: Image -> Strass studio shell. A wider three-column layout (left controls / center
+   canvas / right stats) replacing the single-column .lightbox-body default -- see
+   docs/specifications/IMG-007-StudioShell.md. */
+.lightbox.studio{width:1400px;height:calc(100vh - 64px)}
+.lightbox.studio .lightbox-body{display:grid;grid-template-columns:360px minmax(0,1fr) 260px;gap:var(--space-5);overflow:hidden}
+.lightbox.studio .lightbox-body>*{min-height:0;overflow-y:auto}
+.lightbox-overlay.dock-left{justify-content:flex-start}
+#imageStudioControls details[inert]{opacity:.5}
+/* IMG-022: Redraw with AI row. button.btn sets display, so [hidden] needs its own override. */
+.image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.image-redraw-row button.btn[hidden]{display:none}
+.image-redraw-row label[hidden]{display:none}
+/* IMG-025 (D10b): the style label sits inline with its select, at the button's height. */
+.image-redraw-style{display:flex;align-items:center;gap:6px;margin:0}
+.image-redraw-style select{width:auto;height:var(--control-height-sm)}
+#imageStudioCanvasColumn{display:flex;flex-direction:column;gap:var(--space-3);height:100%}
+#imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
+.view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.view-toggle label{display:flex;align-items:center;gap:4px;cursor:pointer}
+/* IMG-023: the label sets display, so [hidden] needs its own override. */
+.view-toggle label[hidden]{display:none}
+#imageStudioStats dl{margin:0}
+#imageStudioStats dt{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:var(--space-4)}
+#imageStudioStats dt:first-child{margin-top:0}
+#imageStudioStats dd{margin:0;font-size:var(--font-size-sm);font-weight:700;word-break:break-word}
 /* S-105: every Lightbox is movable by dragging its header (src/ui/Lightbox.js). cursor:grab signals
    the affordance. touch-action:none stops the browser's own gesture handling (trackpad/touch pan
    or scroll) from intercepting the pointer sequence before the header's own pointerdown/pointermove
@@ -387,7 +415,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
     <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
-    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
+    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image</button>
     <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
     <button class="topmenu-btn" id="menuProdSheet" title="Generate a manufacturing production sheet"><span class="glyph">🖨</span>Production Sheet</button>
     <button class="topmenu-btn" id="menuShipping" title="Shipping and handling notes"><span class="glyph">📦</span>Shipping &amp; Handling</button>
@@ -466,6 +494,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <button id="distributeV" class="icon-btn" title="Distribute Vertically — spaces selected layers evenly top-to-bottom, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="1" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="6.5" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="12" width="8" height="3" rx="1" fill="currentColor"/></svg></button>
           </div>
           <select id="snapEnabled" title="Snap while dragging: canvas center/edges, the printable safe area, and other layers (does not affect Align/Distribute, keyboard nudge, or the configurable snap distance below)"><option value="on" selected>Snap: On</option><option value="off">Snap: Off</option></select>
+          <select id="canvasBackground" title="Design canvas background: white, or the product colour so the gaps between stones look as they will on the piece (view only, not saved)"><option value="white" selected>Background: White</option><option value="product">Background: Product</option></select>
         </div>
       </div>
 
@@ -652,6 +681,15 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <input id="paintGapMm" type="number" min="0" step="0.1" data-mm-step="0.1" value="0.3" style="display:none;width:70px">
           <label for="paintColor" id="paintColorField" style="display:none;margin:0" title="Paint stone color">Color</label>
           <select id="paintColor" style="display:none"></select>
+          <!-- IMG-026 (D): the stone selection panel for an ai-layout image layer in Design, shown
+               while stones are selected (updateDrawToolButtons()). #aiStoneColor is populated by
+               populateStoneColorOptions(); #aiStoneSize lists listAllStoneSizes() (SS4-SS30). -->
+          <span id="aiStoneCount" style="display:none;margin:0"></span>
+          <label for="aiStoneColor" id="aiStoneColorField" style="display:none;margin:0" title="Colour of the selected stones">Colour</label>
+          <select id="aiStoneColor" style="display:none"></select>
+          <label for="aiStoneSize" id="aiStoneSizeField" style="display:none;margin:0" title="Size of the selected stones">Size</label>
+          <select id="aiStoneSize" style="display:none"></select>
+          <button id="aiStoneDelete" class="btn sm" type="button" style="display:none" title="Delete the selected stones">Delete stones</button>
           <!-- RS-3011 Step 3a: relocation target for #sharedStoneFields (stoneSize/gap/stoneColor) --
                same relocateFieldGroups() mechanism the Lightboxes already use (see FIELD_GROUPS.stone
                in app.js), never a second copy of those fields/ids. Populated only while Design is
@@ -1000,7 +1038,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="lightbox-tab-panel" id="shapesPanelTemplates" hidden>
         <div class="field-section">
           <h3>Object type</h3>
-          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option><option value="plate">Round Dinner Plate</option></select>
+          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option><option value="plate">Round Dinner Plate</option><option value="sheet">Flat Sheet</option></select>
           <p class="hint" id="objectTemplateDetail">Production 210×90mm · Safe area inset 14/10mm · Default wrap: Front only</p>
         </div>
         <p class="hint">Mug, Straight Tumbler, Bottle, and Round Dinner Plate are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object. Wrap mode moved to the Object Preview toolbar (Dual Workspace / Object Preview tab) — it only affects that view.</p>
@@ -1008,7 +1046,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              updateObjectTemplateDetail() in app.js). Outer/inner diameter, overall height, and
              center depth are the plate's own user-adjustable mm parameters (project.plate); rim
              width and weight are read-only/derived. Ranges (min/max/step) mirror
-             src/products/definitions/plate-round-dinner.json's dimensions -- the JSON stays the
+             src/products/definitions/plate-round-dinner.js's dimensions -- the definition module stays the
              single source of truth; these attributes are read from it, not invented here. -->
         <div class="field-section" id="plateFields" style="display:none">
           <h3>Plate dimensions</h3>
@@ -1030,13 +1068,27 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint" id="plateDetail">Rim width 37.5mm (derived) · Approx. weight 800 g (product information, read-only)</p>
         </div>
+        <!-- RS-3037: shown only when Object type is Flat Sheet (toggled by
+             updateObjectTemplateDetail() in app.js). Width/Height are the sheet's own
+             user-adjustable mm parameters, written directly to project.canvas (Flat Sheet has no
+             project.sheet object -- see docs/specifications/RS-3037-FlatSheet.md, "Schema
+             decision"). Range mirrors src/products/SheetProductDefinition.js's SHEET_MIN_MM/
+             SHEET_MAX_MM -- that module stays the single source of truth; these attributes are
+             read from it, not invented here. -->
+        <div class="field-section" id="sheetFields" style="display:none">
+          <h3>Sheet dimensions</h3>
+          <div class="field-row">
+            <div class="field"><label for="sheetWidth" data-unit-label="Width">Width (mm)</label><input id="sheetWidth" type="number" min="20" max="500" step="0.5" data-mm-step="0.5" value="150"></div>
+            <div class="field"><label for="sheetHeight" data-unit-label="Height">Height (mm)</label><input id="sheetHeight" type="number" min="20" max="500" step="0.5" data-mm-step="0.5" value="150"></div>
+          </div>
+        </div>
         <!-- RS-2010: shown only when Object type is Mug/Straight Tumbler/Bottle (toggled by
              updateObjectTemplateDetail() in app.js). Body Diameter/Body Height/Top Diameter are the
              vessel's own user-adjustable mm parameters (project.vessel); Top Diameter is hidden for
              the straight tumbler (forced equal to Body Diameter -- no independent taper). Printable
              height and circumference are read-only/derived. Ranges (min/max/step) mirror
-             src/products/definitions/vessel-standard-*.json's dimensions and are re-applied per
-             product by updateObjectTemplateDetail() -- the JSON stays the single source of truth. -->
+             src/products/definitions/vessel-standard-*.js's dimensions and are re-applied per
+             product by updateObjectTemplateDetail() -- the definition module stays the single source of truth. -->
         <div class="field-section" id="vesselFields" style="display:none">
           <h3>Vessel dimensions</h3>
           <div class="field-row">
@@ -1114,46 +1166,48 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- IMAGE TRACE ---------- -->
-<div class="lightbox-overlay non-modal" id="lightboxImageTrace">
-  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
-    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image Trace</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+<div class="lightbox-overlay non-modal dock-left" id="lightboxImageTrace">
+  <div class="lightbox studio" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image → Strass</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
-      <div id="imageTraceNewSection">
-        <div class="field-section">
-          <h3>Source image</h3>
+      <div id="imageStudioControls">
+        <details class="advanced-section" id="imageStudioGroupSource" open>
+          <summary>Source</summary>
           <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
           <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
-        </div>
-        <div id="imageImportPanel" style="display:none">
-          <div class="field-section">
-            <h3>Preview</h3>
-            <div class="preview-box"><canvas id="imageImportPreviewCanvas" width="1" height="1"></canvas><div id="imageImportStoneCount" class="stone-count">— stones (approx.)</div></div>
+          <p class="hint" id="imageStudioFileName"></p>
+          <button id="imageStudioRemove" class="btn sm">Remove image</button>
+          <!-- IMG-022: Redraw with AI. #imageRedraw is shown only when a redraw provider is available
+               (src/redraw/index.js); Use original only when the image layer has a redraw record.
+               Visibility is set by syncImageRedrawControls() in app.js. -->
+          <div class="image-redraw-row">
+            <label id="imageRedrawStyleField" class="image-redraw-style" hidden>Redraw style <select id="imageRedrawStyle"><option value="stones" selected>Stone picture</option><option value="flat">Flat artwork</option></select></label>
+            <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn by AI in the chosen style">Redraw with AI</button>
+            <button id="imageRedrawCancel" class="btn sm" hidden>Cancel</button>
+            <button id="imageRedrawUseOriginal" class="btn sm" hidden title="Go back to the image as it was before the redraw">Use original</button>
           </div>
-          <div class="field-section">
-            <h3>Trace parameters</h3>
-            <div class="field"><label for="imgPreviewThreshold">Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128"></div>
-            <div class="field-row">
-              <div class="field"><label for="imgPreviewInvert">Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
-              <div class="field"><label for="imgPreviewBlur">Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="imgPreviewMaxWidth">Maximum width (px)</label><input id="imgPreviewMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
-              <div class="field"><label for="imgPreviewMaxHeight">Maximum height (px)</label><input id="imgPreviewMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
-            </div>
-          </div>
-          <footer class="lightbox-footer" style="margin:0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));">
-            <button class="btn" id="imageImportCancel">Cancel</button>
-            <button class="btn primary" id="imageImportCommit">Import</button>
-          </footer>
-        </div>
-      </div>
-      <div id="imageTraceEditSection" style="display:none">
-        <div class="field-section">
-          <h3>Edit selected image layer</h3>
+          <p class="hint" id="imageRedrawStatus" aria-live="polite"></p>
+          <!-- IMG-023: "Details: <request ID>" under a declined redraw. -->
+          <p class="hint" id="imageRedrawStatusDetail"></p>
+          <!-- RS-3037: shown only while Object type is not Flat Sheet (toggled by
+               renderImageStudio()/updateObjectTemplateDetail() in app.js). Reuses the #objectType
+               change handler itself (dispatches a real change event) rather than duplicating its
+               reset logic. -->
+          <button id="imageStudioSwitchToSheet" class="btn sm">Switch to Flat Sheet</button>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupPosition" open>
+          <summary>Position &amp; size</summary>
+          <div id="imageTracePositionSlot" class="field-slot"></div>
+        </details>
+        <div id="legacyImageControls">
+        <details class="advanced-section" id="imageStudioGroupTrace" open>
+          <summary>Trace</summary>
           <div id="imageControls">
+            <div class="field"><label for="imgMaskMode" title="Which pixels become the traced silhouette. Subject finds the photographed object itself; Threshold keeps the pre-existing dark-pixel behavior (best for logos and black text on white). Subject route: the Threshold slider below has no effect on the mask. Whole image uses every pixel, for a full-bleed image with no background; in Whole image mode neither the Threshold slider nor Invert has any effect.">Mask</label><select id="imgMaskMode"><option value="threshold" selected>Threshold - keeps dark pixels</option><option value="subject">Subject - finds the photographed object</option><option value="whole">Whole image - no background</option></select></div>
             <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
-            <div class="field-row">
+            <div class="field-row-3">
               <div class="field"><label for="imgInvert">Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgTransparent" title="How pixels with a transparent source background are treated.">Transparency</label><select id="imgTransparent"><option value="white" selected>Flatten to white</option><option value="ignore">Ignore transparent areas</option></select></div>
               <div class="field"><label for="imgBlurRadius">Blur radius (px)</label><input id="imgBlurRadius" type="number" min="0" max="50" step="1" value="0"></div>
             </div>
             <div class="field-row">
@@ -1161,26 +1215,90 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
             </div>
           </div>
-          <div class="field-section">
-            <h3>Fill Style</h3>
-            <select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge.">
-              <option value="fill" selected>Grid Fill - even rows and columns</option>
-              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
-              <option value="radial">Radial Fill - rings out from the center</option>
-              <option value="contour">Contour Fill - rings that follow the traced shape inward</option>
-            </select>
-          </div>
-          <div class="field-section">
-            <h3>Position &amp; size</h3>
-            <div id="imageTracePositionSlot" class="field-slot"></div>
-          </div>
-          <div class="field-section">
-            <h3>Stones</h3>
-            <div id="imageTraceStoneSlot" class="field-slot"></div>
-            <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
-          </div>
-          <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option><option value="organic">Organic - hand-set, non-grid look</option><option value="edge">Edge - dense along edges, thinner inside</option><option value="line-design">Line Design - traced outline and lines, filled interior</option><option value="ai-stones">AI stones - reads the stones in an AI redraw</option><option value="ai-layout" disabled>AI layout - stones placed from the AI redraw</option></select></div>
+          <!-- IMG-023: the size of an AI stones layer, as a share of how large the AI drew it (1 = one AI
+               stone per real stone). Enabled only while Fill style is AI stones (app.js renderImageStudio()). -->
+          <div class="field" id="imgAiStoneShrinkField"><label for="imgAiStoneShrink">AI stone size</label><select id="imgAiStoneShrink" title="Only used when Fill style is set to AI stones."><option value="1" selected>100% (as drawn)</option><option value="0.9">90%</option><option value="0.8">80%</option></select><p class="hint" id="imgAiStoneShrinkHint" hidden></p></div>
+          <!-- IMG-025: clean-up of the finished stones; enabled per D8 by app.js renderImageStudio(). -->
+          <label class="checkbox-row" title="Fills small holes, fixes single odd-coloured stones and removes stray crumbs"><input type="checkbox" id="imgCleanup"> Clean up stones</label>
+          <label class="checkbox-row" title="Turns the outer edge of the design into one row of Jet stones"><input type="checkbox" id="imgJetOutline"> Jet outline</label>
+          <p class="hint" id="imgCleanupHint" hidden>Clean-up works with Staggered Fill (one stone size) and AI stones</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupStones" open>
+          <summary>Stones</summary>
+          <div id="imageTraceStoneSlot" class="field-slot"></div>
+          <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupColors" open>
+          <summary>Colours</summary>
+          <div class="field"><label for="imgColorCount">Number of colours <span id="imgColorCountAuto" class="hint" style="display:none"></span></label><select id="imgColorCount"><option value="auto" selected>Auto (best fit)</option><option value="1">1 (single colour)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option></select></div>
+          <div class="field"><label for="imgVividness">Colour vividness</label><select id="imgVividness"><option value="1">Natural</option><option value="1.2">Rich</option><option value="1.4" selected>Vivid</option><option value="1.6">Bold</option></select><p class="hint">Pushes colours toward brighter stones. No effect on black-and-white images or single-colour layers.</p></div>
+          <div class="field" id="imgColorGroup0" hidden><label>Colour 1 <span id="imgColorShare0" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch0" class="color-swatch" title="Detected colour"></span><select id="imgColorPick0"></select></div></div>
+          <div class="field" id="imgColorGroup1" hidden><label>Colour 2 <span id="imgColorShare1" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch1" class="color-swatch" title="Detected colour"></span><select id="imgColorPick1"></select></div></div>
+          <div class="field" id="imgColorGroup2" hidden><label>Colour 3 <span id="imgColorShare2" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch2" class="color-swatch" title="Detected colour"></span><select id="imgColorPick2"></select></div></div>
+          <div class="field" id="imgColorGroup3" hidden><label>Colour 4 <span id="imgColorShare3" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch3" class="color-swatch" title="Detected colour"></span><select id="imgColorPick3"></select></div></div>
+          <div class="field" id="imgColorGroup4" hidden><label>Colour 5 <span id="imgColorShare4" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch4" class="color-swatch" title="Detected colour"></span><select id="imgColorPick4"></select></div></div>
+          <div class="field" id="imgColorGroup5" hidden><label>Colour 6 <span id="imgColorShare5" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch5" class="color-swatch" title="Detected colour"></span><select id="imgColorPick5"></select></div></div>
+          <div class="field" id="imgColorGroup6" hidden><label>Colour 7 <span id="imgColorShare6" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch6" class="color-swatch" title="Detected colour"></span><select id="imgColorPick6"></select></div></div>
+          <div class="field" id="imgColorGroup7" hidden><label>Colour 8 <span id="imgColorShare7" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch7" class="color-swatch" title="Detected colour"></span><select id="imgColorPick7"></select></div></div>
+          <button id="imgColorReset" class="btn sm">Reset colour overrides</button>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupOrganic" open>
+          <summary>Organic</summary>
+          <p class="hint">Only used when Fill style (above) is set to Organic.</p>
+          <div class="field"><label for="imgSeed">Seed</label><input id="imgSeed" type="number" min="0" step="1" value="1"></div>
+          <button id="imgShuffle" class="btn sm">Shuffle</button>
+          <div class="field"><label for="imgSpread">Spread <span id="imgSpreadValue" class="hint"></span></label><input id="imgSpread" type="range" min="1" max="2.5" step="0.05" value="1" title="How far apart Organic placement spaces stones. 1 = default density; higher values thin the placement out."></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupEdges">
+          <summary>Edges</summary>
+          <p class="hint">Only used when Fill style is Edge.</p>
+          <div class="field"><label for="imgEdgeWidth" data-unit-label="Edge band">Edge band (mm)</label><input id="imgEdgeWidth" type="number" min="0.5" max="30" step="0.5" data-mm-step="0.5" value="6"></div>
+          <div class="field"><label for="imgEdgeThinning">Thinning <span id="imgEdgeThinningValue" class="hint"></span></label><input id="imgEdgeThinning" type="range" min="0" max="3" step="0.1" value="1" title="How much thinner the interior gets than the edge band. 0 = same as Organic."></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupCheckFix">
+          <summary>Check &amp; fix</summary>
+          <p class="hint" id="imageStudioStatCheckFix">Only applies to Contour Fill and Radial Fill.</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupBrightness">
+          <summary>Brightness</summary>
+          <div class="field"><label for="imgBrightnessSteps">Brightness steps</label><select id="imgBrightnessSteps" title="Maps each point's measured brightness to a stone size -- darker areas get larger stones, brighter areas smaller. Off = every stone is this layer's stone size."><option value="0">Off</option></select></div>
+          <div class="field"><label for="imgBrightnessThinning">Thinning <span id="imgBrightnessThinningValue" class="hint"></span></label><input id="imgBrightnessThinning" type="range" min="0" max="3" step="0.1" value="0" title="Thins Organic/Edge placement density in brighter areas. 0 = no thinning."></div>
+        </details>
         </div>
+        <details class="advanced-section" id="imageStudioGroupAiColours" open>
+          <summary>Colours used</summary>
+          <div id="aiLayoutColourRows"></div>
+          <button id="aiLayoutColourReset" class="btn sm">Reset colours</button>
+        </details>
+        <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+      </div>
+      <div id="imageStudioCanvasColumn">
+        <div id="imageStudioView" class="view-toggle" role="radiogroup" aria-label="Canvas view">
+          <label><input type="radio" name="imageStudioView" value="source">Source</label>
+          <!-- IMG-023: shown only for a redrawn layer (app.js renderImageStudio()). -->
+          <label id="imageStudioViewAi" hidden><input type="radio" name="imageStudioView" value="ai">AI image</label>
+          <label id="imageStudioViewMask"><input type="radio" name="imageStudioView" value="mask">Mask</label>
+          <label id="imageStudioViewColors"><input type="radio" name="imageStudioView" value="colors">Colours</label>
+          <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
+          <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
+        </div>
+        <canvas id="imageStudioCanvas"></canvas>
+        <p class="hint" id="imageStudioEmpty">Choose an image to begin.</p>
+      </div>
+      <div id="imageStudioStats">
+        <dl>
+          <dt>Image</dt><dd id="imageStudioStatImage">—</dd>
+          <dt>Stones</dt><dd id="imageStudioStatCount">—</dd>
+          <dt>Sizes</dt><dd id="imageStudioStatSizes">—</dd>
+          <dt>Colours</dt><dd id="imageStudioStatColors">—</dd>
+          <dt>Bounding box</dt><dd id="imageStudioStatBox">—</dd>
+          <dt id="imageStudioStatMinGapLabel" hidden>Min gap</dt><dd id="imageStudioStatMinGap" hidden>—</dd>
+          <dt id="imageStudioStatViolationsLabel" hidden>Gap violations</dt><dd id="imageStudioStatViolations" hidden>—</dd>
+          <dt id="imageStudioStatCoverageLabel" hidden>Coverage</dt><dd id="imageStudioStatCoverage" hidden>—</dd>
+          <dt id="imageStudioStatScaleLabel" hidden>Enlarged</dt><dd id="imageStudioStatScale" hidden>—</dd>
+        </dl>
+        <p class="hint" id="imageStudioStatCleanup" hidden></p>
       </div>
     </div>
     <footer class="lightbox-footer">
@@ -1391,6 +1509,24 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   </div>
 </div>
 
+<!-- IMG-022: consent before the first redraw upload of a page session. Non-primary, so it stacks
+     over Image -> Strass instead of closing it. Filled in by askRedrawConsent() in app.js. -->
+<div class="lightbox-overlay" id="lightboxRedrawConsent">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxRedrawConsentTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxRedrawConsentTitle">Redraw with AI</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p>This image will be sent to <strong id="redrawConsentRecipient"></strong> for processing.</p>
+      <p class="hint" id="redrawConsentCost"></p>
+      <div class="field" id="redrawAccessCodeField"><label for="redrawAccessCode">Access code</label><input id="redrawAccessCode" type="password" autocomplete="off"></div>
+      <p class="hint" id="redrawConsentError"></p>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Cancel</button>
+      <button class="btn primary" id="redrawConsentContinue">Continue</button>
+    </footer>
+  </div>
+</div>
+
 <!-- ============================================================================
      Shared, relocated field groups (single canonical DOM node per field; UI-001
      moves these between an inspector "home" slot and the relevant open Lightbox's
@@ -1434,6 +1570,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's
        existing "disable the control + explain why right below it" convention. -->
   <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
+  <!-- IMG-010: Line Design ignores Stone size and Mixed Stone Size entirely (fixed 2.0mm chains,
+       2.8mm fills, decision 2) -- mirrors #gapFixedHint's own "disable the control + explain why
+       right below it" convention. Toggled in updateLineDesignSizeCapabilityUI(). -->
+  <p class="hint" id="lineDesignFixedSizeHint" style="display:none">Line design uses fixed 2.0mm chains and 2.8mm fills. Stone size and Mixed Stone Size do not apply. It also chooses its own colours from the full catalog, so the colour count and the Mask and Trace controls do not apply -- but colour overrides do.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
   <!-- RS-3013 Step 5: region-only Fill Style, shown instead of the whole-shape #shapeFillMode
        (5 options) while a region is selected -- deliberately scoped to just fill/outline for this
@@ -1463,7 +1603,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 <div id="sharedMixedSizeFields">
   <div class="field-section">
     <h3>Mixed Stone Size</h3>
-    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach. Weight-following: outline text only — larger stones on wide parts of a stroke, smaller on hairlines."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option><option value="weight">Weight-following</option></select></div>
+    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach. Weight-following: outline text only — larger stones on wide parts of a stroke, smaller on hairlines."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option><option value="weight">Weight-following</option><option value="brightness">Brightness-following</option></select></div>
     <!-- MONO-015: weight-following stone size. Shown only when Generation mode is "Weight-following"
          (which app.js allows selecting only for an outline-mode text layer). #weightSteps is a
          graduated control: Off, or one/two catalog sizes up from this layer's stone size. Its

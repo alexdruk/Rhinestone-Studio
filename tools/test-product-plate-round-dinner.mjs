@@ -357,7 +357,9 @@ await test('20. app.js: the plate fields are history-tracked, written into proje
   assert.match(appJs, /if\(currentObjectTemplate\(\)\.preview\.kind==='plate'\)\{\s*project\.plate=normalizePlateParams\(/);
   assert.match(appJs, /el\('plateFields'\)\.style\.display=isPlate\?'block':'none'/);
   assert.match(appJs, /el\('plateColorField'\)\.style\.display=isPlate\?'flex':'none'/);
-  assert.match(appJs, /el\('cupColorField'\)\.style\.display=isPlate\?'none':'flex'/);
+  // RS-3037: #cupColorField is now also hidden for Flat Sheet (no Object Preview to color either) --
+  // still hidden for plate either way.
+  assert.match(appJs, /el\('cupColorField'\)\.style\.display=\(isPlate\|\|isSheet\)\?'none':'flex'/);
 });
 
 await test('21. app.js: switching #objectType to plate reseeds project.plate/cupColor from the JSON defaults, exactly like project.canvas/wrap already reset for every template', () => {
@@ -368,7 +370,10 @@ await test('21. app.js: switching #objectType to plate reseeds project.plate/cup
 
 await test('22. app.js: the plate draws its own circular/annular design-target guide instead of the cylindrical Front View Frame, and drawCup() forwards plateParams to the 3D preview', () => {
   assert.match(appJs, /function drawPlateDesignTargetGuide\(/);
-  assert.match(appJs, /if\(isPlate\)\{drawPlateDesignTargetGuide\(ctx,s,ox,oy,dpr\)\}else\{drawFrontViewFrame\(/);
+  // RS-3037: drawLayout() is now a three-way split -- plate keeps its own guide; Flat Sheet (a new
+  // else-if branch) draws neither the plate guide nor the Front View Frame; every other template
+  // still falls into the final else and draws the Front View Frame.
+  assert.match(appJs, /if\(isPlate\)\{drawPlateDesignTargetGuide\(ctx,s,ox,oy,dpr\)\}else if\(isSheet\)\{[\s\S]*?\}else\{drawFrontViewFrame\(/);
   // RS-2010: drawCup() now also forwards vesselParams:project.vessel alongside plateParams.
   // RS-2013 step 7: the instancedStones dev toggle forwarded here (step 6/6c) was removed once the
   // instanced path became the sole renderer -- plateParams/vesselParams forwarding itself is unchanged.
@@ -376,12 +381,15 @@ await test('22. app.js: the plate draws its own circular/annular design-target g
 });
 
 await test('23. app.js: isPointerOnFrontViewFrame()/isTextTooLongForObject() both opt the plate out of the cylindrical wrap-around concepts that do not apply to a flat disc', () => {
+  // RS-3037: both checks now opt out via the shared isFlatObjectTemplate() predicate (true for
+  // plate AND sheet) instead of a plate-only literal check -- still covers plate.
   const frameFn = appJs.match(/function isPointerOnFrontViewFrame\(mm\)\{[\s\S]*?\n\}/);
   assert.ok(frameFn);
-  assert.match(frameFn[0], /if\(currentObjectTemplate\(\)\.preview\.kind==='plate'\)return false;/);
+  assert.match(frameFn[0], /if\(isFlatObjectTemplate\(currentObjectTemplate\(\)\)\)return false;/);
   const tooLongFn = appJs.match(/function isTextTooLongForObject\(l\)\{[\s\S]*?\n\}/);
   assert.ok(tooLongFn);
-  assert.match(tooLongFn[0], /if\(currentObjectTemplate\(\)\.preview\.kind==='plate'\)return false;/);
+  assert.match(tooLongFn[0], /if\(isFlatObjectTemplate\(currentObjectTemplate\(\)\)\)return false;/);
+  assert.match(appJs, /function isFlatObjectTemplate\(t\)\{return t\.preview\.kind==='plate'\|\|t\.preview\.kind==='sheet'\}/);
 });
 
 // --- 7. UX corrections: Plate-Specific Workflow (Wrap Mode hidden for the plate) -------------------
@@ -393,7 +401,8 @@ await test('24. index.html wraps the Wrap Mode control in a #wrapField toolbar-g
 
 await test('25. updateObjectTemplateDetail() hides #wrapField whenever the plate template is active, shows it otherwise', () => {
   const fn = extractBlock(appJs, /function updateObjectTemplateDetail\(\)\{[\s\S]*?\n\}/, 'updateObjectTemplateDetail()');
-  assert.match(fn, /el\('wrapField'\)\.style\.display=isPlate\?'none':'flex'/, 'expected #wrapField to be toggled exactly like the other plate-only field groups, keyed off isPlate');
+  // RS-3037: #wrapField is now also hidden for Flat Sheet -- still hidden for plate either way.
+  assert.match(fn, /el\('wrapField'\)\.style\.display=\(isPlate\|\|isSheet\)\?'none':'flex'/, 'expected #wrapField to be toggled exactly like the other plate-only field groups, keyed off isPlate');
 });
 
 await test('26. the plate\'s Design Target select still exposes exactly Center Well / Rim Band / Full Top Surface, nothing else', () => {

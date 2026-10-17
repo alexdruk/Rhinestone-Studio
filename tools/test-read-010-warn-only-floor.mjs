@@ -22,6 +22,7 @@ import { formatLengthDisplay, unitSuffix, mmToDisplayValue, displayValueToMm } f
 import { FontManager } from '../src/fonts/index.js';
 import { strokeNarrowerThanOneStone, INTERIOR_FILL_MODES } from '../src/text/index.js';
 import { MIN_HEIGHT_TO_STONE_RATIO } from '../src/geometry/TextAutoFit.js';
+import { countStonesOutsideProductionArea } from '../src/export/ProductionSheetExporter.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -155,15 +156,21 @@ await test('4. authored Production Font layers are excluded (inherited from the 
 // layerLabel() on layers textLayersBelowReadableMinimum() already filtered to text, so merely
 // including a non-text layer in `layers` would never actually reach layerLabel()'s non-text
 // SHAPE_DISPLAY_LABELS fallback branch through that path alone.
-function runProdSheetValidation(layers, { units = 'mm', authoredFontIds = ['rs-block', 'rs-modern'] } = {}) {
+// RS-3038: updateProdSheetReadabilityValidation() now also reads the module-scope `layout` and
+// calls countStonesOutsideProductionArea() -- both injected here as free variables, same as every
+// other app.js global this harness already stubs. `layout` defaults to null (the same "nothing
+// generated yet" state real app.js starts in), which short-circuits the outside-area branch
+// entirely, so these pre-existing readability-only tests stay unaffected by RS-3038's addition; the
+// outside-area behavior itself is covered by tools/test-rs-3038-prod-sheet-messages.mjs.
+function runProdSheetValidation(layers, { units = 'mm', authoredFontIds = ['rs-block', 'rs-modern'], layout = null, canvas = { width: 200, height: 90 } } = {}) {
   const validation = { textContent: '', classList: makeClassList() };
   const el = (id) => (id === 'prodSheetValidation' ? validation : { textContent: '', classList: makeClassList() });
-  const project = { layers, units };
+  const project = { layers, units, canvas };
   const factory = new Function(
-    'el', 'project', 'isAuthoredStoneFontId', 'MIN_HEIGHT_TO_STONE_RATIO', 'formatLengthDisplay', 'unitSuffix',
+    'el', 'project', 'isAuthoredStoneFontId', 'MIN_HEIGHT_TO_STONE_RATIO', 'formatLengthDisplay', 'unitSuffix', 'layout', 'countStonesOutsideProductionArea',
     `${shapeDisplayLabelsSrc}\n${heightPredicateSrc}\n${projectPredicateSrc}\n${layerLabelSrc}\n${prodSheetValidationSrc}\nreturn{updateProdSheetReadabilityValidation,layerLabel};`
   );
-  const { updateProdSheetReadabilityValidation, layerLabel } = factory(el, project, (id) => authoredFontIds.includes(id), MIN_HEIGHT_TO_STONE_RATIO, formatLengthDisplay, unitSuffix);
+  const { updateProdSheetReadabilityValidation, layerLabel } = factory(el, project, (id) => authoredFontIds.includes(id), MIN_HEIGHT_TO_STONE_RATIO, formatLengthDisplay, unitSuffix, layout, countStonesOutsideProductionArea);
   updateProdSheetReadabilityValidation();
   return { validation, layerLabel };
 }

@@ -19,19 +19,47 @@ export {
 } from './Invert.js';
 
 export {
+  extractAlphaChannel,
+  toCoverageMask,
+  ALPHA_COVERAGE_THRESHOLD
+} from './Alpha.js';
+
+export {
   blurMask
 } from './Blur.js';
+
+export {
+  edgeChannel
+} from './Edge.js';
 
 export {
   resizeField
 } from './Resize.js';
 
 export {
-  prepareImageField
+  prepareImageField,
+  TRANSPARENT_MODES,
+  DEFAULT_TRANSPARENT_MODE
 } from './ImageFieldPipeline.js';
 
 export {
-  maskFieldToRgba
+  quantizeColors
+} from './ColorQuantize.js';
+
+export {
+  chooseAutoColorCount,
+  prepareAutoColorField
+} from './AutoColourCount.js';
+
+export {
+  computeSubjectMask,
+  DEFAULT_SUBJECT_TOLERANCE_DE,
+  SUBJECT_ALPHA_PRESENCE_FRACTION
+} from './SubjectMask.js';
+
+export {
+  maskFieldToRgba,
+  labelsFieldToRgba
 } from './ImagePreviewRender.js';
 
 export {
@@ -42,3 +70,8 @@ export {
   readFileAsDataUrl,
   decodeDataUrlToBuffer
 } from './ImageDecoder.js';
+
+// IMG-023: the stones an AI drew in a rhinestone picture (AI stones fill mode).
+export {
+  detectAiStones
+} from './AiStoneDetect.js';

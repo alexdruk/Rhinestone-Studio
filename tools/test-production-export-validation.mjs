@@ -214,7 +214,12 @@ await test('13. app.js defines and wires a Project JSON import path with validat
 
 await test('14. every export button handler guards on layout readiness and is wrapped in try/catch', () => {
   for (const id of ['exportLayout', 'exportDXF', 'exportSVG', 'exportPNG', 'exportCup', 'exportCombined']) {
-    const re = new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{if\\(!layout\\)\\{[^}]*return\\}try\\{`);
+    // RS-3037 follow-up: #exportCup/#exportCombined gained a leading Flat-Sheet guard (checked
+    // first, before the pre-existing !layout guard) -- allow it optionally for those two ids only.
+    const flatSheetGuard = (id === 'exportCup' || id === 'exportCombined')
+      ? `if\\(currentObjectTemplate\\(\\)\\.id==='sheet'\\)\\{[^}]*return\\}`
+      : '';
+    const re = new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{${flatSheetGuard}if\\(!layout\\)\\{[^}]*return\\}try\\{`);
     assert.match(appJs, re, `expected #${id} handler to guard on !layout before a try block`);
   }
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{/, 'expected #exportProject handler to be wrapped in try/catch');

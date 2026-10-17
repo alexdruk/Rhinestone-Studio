@@ -1,0 +1,14 @@
+csbdeep==0.8.2
+dlib-bin==19.24.6
+fastapi==0.142.2
+httpx==0.28.1
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+pillow==12.3.0
+python-multipart==0.0.32
+scikit-image==0.26.0
+scikit-learn==1.9.1
+scipy==1.17.1
+stardist==0.9.2
+tensorflow==2.16.2
+uvicorn==0.54.0

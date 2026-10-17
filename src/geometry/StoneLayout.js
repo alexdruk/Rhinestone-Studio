@@ -35,8 +35,20 @@ export class StoneLayout {
    *   computeFrozenBoxTransform()'s own trap describes. Set on EVERY text layout, edited or not
    *   (the centring fix needs it on unedited layers too, where it is identical to getBoundingBox());
    *   null for every non-text layout and every layout produced before this field existed.
+   * @param {{violationsFound: number, repaired: number, dropped: number}|null} [params.checkFixStats]
+   *   IMG-005: same-layer spacing repair accounting for a Contour/Radial image layout's base stones
+   *   -- see nudgeOrDropStonePoints() (StoneSampler.js). Additive and optional, following the exact
+   *   outlineStats precedent above: null/absent for every non-Contour/Radial image layout and every
+   *   layout produced before this field existed.
+   * @param {{filled: number, recoloured: number, removed: number, outlined: number}|{skipped: string}|null} [params.cleanupStats]
+   *   IMG-025: what the stone clean-up pass changed on a Staggered / AI stones image layout (see
+   *   StoneCleanup.js). Same additive precedent as checkFixStats: null/absent whenever clean-up did
+   *   not run, and for every layout produced before this field existed.
+   * @param {{stones: number, violations: number, minGapMm: (number|null), k: number}|null} [params.aiLayoutStats]
+   *   IMG-026: what an ai-layout image layout placed (see GeometryEngine._generateAiLayoutStones()).
+   *   Same additive precedent: null/absent for every other layout.
    */
-  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null } = {}) {
+  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null, cleanupStats = null, aiLayoutStats = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {
       throw new TypeError('StoneLayout requires a non-empty layerId.');
     }
@@ -46,6 +58,9 @@ export class StoneLayout {
     this.stones = stones.map((stone) => (stone instanceof Stone ? stone : Stone.fromJSON(stone)));
     this.outlineStats = outlineStats;
     this.baseBoundingBoxMm = baseBoundingBoxMm;
+    this.checkFixStats = checkFixStats;
+    this.cleanupStats = cleanupStats;
+    this.aiLayoutStats = aiLayoutStats;
   }
 
   get count() {
@@ -96,6 +111,15 @@ export class StoneLayout {
     if (this.outlineStats) {
       json.outlineStats = { ...this.outlineStats };
     }
+    if (this.checkFixStats) {
+      json.checkFixStats = { ...this.checkFixStats };
+    }
+    if (this.cleanupStats) {
+      json.cleanupStats = { ...this.cleanupStats };
+    }
+    if (this.aiLayoutStats) {
+      json.aiLayoutStats = { ...this.aiLayoutStats };
+    }
     if (this.baseBoundingBoxMm) {
       const b = this.baseBoundingBoxMm;
       json.baseBoundingBoxMm = {
@@ -119,7 +143,10 @@ export class StoneLayout {
       sourceMode: value.sourceMode ?? null,
       stones: value.stones ?? [],
       outlineStats: value.outlineStats ?? null,
-      baseBoundingBoxMm: value.baseBoundingBoxMm ?? null
+      baseBoundingBoxMm: value.baseBoundingBoxMm ?? null,
+      checkFixStats: value.checkFixStats ?? null,
+      cleanupStats: value.cleanupStats ?? null,
+      aiLayoutStats: value.aiLayoutStats ?? null
     });
   }
 }
@@ -162,7 +189,9 @@ export function findOverlappingStonePairs(stones) {
 export function hasAnyOverlappingStonePair(stones) {
   if (stones.length < 2) return false;
 
-  const cellSizeMm = Math.max(...stones.map((stone) => stone.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const stone of stones) cellSizeMm = Math.max(cellSizeMm, stone.sizeMm);
   const buckets = new Map();
   for (const stone of stones) {
     const gx = Math.floor(stone.xMm / cellSizeMm);
@@ -227,7 +256,9 @@ export function measureStoneCrowding(stones, { gapMm } = {}) {
     return { count, minRimGapMm: null, medianRimGapMm: null, fractionBelowHalfGap: 0 };
   }
 
-  const cellSizeMm = Math.max(...stones.map((stone) => stone.sizeMm));
+  // Folded one-by-one, not spread: see selectNonOverlappingSizedStones() in MixedSizeGenerator.js (RS-3039).
+  let cellSizeMm = -Infinity;
+  for (const stone of stones) cellSizeMm = Math.max(cellSizeMm, stone.sizeMm);
   const buckets = new Map();
   for (const stone of stones) {
     const gx = Math.floor(stone.xMm / cellSizeMm);
