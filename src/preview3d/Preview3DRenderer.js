@@ -92,6 +92,26 @@ const INSTANCED_STONES_REBUILD_THROTTLE_MS = 100;
 // the basis quaternion maps to the outward normal -- see that function's own comment).
 export const STONE_DEPTH_RATIO = 0.6;
 
+// IMG-026K: the instanced stone is a round flat-back rhinestone, not an octahedron. Seen from the
+// front an octahedron is a diamond covering only 2/pi (64 %) of the stone's round footprint, so a
+// dense image layout broke into separated spikes and its gaps looked far wider than on the real
+// piece. This profile (unit radius, unit height along the stone's local +Z, the outward normal) is
+// a short girdle, a crown of facets and a flat table (no base: it lies on the wall and is never
+// seen, which saves RHINESTONE_FACETS triangles per stone); with RHINESTONE_FACETS facets
+// around and flat shading, its silhouette covers 95 % of the footprint and every facet catches the
+// lights separately. STONE_DEPTH_RATIO still flattens it along the normal.
+export const RHINESTONE_FACETS = 12;
+export const RHINESTONE_PROFILE = Object.freeze([
+  [1, 0], [1, 0.18], [0.78, 0.62], [0.46, 1], [0, 1]
+]);
+
+export function createRhinestoneGeometry(THREE) {
+  const points = RHINESTONE_PROFILE.map(([r, h]) => new THREE.Vector2(r, h));
+  const geometry = new THREE.LatheGeometry(points, RHINESTONE_FACETS, Math.PI / RHINESTONE_FACETS);
+  geometry.rotateX(Math.PI / 2);
+  return geometry.toNonIndexed();
+}
+
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
@@ -463,8 +483,9 @@ export class Preview3DRenderer {
         this._stoneMesh.geometry.dispose();
         this._stoneMesh.material.dispose();
       }
-      const geometry = new THREE.OctahedronGeometry(1, 0);
-      const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+      const geometry = createRhinestoneGeometry(THREE);
+      geometry.computeVertexNormals();
+      const material = new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0.08, flatShading: true });
       this._stoneMesh = new THREE.InstancedMesh(geometry, material, capacity);
       this._stoneMesh.userData.capacity = capacity;
       this._group.add(this._stoneMesh);
