@@ -1,4 +1,4 @@
-"""IMG-026I: the DEFAULT rules (eyes, Indian Siam off skin, soft outlines, calm skin) against BUILD_H.
+"""IMG-026I: the BUILD_I rules (eyes, Indian Siam off skin, soft outlines, calm skin) against BUILD_H.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "Faces and eyes (build I)" and the
 Build I acceptance figures.
@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from skimage.color import rgb2lab
 
-from strass_layout import BUILD_H, DEFAULT
+from strass_layout import BUILD_H, BUILD_I
 from strass_layout.colour import CAT_IDS, PLUS_REAL, PLUS_REAL_SKIN, palette, snap_colours
 from strass_layout.eyes import UP_RIGHT, glint_angles
 from strass_layout.faces import calm_skin, soften_outlines
@@ -28,7 +28,7 @@ def hex_lab(h):
 class Palettes(unittest.TestCase):
     def test_rules_pick_the_palette(self):
         self.assertIs(palette(BUILD_H), PLUS_REAL)
-        self.assertIs(palette(DEFAULT), PLUS_REAL_SKIN)
+        self.assertIs(palette(BUILD_I), PLUS_REAL_SKIN)
         self.assertEqual(PLUS_REAL_SKIN.ids, PLUS_REAL.ids)
         self.assertEqual(PLUS_REAL_SKIN.fills, PLUS_REAL.fills)
 
@@ -138,12 +138,12 @@ class FaceFinish(unittest.TestCase):
         self.assertEqual(n, 0)
 
 
-class DefaultAgainstBuildH(unittest.TestCase):
+class BuildIAgainstBuildH(unittest.TestCase):
     def test_images(self):
         for name in IMAGES:
             with self.subTest(image=name):
                 h = support.layout_result(name, BUILD_H)["report"]
-                i = support.layout_result(name, DEFAULT)["report"]
+                i = support.layout_result(name, BUILD_I)["report"]
                 self.assertEqual(i["violations"], 0)
                 self.assertGreaterEqual(i["minGapMm"], MIN_GAP_MM)
                 self.assertLessEqual(abs(i["stones"] - h["stones"]), 0.01 * h["stones"])
@@ -156,7 +156,7 @@ class DefaultAgainstBuildH(unittest.TestCase):
 
     def test_the_portrait_pupil_is_in_the_eye(self):
         h = support.layout_result("portrait", BUILD_H)["report"]["pupilsMm"]
-        i = support.layout_result("portrait", DEFAULT)["report"]["pupilsMm"]
+        i = support.layout_result("portrait", BUILD_I)["report"]["pupilsMm"]
         self.assertEqual(len(i), 2)
         self.assertEqual(i[0], i[1])
         self.assertLess(i[0], h[0])
