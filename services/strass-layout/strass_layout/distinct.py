@@ -1,7 +1,8 @@
 """Tone separation: k-means (14) on the stone colours, assigned to catalogue colours so
 that clearly different tones of one hue family stay different. Skin tones stay in skin.
 An aiOnly colour (colour.EXTRA_IDS) is never picked as the alternate for a cluster; it is
-only ever a cluster's own nearest colour."""
+only ever a cluster's own nearest colour. A palette's warm_block (colour.PLUS_REAL_SKIN) also
+applies to the clusters, as it does in snap_colours()."""
 import numpy as np
 from sklearn.cluster import KMeans
 from skimage.color import deltaE_ciede2000
@@ -38,6 +39,12 @@ def _distinct(C, lab, prot, k=14, sep=12.0, extra=12.0, pal=BASE):
     cen = km.cluster_centers_
     cnt = np.bincount(km.labels_, minlength=k)
     d = np.stack([deltaE_ciede2000(cen, np.repeat(c[None], k, 0), kL=KL, kH=KH) for c in cat], 1)
+    if pal.warm_block:
+        ch = np.hypot(cen[:, 1], cen[:, 2])
+        hue = np.degrees(np.arctan2(cen[:, 2], cen[:, 1])) % 360
+        warm = (hue >= 30) & (hue <= 78) & (ch < 65) & (ch > 8)
+        for k_ in pal.warm_block:
+            d[warm, ids.index(k_)] += 1000
     order = np.argsort(-cnt)
     assign = {}
     for ci in order:

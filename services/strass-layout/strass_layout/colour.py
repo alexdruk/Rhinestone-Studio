@@ -16,6 +16,10 @@ Rules.real_colours picks the REAL palettes.
 IMG-026H added eight more aiOnly colours, marked "aiSet": "H" (EXTRA_H_IDS). Only
 PLUS_REAL, which Rules.more_colours picks, has them.
 
+IMG-026I: PLUS_REAL_SKIN is PLUS_REAL with Indian Siam blocked for warm skin and fur tones of
+hue 30 degrees or more (its own fill is at 27); build H gave Einstein's brown skin hundreds of
+dark red stones. Rules.skin_no_wine picks it.
+
 Ported from rs_fix.py (stone_colours, snap_colours and the colour constants).
 """
 import json
@@ -35,8 +39,9 @@ ALL_EXTRA_IDS = EXTRA_IDS + EXTRA_H_IDS
 class Palette:
     """Catalogue ids and their Lab colours, in catalogue order."""
 
-    def __init__(self, ids, real=False):
+    def __init__(self, ids, real=False, warm_block=()):
         self.ids = list(ids)
+        self.warm_block = tuple(warm_block)
         self.fills = [CAT[k]["fill"] if real else CAT[k].get("prototypeFill", CAT[k]["fill"]) for k in self.ids]
         self.lab = rgb2lab(np.array([[int(f[i:i + 2], 16) / 255 for i in (1, 3, 5)] for f in self.fills])[None])[0]
         self.real = real
@@ -47,12 +52,13 @@ FULL = Palette([k for k in CAT_IDS if k not in EXTRA_H_IDS])
 BASE_REAL = Palette(BASE.ids, real=True)
 FULL_REAL = Palette(FULL.ids, real=True)
 PLUS_REAL = Palette(CAT_IDS, real=True)
+PLUS_REAL_SKIN = Palette(CAT_IDS, real=True, warm_block=("indian-siam",))
 CAT_LAB = BASE.lab
 
 
 def palette(rules):
     if rules.more_colours:
-        return PLUS_REAL
+        return PLUS_REAL_SKIN if rules.skin_no_wine else PLUS_REAL
     if rules.real_colours:
         return FULL_REAL if rules.extra_colours else BASE_REAL
     return FULL if rules.extra_colours else BASE
@@ -112,6 +118,8 @@ def snap_colours(lab, pal=BASE):
             d[(hue < 80) & (chroma > 8), ids.index(k_)] += 1000
     if "topaz" in ids:
         d[warm & (chroma < 50), ids.index("topaz")] += 1000
+    for k_ in pal.warm_block:
+        d[warm & (hue >= 30), ids.index(k_)] += 1000
     if "hyacinth" in ids:
         d[chroma < 60, ids.index("hyacinth")] += 1000
     k = d.argmin(1)

@@ -141,12 +141,51 @@ def _ring(cx, cy, r, d, skip, phase=0.0):
     return out
 
 
+UP_RIGHT = -np.pi / 4
+
+
+def glint_angles(cands, Lab, a, human):
+    """Set c["ang"], the direction of each pupil's catch-light. It points at the highlight pixels
+    (L > 85, chroma < 18) inside 0.8 of the pupil radius, so the white of the eye around it is not
+    counted; a pupil without one, or whose highlight points down, takes up and right. A person's
+    two pupils share one direction, the mean of the ones measured. The direction is kept between
+    30 and 150 degrees above the horizontal, where the AI draws the highlight."""
+    L = Lab[..., 0].astype(float) / 2.55
+    ch = np.hypot(Lab[..., 1].astype(float) - 128, Lab[..., 2].astype(float) - 128)
+    hl = (L > 85) & (ch < 18) & (a > 0.5)
+    h, w = hl.shape
+    vec = []
+    for c in cands:
+        r = 0.8 * c["r_px"]
+        x0, x1 = int(max(0, c["x"] - r)), int(min(w, c["x"] + r + 1))
+        y0, y1 = int(max(0, c["y"] - r)), int(min(h, c["y"] + r + 1))
+        if x1 <= x0 or y1 <= y0:
+            vec.append(None)
+            continue
+        yy, xx = np.mgrid[y0:y1, x0:x1]
+        m = hl[y0:y1, x0:x1] & (np.hypot(xx - c["x"], yy - c["y"]) <= r)
+        if m.any():
+            v = np.array([xx[m].mean() - c["x"], yy[m].mean() - c["y"]])
+            n = np.hypot(*v)
+            vec.append(v / n if n > 1e-6 and v[1] <= 0.25 * n else None)
+        else:
+            vec.append(None)
+    if human and len(cands) == 2:
+        got = [v for v in vec if v is not None]
+        m = np.mean(got, 0) if got else None
+        vec = [m, m]
+    for c, v in zip(cands, vec):
+        ang = float(np.arctan2(v[1], v[0])) if v is not None and np.hypot(*v) > 1e-6 else UP_RIGHT
+        c["ang"] = float(np.clip(ang, -5 * np.pi / 6, -np.pi / 6))
+
+
 def build_eye_copy(c, s, iris=False, n_rings=2):
-    """Stones of one eye: tuples (x, y, d, colour or None, colour-sample point or None), and the eye zone (ox, oy, radius)."""
+    """Stones of one eye: tuples (x, y, d, colour or None, colour-sample point or None), and the eye zone (ox, oy, radius).
+    The catch-light goes in the direction c["ang"] when glint_angles() set it."""
     Dp = c["diam_mm"]
     R0 = Dp / 2
     ox, oy = c["x"] * s, c["y"] * s
-    ang = np.arctan2(c["hy"] * s - oy, c["hx"] * s - ox)
+    ang = c["ang"] if "ang" in c else np.arctan2(c["hy"] * s - oy, c["hx"] * s - ox)
     dp = next((z for z in PUPIL_SIZES if z <= Dp + 0.3), SS4)
     stones = [(ox, oy, dp, "jet", None)]
     rr = dp / 2 + GAPX + SS4 / 2

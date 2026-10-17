@@ -11,6 +11,7 @@ import numpy as np
 from .colour import CAT_IDS, palette
 from .detect import detect_stones
 from .distinct import distinct_tones
+from .faces import finish_faces
 from .errors import CatalogueMismatch, NoStones
 from .geometry import FrameState, holes, violations
 from .imageio import decode_png
@@ -46,6 +47,7 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     D = np.array([q["d"] for q in stones])
     C = [q["color"] for q in stones]
     colours = distinct_tones(px.rgb, px.a, first["s"], P, D, C, palette(rules), rules.mean_colour)
+    colours = finish_faces(P, D, colours, palette(rules), info["face"], info["eyeZones"], rules)
     for q, c in zip(stones, colours):
         q["color"] = c
     clock.lap("colour")

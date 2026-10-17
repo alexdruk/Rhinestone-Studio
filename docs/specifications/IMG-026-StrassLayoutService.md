@@ -1497,6 +1497,142 @@ with cached detection, `DEFAULT` against `BUILD_G`:
 | `PROMPT_VERSION` / skin ramp | `server/redraw/prompt.mjs:13` / `:51` |
 | `MAX_BREAKDOWN_COLUMNS` / cover column loop | `src/export/ProductionSheetExporter.js:172` / `:733` |
 
+## Faces and eyes (build I)
+
+The owner's subjects are mostly faces and pets. Close-ups of build H show four faults that the
+colours do not touch:
+- **The catch-light lands in the wrong place.** `find_pupils()` averages every highlight pixel
+  near the pupil, including the white of the eye. On the woman it points down and sideways, so the
+  Crystal stone reads as eye white, not as a reflection.
+- **Some pupils are missed, or put in the hair.** The human fallback in `post_process()` measures
+  the largest dark disc around an eye box:
+  - The highlight inside the pupil punches a hole in that disc. On the q8 portrait (16 Oct upload)
+    the disc measures 15.6 px against the 16.4 px it needs, so neither eye gets a pupil.
+  - When the pupil, lashes and hair form one dark region, the largest disc is in the hair (the
+    reference portrait's left eye).
+- **Indian Siam on skin.** Build H gave Einstein's dark brown skin 591 Indian Siam stones, a dark
+  wine red.
+- **Heavy black outlines and speckle on faces.** The AI draws a person's jaw, nose and ear lines
+  in Jet. Some skin stones also differ from all their neighbours.
+
+On the design canvas, the gaps between image stones show white, while the real piece sits on the
+product colour.
+
+### Eyes (`lively_eyes`)
+
+- **Glint direction.** `glint_angles()` (in `eyes.py`) sets each pupil's `ang`:
+  - it points at the highlight pixels (L > 85, chroma < 18) within 0.8 of the pupil radius;
+  - a pupil with no highlight there, or whose highlight points down, takes up and right (−45°);
+  - a person's two pupils share the mean direction;
+  - the result is kept between 30° and 150° above the horizontal.
+
+  `build_eye_copy()` places the SS4 Crystal catch-light in that direction.
+- **Fallback pupil.** For a person's eye box:
+  - dark holes smaller than π(0.9 main_px)² are filled before measuring, as in `_find_inscribed()`;
+  - the diameter is the disc's, no longer ×1.15, which made up for the hole;
+  - `_best_disc()` takes every local maximum of the distance transform with radius ≥ 0.65 main_px;
+    a disc with highlight pixels within 1.3 radii wins, then the one nearest the box centre.
+- **Tested and rejected:** an inset catch-light. The pupil steps down one size and the glint sits
+  inside the measured disc, the way the AI draws it. On the product colour the pupils look too
+  small beside the AI's.
+
+### Indian Siam off skin (`skin_no_wine`)
+
+`PLUS_REAL_SKIN` is `PLUS_REAL` with `warm_block = ("indian-siam",)`. In `snap_colours()`, and for
+the cluster centres in `_distinct()`, a warm tone with hue ≥ 30° cannot take Indian Siam:
+- the warm range is hue 25–78° and chroma 8–65, as for the neutral and Topaz blocks;
+- Indian Siam's own fill is at 27°, so real wine reds keep it.
+
+### Soft outlines and calm skin (`soft_outlines`, `calm_skin`)
+
+`faces.finish_faces()` runs after `distinct_tones()`. Neighbours are stones whose edges are within
+0.6 mm.
+- **`soften_outlines()`** applies to people only, outside 2.2 eye-zone radii. A Jet stone with at
+  least 40 % skin neighbours (`distinct.SKIN`) and at most two black neighbours (Jet, Hematite,
+  Black Diamond, Jet Hematite) becomes Smoked Topaz.
+- **`calm_skin()`** applies outside 1.5 eye-zone radii. A skin stone changes to the colour most of
+  its neighbours share when all of these hold:
+  - no neighbour shares its colour;
+  - it has at least four neighbours;
+  - at least 60 % of them share that one other skin colour;
+  - that colour is within 15 ΔE2000 of its own.
+
+`post_process()` returns the eye zones as `info["eyeZones"]`.
+
+### Rules
+
+`Rules` gains `lively_eyes`, `skin_no_wine`, `soft_outlines` and `calm_skin`, all `False` by
+default:
+
+```python
+BUILD_H = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True,
+                human_iris=True, eye_keep=True, pupil_inscribed=True, real_colours=True,
+                more_colours=True)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True,
+                human_iris=True, eye_keep=True, pupil_inscribed=True, real_colours=True,
+                more_colours=True, lively_eyes=True, skin_no_wine=True, soft_outlines=True,
+                calm_skin=True)
+```
+
+`test_build_h` now compares `BUILD_H` with `BUILD_G`.
+
+### Product-colour background
+
+- **Renderer.** `renderProductionLayout()` gains `backgroundColor` (default `#fbfdff`).
+- **App.** `app.js`:
+  - `canvasBackgroundColor()` returns `project.cupColor` when `#canvasBackground` is `product`, and
+    `#fbfdff` otherwise;
+  - Flat Sheet has no product colour, so it always gets `#fbfdff`;
+  - `drawLayout()` passes the result, and the control redraws on change.
+- **Control.** `#canvasBackground` ("Background: White" or "Background: Product") follows
+  `#snapEnabled` in the canvas toolbar.
+- **Scope.** It is a view setting like the safe-area guide: it is not saved in the project, not
+  history-tracked, and never changes the StoneLayout. The 3D Object Preview already shows the
+  product colour.
+
+### Measured with the repository package (16 Oct 2026, Linux)
+
+On the 26 images, with cached detection, `DEFAULT` against `BUILD_H`:
+- 0 violations; stone counts and coverage unchanged; mean look 9.80 → 9.75.
+- **Pupils change on 3 images, all fixes:**
+  - q8_portrait: none → 3.46, 3.46;
+  - portrait: 4.18, 4.18 (one in the hair) → 3.46, 3.46;
+  - new_boris: 3.44 → 3.12, 3.12.
+- **Indian Siam** stones: Einstein 591 → 117 (the lips), dog 64 → 0, the portraits 0.
+- **Look:**
+  - better: Einstein 7.25 → 6.18, parrot 23.58 → 21.92, q8_portrait 6.72 → 6.39;
+  - worse, below 0.7: q5_portrait 6.00 → 6.65, q7_bulldog 18.92 → 19.53, q5_bulldog 19.27 → 19.68,
+    dog 10.28 → 10.57.
+
+  The look figure blurs half a pitch, so it barely sees a catch-light move.
+- **Outlines softened** (people only), out of 2,500–4,000 stones:
+
+  | Image | Stones |
+  | --- | --- |
+  | woman | 96 |
+  | q8_portrait | 112 |
+  | new_portrait | 136 |
+  | Einstein | 26 |
+  | q7_portrait | 100 |
+  | portrait | 43 |
+  | q5_portrait | 76 |
+
+- **Skin stones calmed:** 7–39 per image.
+
+### Build I anchors (grepped at `3ffee7b`)
+
+| Anchor | Location |
+| --- | --- |
+| `build_eye_copy()` | `services/strass-layout/strass_layout/eyes.py:144` |
+| `post_process()` / fallback threshold loop / `build_eye_copy` loop / `info` | `strass_layout/post.py:57` / `:86` / `:110` / `:223` |
+| `Palette` / `PLUS_REAL` / `snap_colours()` / Hyacinth block | `strass_layout/colour.py:35` / `:49` / `:95` / `:115` |
+| `_distinct()` cluster distances | `strass_layout/distinct.py:40` |
+| `distinct_tones` call | `strass_layout/pipeline.py:48` |
+| `DEFAULT` | `strass_layout/rules.py:33` |
+| `renderProductionLayout()` | `src/renderer/CanvasRenderer2D.js:204` |
+| `drawLayout()` / `#snapEnabled` listener | `app.js:3199` / `:5371` |
+| `#snapEnabled` | `index.html:496` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -1828,6 +1964,40 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - **Production Sheet.** A Letter sheet that lists all 47 colours exports without error. Every
   colour has its own count line, and the counts add up to the stone count.
 
+**Build I.**
+
+- **Earlier rules are unchanged.** `BUILD_H` gives build H's figures with `PLUS_REAL`.
+- **`DEFAULT` against `BUILD_H`,** on the 12 images and `tests/fixtures/sunburst_flower.png`:
+  - 0 violations, and minimum gap ≥ 0.100 mm;
+  - stone counts within ±1 %, coverage within ±0.01;
+  - `face` equal, and every colour id in the catalogue;
+  - `pupilsMm` equal except on the portrait, whose two pupils are now equal and smaller than
+    build H's.
+- **Palettes.** `palette(BUILD_H)` is `PLUS_REAL` and `palette(DEFAULT)` is `PLUS_REAL_SKIN`, with
+  the same ids and fills. A warm brown (`#5c2a22`) snaps to Indian Siam under `PLUS_REAL` but not
+  under `PLUS_REAL_SKIN`; Indian Siam's own fill still snaps to itself.
+- **`glint_angles()`** on a synthetic eye (a black pupil of radius 20 px):
+  - it points at a highlight up and left inside the pupil, within 0.15 rad, and ignores a white
+    patch outside 0.8 radii;
+  - a low highlight, or none, gives −45°;
+  - a level highlight is raised to −30°;
+  - a person's two pupils share one direction.
+- **`_best_disc()`:**
+  - in one dark region holding a large unlit disc and a smaller lit one, it takes the lit one;
+  - with no highlight, it takes the one nearest the box centre.
+- **Face passes** on hex-packed stones:
+  - a Jet row along skin becomes Smoked Topaz, but not within an eye zone, and not inside a black
+    area;
+  - a lone Golden Shadow among Light Colorado Topaz takes Light Colorado Topaz; a lone Smoked Topaz
+    keeps its colour.
+- **App.**
+  - `renderProductionLayout()` fills with `backgroundColor`, by default `#fbfdff`, and draws the
+    same stones either way.
+  - `canvasBackgroundColor()` gives `#fbfdff` for White, `cupColor` for Product, and `#fbfdff` for
+    Product on Flat Sheet.
+  - `#canvasBackground` has White (selected) and Product, follows `#snapEnabled`, and is neither
+    history-tracked nor saved in the project.
+
 ## Tests the builds must add
 
 **A.**
@@ -1901,6 +2071,11 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - `services/strass-layout/tests/test_build_h.py`: the Build H service figures.
 - `tools/test-img-026-ai-colours-sheet.mjs` test 5: a sheet with every catalogue colour.
 - `tools/test-img-022-redraw-provider.mjs` T1 reads Appendix D instead of Appendix C.
+
+**I.**
+
+- `services/strass-layout/tests/test_build_i.py`: the Build I service figures.
+- `tools/test-img-026-product-background.mjs` (group `ui`): the Build I app figures.
 
 ## Existing tests that grep the text these builds change
 
@@ -2002,6 +2177,9 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
     - `BASE` and `FULL` leave out the eight;
     - the guard test patches `distinct.ALL_EXTRA_IDS`.
   - `services/strass-layout/tests/test_build_g.py`: `BUILD_G` instead of `DEFAULT`.
+
+- Build I changes text this file greps: `services/strass-layout/tests/test_build_h.py` (`BUILD_H`
+  instead of `DEFAULT`).
 
 ## Anchors (grepped at `7a9e482`)
 

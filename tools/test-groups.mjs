@@ -414,6 +414,8 @@ export const GROUPS = {
   ],
   ui: [
     'test-ui-shell-structure.mjs',
+    // IMG-026I: the design canvas background switch (white or the product colour).
+    'test-img-026-product-background.mjs',
     'test-lightbox-controller.mjs',
     'test-topmenu-active-state.mjs',
     'test-lightbox-movable-persistent.mjs',

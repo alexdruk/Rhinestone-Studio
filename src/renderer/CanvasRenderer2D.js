@@ -201,9 +201,9 @@ export function renderStoneLayout(ctx, stoneLayout, transform, style = 'layout')
  * @param {{widthPx:number,heightPx:number,paddingPx:number,units?:'mm'|'in'}} viewport
  * @returns {{s:number,ox:number,oy:number}}
  */
-export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx, units = 'mm' }) {
+export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx, units = 'mm', backgroundColor = '#fbfdff' }) {
   ctx.clearRect(0, 0, widthPx, heightPx);
-  ctx.fillStyle = '#fbfdff';
+  ctx.fillStyle = backgroundColor;
   ctx.fillRect(0, 0, widthPx, heightPx);
 
   const boundingBoxMm = stoneLayout.getBoundingBox();
