@@ -1695,6 +1695,59 @@ On the 26 images, with cached detection, `DEFAULT` against `BUILD_I`:
 | `finish_faces` call | `strass_layout/pipeline.py:50` |
 | `DEFAULT` | `strass_layout/rules.py:39` |
 
+## Round stones in the 3D preview (build K)
+
+The customer sees the product in the 3D Object Preview. There every stone is a THREE.js
+`OctahedronGeometry`, chosen by RS-2013 as a cheap first shape for text layouts.
+- **Seen along the normal, an octahedron is a diamond.** It covers 2/π (64 %) of the stone's round
+  footprint.
+- **On a dense image layout** the face breaks into separated spikes, and the gaps look far wider
+  than they will on the real piece.
+
+The 2D canvas and Design already draw round faceted crystals (PREVIEW-001), so only the 3D preview
+is affected.
+
+### The stone
+
+`Preview3DRenderer.js` gains `createRhinestoneGeometry(THREE)`. It is a `LatheGeometry` of
+`RHINESTONE_PROFILE`, a list of (radius, height) points at unit radius and unit height:
+
+| Point | Radius | Height |
+| --- | --- | --- |
+| Girdle bottom | 1 | 0 |
+| Girdle top | 1 | 0.18 |
+| Crown | 0.78 | 0.62 |
+| Table edge | 0.46 | 1 |
+| Table centre | 0 | 1 |
+
+- **Shape.** It has `RHINESTONE_FACETS` = 12 segments, rotated so that its height runs along local
+  +Z, and it is non-indexed.
+- **No base.** The base would lie on the wall and is never seen.
+- **Coverage.** Its silhouette covers at least 90 % of the unit disc.
+- **Material.** `MeshStandardMaterial` with `roughness: 0.32`, `metalness: 0.08` and
+  `flatShading: true`, so each facet catches the lights on its own.
+- **Unchanged.** Instancing, placement, orientation, per-stone colour and `STONE_DEPTH_RATIO` stay
+  as they were.
+
+### Cost
+
+The stone has 96 triangles against the octahedron's 8. That is about 290,000 triangles for a
+3,000-stone image layout, and 1.44 million at RS-2013's 15,000-stone ceiling. It is still one
+instanced draw call; the per-stone CPU loop is unchanged.
+
+### Seen in the browser (17 Oct 2026, SwiftShader)
+
+- **Images.** The q8 portrait and q8 bulldog on the navy mug read as round faceted stones, and the
+  eyes are legible.
+- **Text.** The default text layer reads as round gold stones instead of diamonds.
+
+### Build K anchors (grepped at `7fe9add`)
+
+| Anchor | Location |
+| --- | --- |
+| `STONE_DEPTH_RATIO` | `src/preview3d/Preview3DRenderer.js:93` |
+| `OctahedronGeometry(1, 0)` | `src/preview3d/Preview3DRenderer.js:466` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -2074,6 +2127,18 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   - a stone reading Topaz's colour takes Copper, never Topaz;
   - Jet, Sapphire and a 4.0 mm stone keep their colours.
 
+**Build K.**
+
+- **`createRhinestoneGeometry(THREE)`:**
+  - its silhouette along local Z covers at least 90 % of the unit disc;
+  - its vertices span z 0 to 1 and stay within radius 1;
+  - no triangle lies flat at z = 0;
+  - it has 96 triangles.
+- **The instanced stone mesh** uses it with `flatShading`. A 2 mm stone on a mug keeps scale
+  (1, 1, `STONE_DEPTH_RATIO`).
+- **The existing 3D tests pass unchanged:** `test-preview3d-instanced-stones.mjs`,
+  `test-preview3d-render-scheduling.mjs` and `test-preview3d-stone-orientation.mjs`.
+
 ## Tests the builds must add
 
 **A.**
@@ -2156,6 +2221,10 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 **J.**
 
 - `services/strass-layout/tests/test_build_j.py`: the Build J service figures.
+
+**K.**
+
+- `tools/test-img-026-rhinestone-geometry.mjs` (group `renderers`): the Build K figures.
 
 ## Existing tests that grep the text these builds change
 
