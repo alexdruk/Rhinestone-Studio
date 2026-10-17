@@ -1633,6 +1633,68 @@ On the 26 images, with cached detection, `DEFAULT` against `BUILD_H`:
 | `drawLayout()` / `#snapEnabled` listener | `app.js:3199` / `:5371` |
 | `#snapEnabled` | `index.html:496` |
 
+## Skin and fur tones (build J)
+
+After build I, faces and tan fur still read darker and patchier than the AI image. On light skin
+(AI L above 45, warm hue), measured on seven portraits:
+- **Lightness is not the cause.** The stones match the AI's lightness: the median ΔL is within
+  ±2.1 on six portraits, and −4.5 on the reference portrait.
+- **The AI paints skin more saturated than any skin stone,** about L 64 and chroma 49.
+  - The nearest stones are Golden Shadow (L 67, chroma 33), Copper (L 55) and Silk (L 77).
+  - Typical ΔE2000 is 5–7.
+- **Tone separation pushes skin and fur stones off their nearest colour.** `distinct_tones()`
+  moves whole clusters to keep tones apart. Inside the skin ramp this makes a stone jump between
+  Silk and Copper where the AI has one even tone, and it bleaches tan fur towards Rose Gold.
+
+Three alternatives were tested on the 26 images:
+- **Smoothing** each skin stone's colour over its similar neighbours did not change the look
+  figure.
+- **Lightness-weighted matching** (kL 0.5) made it worse.
+- **Nearest skin colour** improved it.
+
+### Nearest skin colour (`skin_nearest`)
+
+`faces.skin_nearest()` runs first in `finish_faces()`, after `distinct_tones()`. Every SS4 or SS6
+stone whose colour is in `distinct.SKIN` takes the `SKIN` colour (Topaz excepted) nearest, in
+ΔE2000, to its Lab colour. The Lab colour is the mean of the whole stone disc, as `mean_colour`
+reads it.
+
+`pipeline.layout_frame()` computes the Lab colours when the rule is on. `soften_outlines()` and
+`calm_skin()` then run as in build I.
+
+### Rules
+
+`Rules` gains `skin_nearest`, `False` by default. `BUILD_I` keeps the build I rules; `DEFAULT`
+adds `skin_nearest=True`. `test_build_i` now compares `BUILD_I` with `BUILD_H`.
+
+### Measured with the repository package (17 Oct 2026, Linux)
+
+On the 26 images, with cached detection, `DEFAULT` against `BUILD_I`:
+- 0 violations; stone positions and sizes identical; only skin and fur colours change.
+- Stones recoloured per image: 5 on the parrot, 69–270 on most images, and up to 598 (q5_bulldog).
+- **Look:** mean 9.75 → 9.59.
+- **Better:**
+
+  | Image | Look |
+  | --- | --- |
+  | q7_bulldog | 19.53 → 18.50 |
+  | q5_bulldog | 19.68 → 18.94 |
+  | q8_bulldog | 7.03 → 6.49 |
+  | portrait | 24.77 → 24.36 |
+  | q7_portrait | 7.24 → 6.85 |
+  | new_boris | 10.70 → 10.35 |
+  | q5_portrait | 6.65 → 6.39 |
+
+- **Worse:** q8_portrait 6.39 → 6.53, cat 4.63 → 4.72, woman 7.72 → 7.76.
+
+### Build J anchors (grepped at `061ef6f`)
+
+| Anchor | Location |
+| --- | --- |
+| `finish_faces()` | `services/strass-layout/strass_layout/faces.py:73` |
+| `finish_faces` call | `strass_layout/pipeline.py:50` |
+| `DEFAULT` | `strass_layout/rules.py:39` |
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -1998,6 +2060,20 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   - `#canvasBackground` has White (selected) and Product, follows `#snapEnabled`, and is neither
     history-tracked nor saved in the project.
 
+**Build J.**
+
+- **Earlier rules are unchanged.** `BUILD_I` gives build I's figures.
+- **`DEFAULT` against `BUILD_I`,** on the 12 images and `tests/fixtures/sunburst_flower.png`:
+  - 0 violations, and minimum gap ≥ 0.100 mm;
+  - identical stone positions and sizes, stone count, coverage, `pupilsMm` and `face`;
+  - every changed colour is in `distinct.SKIN`;
+  - at least 8 images change.
+- **`skin_nearest()`:**
+  - a Copper stone reading Golden Shadow's colour becomes Golden Shadow;
+  - a Silk stone reading Copper's colour becomes Copper;
+  - a stone reading Topaz's colour takes Copper, never Topaz;
+  - Jet, Sapphire and a 4.0 mm stone keep their colours.
+
 ## Tests the builds must add
 
 **A.**
@@ -2076,6 +2152,10 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 
 - `services/strass-layout/tests/test_build_i.py`: the Build I service figures.
 - `tools/test-img-026-product-background.mjs` (group `ui`): the Build I app figures.
+
+**J.**
+
+- `services/strass-layout/tests/test_build_j.py`: the Build J service figures.
 
 ## Existing tests that grep the text these builds change
 
@@ -2179,6 +2259,9 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
   - `services/strass-layout/tests/test_build_g.py`: `BUILD_G` instead of `DEFAULT`.
 
 - Build I changes text this file greps: `services/strass-layout/tests/test_build_h.py` (`BUILD_H`
+  instead of `DEFAULT`).
+
+- Build J changes text this file greps: `services/strass-layout/tests/test_build_i.py` (`BUILD_I`
   instead of `DEFAULT`).
 
 ## Anchors (grepped at `7a9e482`)
