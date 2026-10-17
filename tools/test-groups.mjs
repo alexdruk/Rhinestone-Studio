@@ -385,6 +385,8 @@ export const GROUPS = {
     'test-preview3d-instanced-stones.mjs',
     'test-preview3d-render-scheduling.mjs',
     'test-preview3d-stone-orientation.mjs',
+    // IMG-026K: the 3D preview's round flat-back rhinestone geometry.
+    'test-img-026-rhinestone-geometry.mjs',
     // src/drawing/StoneSpriteCache.js: offscreen sprite baking for the Design view's stone-dot
     // preview (cache-hit/miss behaviour against a stubbed canvas).
     'test-stone-sprite-cache.mjs',
