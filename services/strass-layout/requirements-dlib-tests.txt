@@ -1,0 +1,4 @@
+# IMG-026L: TEST ONLY. dlib for the equivalence test against the prototype (tests/dlib_faces.py).
+# Its 68-point model was trained on iBUG 300-W, whose licence excludes commercial use: never ship or
+# use it in production. Installed only by scripts/setup_mac.sh --with-dlib-tests.
+dlib-bin==19.24.6

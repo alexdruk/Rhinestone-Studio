@@ -8,17 +8,27 @@ service, the Mac scripts, the Dockerfile and the tests. The Node side comes in l
 Python lives only in this folder. Nothing in `src/`, `app.js` or `server/` imports it; the app
 reaches it over HTTP.
 
+**IMG-026L: no dlib in production.** The service finds faces with MediaPipe Face Landmarker
+(library and model Apache 2.0, `models/mediapipe/face_landmarker.task`, committed), not dlib. The
+dlib 68-point model (`shape_predictor_68_face_landmarks.dat`) was trained on iBUG 300-W, whose
+licence excludes commercial use: **it must never be shipped or used in production.** It is a
+test-only dependency of the equivalence tests, installed only by `setup_mac.sh --with-dlib-tests`;
+without it those tests are skipped. Licences: `THIRD_PARTY_LICENCES.md`.
+
 ## Layout
 
 ```
 strass_layout/   the package: pipeline modules, catalogue.json, layout() and layout_frame()
 app.py           FastAPI app: POST /layout and GET /health
-models/          StarDist model (committed); the dlib model is downloaded by setup_mac.sh
+models/          StarDist and MediaPipe face landmarker models (committed)
 scripts/         setup_mac.sh and start_layout.sh
 tests/           unittest tests
 prototype/       the research code as delivered, kept for the equivalence test; do not edit
 Dockerfile       the same package and requirements.txt on python:3.12-slim
 requirements.txt exact == pins of every direct dependency
+requirements-nodeps.txt      MediaPipe, installed with pip --no-deps (IMG-026L)
+requirements-dlib-tests.txt  dlib, test only (IMG-026L)
+THIRD_PARTY_LICENCES.md      every model and dependency the service ships, and its licence
 ```
 
 ## Setup (Mac)
@@ -28,8 +38,15 @@ brew install python@3.12
 services/strass-layout/scripts/setup_mac.sh
 ```
 
-The script needs `python3.12` on the PATH. It creates `.venv`, installs `requirements.txt`, and
-downloads the dlib 68-landmark model from PyPI (`face_recognition_models==0.3.0`) into
+The script needs `python3.12` on the PATH. It creates `.venv`, installs `requirements.txt`, then
+`requirements-nodeps.txt` (MediaPipe 0.10.15) with `--no-deps`, and checks the committed
+MediaPipe model's SHA-256 (`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`).
+MediaPipe's declared dependencies jax and jaxlib need ml-dtypes >= 0.4, which tensorflow 2.16.2
+refuses; the Face Landmarker does not use them, and everything it does import is already
+installed. 0.10.15 is the last MediaPipe whose Intel Mac binaries run on macOS 13.
+
+Only with `--with-dlib-tests` (test machines, never production) does it install `dlib-bin` and
+download the dlib 68-landmark model from PyPI (`face_recognition_models==0.3.0`) into
 `models/shape_predictor_68_face_landmarks.dat`, checking its SHA-256
 (`fbdc2cb80eb9aa7a758672cbfdda32ba6300efe9b6e6c7a299ff7e736b11b92f`). A model file that already
 has that hash is not downloaded again. If `dlib-bin` has no wheel for the Mac, the script installs
@@ -141,7 +158,14 @@ python -m unittest -v
 
 - `test_equivalence` runs `prototype/run_one.sh` in a temporary copy of `prototype/` and compares
   its stone list, order included, with `layout_frame()` for each of the 12 images. Set
-  `STRASS_SKIP_EQUIVALENCE=1` to skip it.
+  `STRASS_SKIP_EQUIVALENCE=1` to skip it. IMG-026L: the prototype finds faces with dlib, so the
+  package runs here with the test-only dlib landmarks (`tests/dlib_faces.py`); the test is skipped
+  when dlib or its model is absent.
+- `test_build_l` (IMG-026L) fails if any Python file in the repository (tracked, or new and not
+  git-ignored) outside this folder's `tests/` and `prototype/` imports dlib, if loading the service imports it, or if the Dockerfile or `setup_mac.sh` (without
+  `--with-dlib-tests`) fetches its model; it checks the MediaPipe model's SHA-256. Its
+  `FaceEquivalence` tests compare MediaPipe's faces, eye boxes and pupils with dlib's (skipped
+  without dlib).
 - `test_golden` checks, per image, 0 violations, a minimum gap of at least 0.100 mm, a stone count
   within 1 % of `prototype/expected/` and coverage within 3 % of it.
 - `test_contract` checks the response shape and every error code through the HTTP app.
@@ -153,5 +177,5 @@ one to two minutes each. Run long jobs under `caffeinate -i`.
 ## Docker
 
 `docker build -t strass-layout services/strass-layout` builds the same package on
-`python:3.12-slim`, fetches and hash-checks the dlib model at build time, and serves on
+`python:3.12-slim` with the committed StarDist and MediaPipe models (never the dlib model), and serves on
 0.0.0.0:8000 inside the container. Only `LAYOUT_SERVICE_URL` changes in the app.
