@@ -2,6 +2,19 @@
 
 Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no service started.
 
+**Decisions recorded (31 Oct 2026).** Alex decided these questions on 31 Oct 2026:
+- the size cap;
+- the face defaults;
+- no automatic re-run;
+- Black & white;
+- the licence records;
+- the IS source commit.
+
+Sections 3, 4, 7 and 8 now follow those decisions. One decision is **not recorded: `size auto`**. It
+conflicts with RS's rule that an ai-layout layer can only be enlarged: no natural-size design fits a
+mug, and the tallest fit no product but the Flat Sheet. Section 8 explains the conflict and the
+options. Until Alex chooses, IMG-026N carries only the skin-tone prompt change.
+
 ## 0. What was read
 
 - **RS:** branch `is-port-audit`, made from `develop` at `060e50c`. `develop`'s tree is identical to
@@ -203,7 +216,8 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | How | **Copy.** The IS files are RS files plus marked changes. Rename the `IS (IS-07a)` notes to the RS milestone. Commit the 3.8 MB `.task` model (well under GitHub's 50 MB warning). |
 | Risk | Low for layouts (measured identical apart from rs-lake/rs-woman). Medium for install: the Intel iMac's first MediaPipe install was never run (IS-07a says so). |
 | Size | S–M |
-| Tests | Existing: `test_golden`, `test_equivalence` (must switch to dlib-in-tests), `test_contract`, `test_build_*`. Missing: a `test_is07a`-style "no dlib import" test, and a check that the model's SHA matches. |
+| Licence records (decided) | New `services/strass-layout/THIRD_PARTY_LICENCES.md`: every model and dependency, its licence, and whether it allows commercial use (section 6 is the starting list). It also states that the dlib model is test-only. |
+| Tests | Existing: `test_golden`, `test_equivalence` (must switch to dlib-in-tests), `test_contract`, `test_build_*`. To add (decided): a test that fails if `dlib` is imported anywhere in `services/strass-layout/` outside `tests/`, both by scanning the source and by importing the service; and a check that the model's SHA matches. |
 
 ### 3.2 Service rules S1–S8, S10–S13
 
@@ -214,7 +228,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | RS place | The same files under `services/strass-layout/` |
 | Fits rules | Yes. Every rule is a `Rules` flag and `PROTOTYPE`/`BUILD_*` stay as they are. Stones still come only from the service and the one engine. Saved layers do not change. |
 | Goes in | strass-layout service |
-| How | **Copy** S1, S3–S6, S8, S10, S11 and `pupilsAtMm`. **Adapt** S2 (`soft_outlines` off is a judgement call: ask, see Q3). Copy S9 and S7 as off-everywhere flags, or skip them; they are experiments. Copy S12/S13 only if a later RS step uses them (S12 is needed only for an optional service-fill vote; S13 for nothing). Add an RS `BUILD_J` constant that freezes today's `DEFAULT`, matching how builds E–J were frozen, so `test_build_j` keeps comparing like with like. |
+| How | **Copy** S1, S3–S6, S8, S10, S11 and `pupilsAtMm`. `DEFAULT` takes IS's face defaults (decided): `human_iris` off, `skin_nearest_inner`, `warm_shadow` with `warm_shadow_de` 3, `lone_white_skin`, `plausible_eyes`, `sample_delivered`. S2 (`soft_outlines` off) was not in that list, so it stays on as RS ships it until Alex says otherwise. S11 (the `eyes.py` edge crash) comes with a test that reproduces it first. Copy S9 and S7 as off-everywhere flags, or skip them; they are experiments. Copy S12/S13 only if a later RS step uses them (S12 is needed only for an optional service-fill vote; S13 for nothing). Add an RS `BUILD_J` constant that freezes today's `DEFAULT`, matching how builds E–J were frozen, so `test_build_j` keeps comparing like with like. |
 | Risk | Low to medium. Colours change on new redraws; positions change only through S1 (no eye stage on non-faces). The IS tests read only the 12 RS images and `sunburst_flower.png`, which RS already has. |
 | Size | M |
 | Tests | Existing: `test_rules`, `test_build_f`…`_j`, `test_golden`, `test_contract` (`REPORT_KEYS` += `pupilsAtMm`), `test_report`. To add: the IS tests ported, plus a regression test for S11 (`DarkDiscAtTheEdge`). On the Node side, `tools/test-img-026-ai-layout-app.mjs` should accept the new `report` key and `face: null` (check `validateProject()`). |
@@ -228,7 +242,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | RS place | `server/redraw/prompt.mjs` (`V6_HEAD`, `V6_TAIL`, `PROMPT_VERSION`); `server/redraw/handler.mjs:114` (`size`); `src/redraw/index.js:67` (input fitted to 1536 px) |
 | Fits rules | Yes. These are text and request changes; no geometry. |
 | Goes in | redraw (server prompt and handler; the browser for the crop) |
-| How | **Copy** P3 and P4 as prompt v7. **Decide** P1, P2, C1 and C2 together (Q1). If RS keeps square output, keep "Square image" and probably the 60-across sentence. The smallest RS crop: when the upload has real transparency, crop to its alpha box + 3 % before the fit to 1536 px. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
+| How | **Copy** P3 and P4 as prompt v7. P1, P2, C1 and C2 go together and wait on the `size auto` conflict (section 8, item 1). If RS keeps square output, keep "Square image" and probably the 60-across sentence. The smallest RS crop: when the upload has real transparency, crop to its alpha box + 3 % before the fit to 1536 px. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
 | Risk | Medium. A prompt change moves every new design. `size auto` changes natural sizes, and S14 cannot shrink them. Provider calls are needed to measure it. |
 | Size | S (P3/P4 only) to M (with C1/C2 and a measured run) |
 | Tests | Existing: `tools/test-img-022-redraw-provider.mjs` T1 (reads the spec appendix, so a new Appendix E is needed), `tools/test-img-026-redraw-jobs.mjs` (multipart request). Missing: a test for the alpha-box crop. |
@@ -241,7 +255,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | IS | Node: `src/pipeline/cleanup.js`, `holes.js`, `tiers.js` |
 | RS place | **None** (RS's engine only flags violations). The matching service stage is after `post_process()`/`finish_faces()`, before the S1 crop and S2 report in `strass_layout/pipeline.py`. |
 | Fits rules | Not as IS built it. In RS these would be a second stone producer if they ran in `server/redraw/`, and the renderer or engine must not add stones either. **They fit in the service**, which already has the AI image, the alpha mask, `GAP`, `geometry.fill`, `stone_colours` and the palettes, so nothing needs re-implementing. |
-| Goes in | strass-layout service, as `Rules` flags (`overlap_cleanup`, `hole_fill`, `fill_vote`; the cap as a request option, see Q2) |
+| Goes in | strass-layout service, as `Rules` flags (`overlap_cleanup`, `hole_fill`, `fill_vote`). The cap is decided: a service option, **on by default**. Every stone above SS16 becomes SS16 at the same centre, except the two pupils of one plausible pair (S1), which are capped at SS20. The cap runs before the cleanup. |
 | How | **Redesign** in Python. Port the algorithms (worst-pair-first removal with the neighbour tie-break; farthest-spot greedy SS6-then-SS4 fill on a 20 px/mm grid; weighted vote in rounds). Reuse the service's own subject mask and colour code instead of IS's JS copies. Report `removed`, `filled` and coverage after the clean-up. Compare with the service's existing `fill_exact`/`fill_cover_mask` (S9), which attack the same holes inside the service's own fill. |
 | Risk | Medium. It adds and removes stones, so it must run before `aiLayout` is saved (Design edits by index). Runtime is small next to StarDist. |
 | Size | L |
@@ -251,15 +265,15 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 
 | | |
 | --- | --- |
-| Plain words | Reject a bad layout automatically and try once more. |
-| IS | `src/pipeline/design.js` `acceptLayout`, `rerunOrFail` |
-| RS place | `server/redraw/jobs.mjs` (today a layout failure keeps the AI image and falls back to IMG-023) |
-| Fits rules | Yes. It is job control, not geometry. |
-| Goes in | redraw (job) for the decision; the service reports the numbers |
-| How | **Adapt.** With 3.4 in the service, the 0-violation and coverage checks come from the service report. A re-run costs a second provider call (Q4). |
-| Risk | Low, but it costs money. |
+| Plain words | Show how good a layout is, so the user can decide to try again. Decided: **no automatic re-run.** |
+| IS | `src/pipeline/design.js` `acceptLayout` (`rerunOrFail` is not ported) |
+| RS place | The service report (`strass_layout/pipeline.py` `finish_layout`) → `layer.aiLayout.report`. `server/redraw/jobs.mjs` keeps today's fallback to IMG-023 when the layout fails. |
+| Fits rules | Yes. These are report figures, not geometry. |
+| Goes in | strass-layout service (the figures); the lightbox Stats (shows them) |
+| How | **Adapt.** The service adds to its report the stones removed by the cleanup, the coverage after the clean-up and the gap check result (violations, min gap). They are saved in the layer's `aiLayout.report`, and `validateProject()` must accept the new keys. The lightbox shows them next to the existing stats. A re-run is the user's own "try again". |
+| Risk | Low. |
 | Size | S |
-| Tests | `tools/test-img-026-redraw-jobs.mjs` (new stage, re-run count). |
+| Tests | `test_contract` (`REPORT_KEYS`), `test_report`, `tools/test-img-026-ai-layout-app.mjs` (`validateProject()`), `tools/test-img-026-lightbox.mjs` (Stats). `tools/test-img-026-redraw-jobs.mjs` checks that no second provider call is made. |
 
 ### 3.6 Black & white (P5, P6, N5)
 
@@ -267,7 +281,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 
 | | |
 | --- | --- |
-| Plain words | A Jet + Crystal design, either Bold (solid areas) or Shaded (mixed patterns). |
+| Plain words | A Jet + Crystal design, either Bold (solid areas) or Shaded (mixed patterns). Decided: yes, both styles, Jet and Crystal only, as the last image milestone (IMG-026P). |
 | IS | `src/pipeline/prompt.js` (Appendix A, stencil), `src/pipeline/bw.js`, `holes.js` (`lightnessOnWhite`, vote) |
 | RS place | Prompt: `server/redraw/prompt.mjs` (`REDRAW_STYLES`, `PROMPT_VERSIONS`). Mapping: none. Layer data: `layer.redraw.style` via `RedrawLayerTransform.js`. Lightbox: `src/ui/ImageStudioState.js`, `index.html`. |
 | Fits rules | Yes, if the Jet/Crystal mapping is done **in the service**, which has the image, the frame and an inner-60 % reader (`ordered.delivered_lab`). Doing it in Node (as IS) would need image decoding in `server/` and would be a second colour producer. |
@@ -327,7 +341,7 @@ basis for RS numbers.
 
 | IS prompt | RS today | Proposed RS |
 | --- | --- | --- |
-| Colour v4 (= RS v6 + P1 + P2 + P3 + P4) | stones v6 | **stones v7** = v6 + P3 + P4. P1 and P2 are added only if Q1 says RS moves to `size auto`; otherwise v7 keeps "Square image" and the 60-across sentence. Appendix E in IMG-026. |
+| Colour v4 (= RS v6 + P1 + P2 + P3 + P4) | stones v6 | **stones v7** = v6 + P3 + P4. P1 and P2 are added only if RS moves to `size auto`, which is not decided (section 8, item 1). Until then v7 keeps "Square image" and the 60-across sentence. Appendix E in IMG-026. |
 | Bold (stencil) v5, with the eye rule | none | **new style `bold`, `BOLD_PROMPT_VERSION = 1`** |
 | Shaded (halftone, IS Appendix A), shares IS v4 | none | **new style `shaded`, `SHADED_PROMPT_VERSION = 1`** |
 | — | flat v1 | unchanged |
@@ -336,7 +350,8 @@ basis for RS numbers.
 - Per-style numbering follows IMG-024 (each style versions itself). `layer.redraw.promptVersion`
   already records `PROMPT_VERSIONS[style]`, so no data change is needed beyond the new style values.
 - If Alex prefers one shared counter, the alternative is stones v7, bold v8, shaded v9, with the
-  BACKLOG row at v10.
+  BACKLOG row at v10. (Black & white itself is decided; this numbering is still the plan's
+  proposal.)
 
 ---
 
@@ -358,7 +373,7 @@ model sources.
 | --- | --- | --- |
 | **dlib 68-point model** `shape_predictor_68_face_landmarks.dat` (downloaded by `setup_mac.sh` and baked into the Docker image, from `face_recognition_models==0.3.0`) | Trained on iBUG 300-W, whose licence excludes commercial use. dlib's author notes the trained model "can't be used in a commercial product". | **Blocked.** Used at runtime by `strass_layout/models.py` on every layout. |
 | `dlib-bin` 19.24.6 (the library) | Boost Software License | OK, but only needed for the model above. |
-| StarDist model `2D_versatile_fluo` (committed) | Distributed with StarDist (BSD-3). Trained on a subset of DSB 2018 / BBBC038, published as CC0. | OK. Confirm the training-data note once before launch (Q6). |
+| StarDist model `2D_versatile_fluo` (committed) | Distributed with StarDist (BSD-3). Trained on a subset of DSB 2018 / BBBC038, published as CC0. | OK. Record the training-data note in `THIRD_PARTY_LICENCES.md` (IMG-026L). |
 | stardist 0.9.2, csbdeep 0.8.2, scikit-learn, scikit-image, scipy, numpy, httpx, uvicorn | BSD-3 / BSD | OK |
 | tensorflow 2.16.2, opencv-python-headless 4.11, python-multipart | Apache 2.0 | OK |
 | fastapi | MIT | OK |
@@ -404,40 +419,86 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 
 | # | Milestone | Scope (one line) | Done when |
 | --- | --- | --- | --- |
-| 1 | **IMG-026L — Face landmarks without dlib** | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated. | The service imports no dlib and starts and lays out with dlib uninstalled. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
-| 2 | **IMG-026M — Eyes, colour reading and skin rules** | 3.2: S1, S3–S6, S8, S10, S11 and `pupilsAtMm` in `DEFAULT`; S2 per Q3; `BUILD_J` frozen. | The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. 0 violations. `validateProject()` accepts `face: null` and the new report key. |
+| 1 | **IMG-026L — Face landmarks without dlib** | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
+| 2 | **IMG-026M — Eyes, colour reading and skin rules** | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` unchanged. | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. 0 violations. `validateProject()` accepts `face: null` and the new report key. |
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
-| 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); P1/P2/C1/C2 per Q1; BACKLOG row 77 → v8. | T1 reads Appendix E. The jobs test sees the agreed `size`. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
-| 5 | **IMG-026O — Service clean-up and hole fill** | 3.4 + 3.5: overlap cleanup, hole fill with neighbour vote, optional cap, report figures; the job uses them for acceptance. | On the 12 images: 0 stones removed, 0 holes left where an SS4 fits, min gap ≥ 0.100 mm, no lone dark fill stones. `test_report` holds. The jobs test covers the accept/re-run rule. |
+| 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. P1/P2/C1/C2 (`size auto`, the whole-image line, no 60-across, the cut-out crop) only once section 8, item 1 is decided. | T1 reads Appendix E. The jobs test sees the agreed `size` (`1024x1024` until item 1 is decided). A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
+| 5 | **IMG-026O — Service clean-up and hole fill** | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
 | 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
 
-Order: the licence first, because RS is commercial today. Then the cheap, flag-gated service rules,
-which give the largest measured quality gain for the least risk. Exporter fixes whenever there is a
-gap. Then the prompt (needs provider calls and Q1), the clean-up (needs Q2), B&W (a schema change)
-and the view.
+Order (kept): 026L, 026M, RS-3042 (any time), 026N, 026O, 026P, 026Q.
+- The licence comes first.
+- Then the cheap, flag-gated service rules, which give the largest measured quality gain for the
+  least risk.
+- Exporter fixes whenever there is a gap.
+- Then the prompt (needs provider calls; `size auto` waits on section 8, item 1), the clean-up,
+  Black & white (the last image milestone; a schema change) and the view.
+
+Every port milestone reads IS at commit `e9e7014` (GitHub `main`), cloned to a scratch folder, never
+the local IS checkout.
 
 ---
 
-## 8. Open questions for Alex
+## 8. Decisions (31 Oct 2026)
 
-1. **Square or `size auto`?** IS moved to `size auto`, the whole-image line, no "60 across" and the
-   cut-out crop. In RS a tall or wide subject would then come back much larger, and S14 cannot
-   shrink an ai-layout layer. Keep square output in RS, or move to `size auto` and revisit S14 or
-   the product-aware stone count (BACKLOG row 77)?
-2. **Cap large stones?** IS caps everything above SS16 and keeps SS20 only for a face's two pupils
-   (its product decision D2). Should RS cap too (and at what size), or keep SS30 pupils?
-3. **`soft_outlines` off and `human_iris` off for people?** IS measured both as better on its 21
-   designs. Both change how faces look in RS's own portraits. Adopt IS's defaults?
-4. **Automatic re-run.** IS re-runs a rejected layout once, at the cost of a second provider call.
-   RS falls back to the older AI-stones path. Which should RS do?
-5. **Black & white in RS at all,** and if so both Bold and Shaded? Per-style prompt numbers
-   (`bold` 1, `shaded` 1) or one shared counter (section 4)?
-6. **Licence confirmation.** Is a manual check of the MediaPipe model card and of the StarDist
-   training data (DSB 2018 / BBBC038, CC0) enough, or do you want a written licence note in the
-   repository? Also: is RS's current use commercial, so that the dlib fix must land before any
-   further production designs are made?
-7. **The stale IS checkout.** The local IS `main` is five days behind GitHub (`5721965` vs
-   `e9e7014`). Pull it, or keep reading from GitHub for future ports?
-8. **Milestone names.** IMG-026L… continues the v2 build letters. Or start a fresh number
-   (IMG-027A…) for "ports from IS"?
+1. **Provider call, `size auto`: not decided. It conflicts with the enlarge-only rule.**
+   - **The rule.** An ai-layout layer can only be enlarged (IMG-026 S14: k = `layer.w /
+     aiLayout.widthMm`, clamped to at least 1). So the natural size is the smallest the design can
+     ever be.
+   - **The natural sizes.** IS measured a longest side of 131–309 mm with `size auto` (IS-03b: mug
+     131, giraffe 80 × 309, car 260 × 89). RS's square output gives 130–168 mm.
+   - **The products** (RS-2010 defaults; the printable area is a little smaller):
+     - mug body 95 mm tall;
+     - bottle body 150 mm;
+     - tumbler body 175 mm;
+     - plate 270 mm across;
+     - Flat Sheet up to 500 mm.
+   - **The conflict:**
+     - no natural-size design fits a mug, in either output mode;
+     - with `size auto` a tall subject (309 mm) fits no product but the Flat Sheet;
+     - a long subject (260 mm) is wider than a mug's printable band.
+   - **Today**, square output already overflows vessels. S15 accepted that: Image → Strass v2
+     targets the Flat Sheet, and on a vessel the RS-3038 outside-area warning shows.
+   - **The options:**
+     - **A.** Adopt `size auto` for the Flat Sheet as S15 already intends, and accept the warning
+       on vessels as today. Simplest; vessels get no usable size either way.
+     - **B.** Adopt `size auto` only when the active product is the Flat Sheet; keep square
+       `1024x1024` on vessels and the plate. Keeps today's vessel sizes, but adds a product branch in
+       the redraw request.
+     - **C.** Keep square output everywhere (no P1/P2/C1/C2). The natural size stays 130–168 mm.
+     - **D.** Make vessels fit by asking for fewer stones (BACKLOG row 77, product-aware count).
+       IS-03b measured that the model ignores stone-count wording, so this is unproven and needs
+       provider calls.
+     - **E.** Allow shrinking below the natural size. That needs a new layout in the service at a
+       smaller pitch or with fewer stones, because scaling positions down would break the 0.1 mm
+       gap. A large change to S14.
+   - **Until Alex chooses,** IMG-026N ships only the skin-tone prompt lines (P3, P4) with square
+     output.
+2. **Size cap: yes.** Every stone above SS16 becomes SS16 at the same centre, except the two pupils
+   of one plausible pair, capped at SS20. It is a service option, on by default (IMG-026O). Reason:
+   capped stones only widen gaps, and a capped pupil keeps its look (IS-05b).
+3. **Face defaults: adopt IS's.** `human_iris` off, `skin_nearest_inner`, `warm_shadow` with
+   `warm_shadow_de` 3, `lone_white_skin`, the plausible-pupil-pair rule, `sample_delivered`
+   (IMG-026M). Reason: IS measured each on 21 designs: fewer false pupils, no goggle eyes, warmer
+   and cleaner skin, with stone positions unchanged. (`soft_outlines` was not in the list and stays
+   on as RS ships it.)
+4. **No automatic re-run.** RS keeps its current fallback (IMG-023 when the layout fails). The
+   acceptance numbers go into the layer's report: stones removed by the cleanup, coverage, and the
+   gap check (IMG-026O). Reason: the user sees the numbers and decides whether to try again, and no
+   second provider call is made without asking.
+5. **Black & white: yes.** Bold (stencil) and Shaded (halftone), Jet and Crystal only, as the last
+   image milestone (IMG-026P). Reason: IS showed both styles work, and they need the clean-up and
+   hole fill of IMG-026O first.
+6. **Licence records: in IMG-026L.** A `services/strass-layout/THIRD_PARTY_LICENCES.md` lists every
+   model and dependency with its licence and whether it allows commercial use. A test fails if dlib
+   is imported anywhere outside the tests. Reason: the dlib model must never come back into
+   production by accident, and the licence position should be written down where the service
+   lives.
+7. **IS source: every port milestone reads IS at commit `e9e7014` (GitHub `main`),** cloned to a
+   scratch folder, never the local IS checkout. Reason: the local checkout is stale (`5721965`), and
+   one pinned commit keeps every port diffable.
+
+Still the plan's proposal, not decided:
+- the prompt numbering for Bold and Shaded (section 4);
+- the milestone names (IMG-026L… rather than a fresh number).
