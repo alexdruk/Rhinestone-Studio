@@ -2,18 +2,18 @@
 
 Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no service started.
 
-**Decisions recorded (31 Oct 2026).** Alex decided these questions on 31 Oct 2026:
+**Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
-- the face defaults;
+- the face defaults, with `soft_outlines` off as IS has it (IS measured why);
 - no automatic re-run;
 - Black & white;
 - the licence records;
-- the IS source commit.
+- the IS source commit;
+- **option B for the size.** `size auto` and the whole-image prompt line apply only on the Flat
+  Sheet. Vessels and the plate keep square output and today's wording.
 
-Sections 3, 4, 7 and 8 now follow those decisions. One decision is **not recorded: `size auto`**. It
-conflicts with RS's rule that an ai-layout layer can only be enlarged: no natural-size design fits a
-mug, and the tallest fit no product but the Flat Sheet. Section 8 explains the conflict and the
-options. Until Alex chooses, IMG-026N carries only the skin-tone prompt change.
+Sections 3, 4, 7 and 8 follow those decisions. The mug, which no design fits, is an open item
+(section 8, item 8), not a milestone.
 
 ## 0. What was read
 
@@ -228,7 +228,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | RS place | The same files under `services/strass-layout/` |
 | Fits rules | Yes. Every rule is a `Rules` flag and `PROTOTYPE`/`BUILD_*` stay as they are. Stones still come only from the service and the one engine. Saved layers do not change. |
 | Goes in | strass-layout service |
-| How | **Copy** S1, S3–S6, S8, S10, S11 and `pupilsAtMm`. `DEFAULT` takes IS's face defaults (decided): `human_iris` off, `skin_nearest_inner`, `warm_shadow` with `warm_shadow_de` 3, `lone_white_skin`, `plausible_eyes`, `sample_delivered`. S2 (`soft_outlines` off) was not in that list, so it stays on as RS ships it until Alex says otherwise. S11 (the `eyes.py` edge crash) comes with a test that reproduces it first. Copy S9 and S7 as off-everywhere flags, or skip them; they are experiments. Copy S12/S13 only if a later RS step uses them (S12 is needed only for an optional service-fill vote; S13 for nothing). Add an RS `BUILD_J` constant that freezes today's `DEFAULT`, matching how builds E–J were frozen, so `test_build_j` keeps comparing like with like. |
+| How | **Copy** S1, S3–S6, S8, S10, S11 and `pupilsAtMm`. `DEFAULT` takes IS's face defaults (decided): `human_iris` off, `skin_nearest_inner`, `warm_shadow` with `warm_shadow_de` 3, `lone_white_skin`, `plausible_eyes`, `sample_delivered`. S2: `soft_outlines` off, as IS (decided; section 8, item 3). S11 (the `eyes.py` edge crash) comes with a test that reproduces it first. Copy S9 and S7 as off-everywhere flags, or skip them; they are experiments. Copy S12/S13 only if a later RS step uses them (S12 is needed only for an optional service-fill vote; S13 for nothing). Add an RS `BUILD_J` constant that freezes today's `DEFAULT`, matching how builds E–J were frozen, so `test_build_j` keeps comparing like with like. |
 | Risk | Low to medium. Colours change on new redraws; positions change only through S1 (no eye stage on non-faces). The IS tests read only the 12 RS images and `sunburst_flower.png`, which RS already has. |
 | Size | M |
 | Tests | Existing: `test_rules`, `test_build_f`…`_j`, `test_golden`, `test_contract` (`REPORT_KEYS` += `pupilsAtMm`), `test_report`. To add: the IS tests ported, plus a regression test for S11 (`DarkDiscAtTheEdge`). On the Node side, `tools/test-img-026-ai-layout-app.mjs` should accept the new `report` key and `face: null` (check `validateProject()`). |
@@ -242,7 +242,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | RS place | `server/redraw/prompt.mjs` (`V6_HEAD`, `V6_TAIL`, `PROMPT_VERSION`); `server/redraw/handler.mjs:114` (`size`); `src/redraw/index.js:67` (input fitted to 1536 px) |
 | Fits rules | Yes. These are text and request changes; no geometry. |
 | Goes in | redraw (server prompt and handler; the browser for the crop) |
-| How | **Copy** P3 and P4 as prompt v7. P1, P2, C1 and C2 go together and wait on the `size auto` conflict (section 8, item 1). If RS keeps square output, keep "Square image" and probably the 60-across sentence. The smallest RS crop: when the upload has real transparency, crop to its alpha box + 3 % before the fit to 1536 px. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
+| How | **Copy** P3 and P4 as prompt v7. **Option B (decided):** before the provider call, the product type picks the shape. On the Flat Sheet the request sends `size: 'auto'` and the prompt has the whole-image line (P1, C1). Vessels and the plate send `1024x1024` with today's "Square image" line. P2 (dropping the 60-across sentence) and C2 (the cut-out crop) are not decided; both texts keep the sentence until Alex says otherwise. The smallest RS crop: when the upload has real transparency, crop to its alpha box + 3 % before the fit to 1536 px. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
 | Risk | Medium. A prompt change moves every new design. `size auto` changes natural sizes, and S14 cannot shrink them. Provider calls are needed to measure it. |
 | Size | S (P3/P4 only) to M (with C1/C2 and a measured run) |
 | Tests | Existing: `tools/test-img-022-redraw-provider.mjs` T1 (reads the spec appendix, so a new Appendix E is needed), `tools/test-img-026-redraw-jobs.mjs` (multipart request). Missing: a test for the alpha-box crop. |
@@ -341,7 +341,7 @@ basis for RS numbers.
 
 | IS prompt | RS today | Proposed RS |
 | --- | --- | --- |
-| Colour v4 (= RS v6 + P1 + P2 + P3 + P4) | stones v6 | **stones v7** = v6 + P3 + P4. P1 and P2 are added only if RS moves to `size auto`, which is not decided (section 8, item 1). Until then v7 keeps "Square image" and the 60-across sentence. Appendix E in IMG-026. |
+| Colour v4 (= RS v6 + P1 + P2 + P3 + P4) | stones v6 | **stones v7** = v6 + P3 + P4, in two shape variants that differ only in section 6's first line: the whole-image line (P1) on the Flat Sheet, "Square image" on vessels and the plate (option B). Appendix E in IMG-026 gives both. Proposed: one version number for both, because the line follows the product and the layer already knows its product. |
 | Bold (stencil) v5, with the eye rule | none | **new style `bold`, `BOLD_PROMPT_VERSION = 1`** |
 | Shaded (halftone, IS Appendix A), shares IS v4 | none | **new style `shaded`, `SHADED_PROMPT_VERSION = 1`** |
 | — | flat v1 | unchanged |
@@ -420,9 +420,9 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | # | Milestone | Scope (one line) | Done when |
 | --- | --- | --- | --- |
 | 1 | **IMG-026L — Face landmarks without dlib** | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
-| 2 | **IMG-026M — Eyes, colour reading and skin rules** | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` unchanged. | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. 0 violations. `validateProject()` accepts `face: null` and the new report key. |
+| 2 | **IMG-026M — Eyes, colour reading and skin rules** | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` off in `DEFAULT` (IS-05b). | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. With `soft_outlines` off, only outline stones on human faces change colour (black stays black). 0 violations. `validateProject()` accepts `face: null` and the new report key. |
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
-| 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. P1/P2/C1/C2 (`size auto`, the whole-image line, no 60-across, the cut-out crop) only once section 8, item 1 is decided. | T1 reads Appendix E. The jobs test sees the agreed `size` (`1024x1024` until item 1 is decided). A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
+| 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
 | 5 | **IMG-026O — Service clean-up and hole fill** | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
 | 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
@@ -432,7 +432,7 @@ Order (kept): 026L, 026M, RS-3042 (any time), 026N, 026O, 026P, 026Q.
 - Then the cheap, flag-gated service rules, which give the largest measured quality gain for the
   least risk.
 - Exporter fixes whenever there is a gap.
-- Then the prompt (needs provider calls; `size auto` waits on section 8, item 1), the clean-up,
+- Then the prompt (needs provider calls; option B for the shape), the clean-up,
   Black & white (the last image milestone; a schema change) and the view.
 
 Every port milestone reads IS at commit `e9e7014` (GitHub `main`), cloned to a scratch folder, never
@@ -442,47 +442,30 @@ the local IS checkout.
 
 ## 8. Decisions (31 Oct 2026)
 
-1. **Provider call, `size auto`: not decided. It conflicts with the enlarge-only rule.**
-   - **The rule.** An ai-layout layer can only be enlarged (IMG-026 S14: k = `layer.w /
-     aiLayout.widthMm`, clamped to at least 1). So the natural size is the smallest the design can
-     ever be.
-   - **The natural sizes.** IS measured a longest side of 131–309 mm with `size auto` (IS-03b: mug
-     131, giraffe 80 × 309, car 260 × 89). RS's square output gives 130–168 mm.
-   - **The products** (RS-2010 defaults; the printable area is a little smaller):
-     - mug body 95 mm tall;
-     - bottle body 150 mm;
-     - tumbler body 175 mm;
-     - plate 270 mm across;
-     - Flat Sheet up to 500 mm.
-   - **The conflict:**
-     - no natural-size design fits a mug, in either output mode;
-     - with `size auto` a tall subject (309 mm) fits no product but the Flat Sheet;
-     - a long subject (260 mm) is wider than a mug's printable band.
-   - **Today**, square output already overflows vessels. S15 accepted that: Image → Strass v2
-     targets the Flat Sheet, and on a vessel the RS-3038 outside-area warning shows.
-   - **The options:**
-     - **A.** Adopt `size auto` for the Flat Sheet as S15 already intends, and accept the warning
-       on vessels as today. Simplest; vessels get no usable size either way.
-     - **B.** Adopt `size auto` only when the active product is the Flat Sheet; keep square
-       `1024x1024` on vessels and the plate. Keeps today's vessel sizes, but adds a product branch in
-       the redraw request.
-     - **C.** Keep square output everywhere (no P1/P2/C1/C2). The natural size stays 130–168 mm.
-     - **D.** Make vessels fit by asking for fewer stones (BACKLOG row 77, product-aware count).
-       IS-03b measured that the model ignores stone-count wording, so this is unproven and needs
-       provider calls.
-     - **E.** Allow shrinking below the natural size. That needs a new layout in the service at a
-       smaller pitch or with fewer stones, because scaling positions down would break the 0.1 mm
-       gap. A large change to S14.
-   - **Until Alex chooses,** IMG-026N ships only the skin-tone prompt lines (P3, P4) with square
-     output.
+1. **Size: option B.** The provider call uses `size auto` and the whole-image prompt line ("in
+   the same shape as the uploaded image") only when the layer is on the Flat Sheet. Vessels and the
+   plate keep square output and today's wording. The choice is made from the product type before
+   the provider call (IMG-026N).
+   - Reason: square output (130–168 mm) already fits the tumbler (175 mm) and the plate (270 mm);
+     `size auto` (up to 309 mm) would not. The Flat Sheet gains the photo's shape.
+   - Background: an ai-layout layer can only be enlarged (S14), so its natural size is its
+     smallest. Options A, C, D and E were set aside; E (shrinking) is the mug open item below.
 2. **Size cap: yes.** Every stone above SS16 becomes SS16 at the same centre, except the two pupils
    of one plausible pair, capped at SS20. It is a service option, on by default (IMG-026O). Reason:
    capped stones only widen gaps, and a capped pupil keeps its look (IS-05b).
 3. **Face defaults: adopt IS's.** `human_iris` off, `skin_nearest_inner`, `warm_shadow` with
-   `warm_shadow_de` 3, `lone_white_skin`, the plausible-pupil-pair rule, `sample_delivered`
-   (IMG-026M). Reason: IS measured each on 21 designs: fewer false pupils, no goggle eyes, warmer
-   and cleaner skin, with stone positions unchanged. (`soft_outlines` was not in the list and stays
-   on as RS ships it.)
+   `warm_shadow_de` 3, `lone_white_skin`, the plausible-pupil-pair rule, `sample_delivered`, and
+   **`soft_outlines` off** (IMG-026M). Reason: IS measured each on 21 designs: fewer false pupils,
+   no goggle eyes, warmer and cleaner skin, with stone positions unchanged.
+   - **What `soft_outlines` does:** on a person's face (outside the eye area), a black (Jet) stone
+     whose neighbours are at least 40 % skin colours and at most two black turns Smoked Topaz. It
+     softens the black lines the AI draws for the jaw, nose and ears (RS build I).
+   - **IS's reason, measured:** IS docs/IS-05b-results.md ("Rules switched off one at a time", 6.2)
+     and services/strass/ORIGIN.md (IS-05b follow-up). It is the only rule whose removal lowers the
+     colour error against the AI image where it acts: mean ΔE2000 woman 7.73 → 7.02 (94 stones),
+     portrait 8.23 → 8.06 (44), dog 7.76 → 7.66 (11). Nothing else changes. On the woman it had
+     turned 94 outline stones that the AI drew black into Smoked Topaz.
+   - **Decision:** off, as IS, in IMG-026M.
 4. **No automatic re-run.** RS keeps its current fallback (IMG-023 when the layout fails). The
    acceptance numbers go into the layer's report: stones removed by the cleanup, coverage, and the
    gap check (IMG-026O). Reason: the user sees the numbers and decides whether to try again, and no
@@ -499,6 +482,14 @@ the local IS checkout.
    scratch folder, never the local IS checkout. Reason: the local checkout is stale (`5721965`), and
    one pinned commit keeps every port diffable.
 
+8. **Open item, not a milestone: the mug.** No design fits the mug (95 mm body), square or not:
+   natural sizes start at about 130 mm. Fixing it needs a layout at a smaller scale (option E: a new
+   service layout with a smaller pitch or fewer stones, because scaling positions down would break
+   the 0.1 mm gap). That is out of scope for this port. The bottle (150 mm body) is in between: it
+   takes the smaller square designs, not the largest (168 mm).
+
 Still the plan's proposal, not decided:
 - the prompt numbering for Bold and Shaded (section 4);
-- the milestone names (IMG-026L… rather than a fresh number).
+- the milestone names (IMG-026L… rather than a fresh number);
+- on the Flat Sheet, whether to drop the 60-across sentence (P2) and crop to the cut-out (C2);
+  IS-03b recommends dropping P2 with non-square output.
