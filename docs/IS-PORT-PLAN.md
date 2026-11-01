@@ -23,6 +23,17 @@ Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no ser
     7.4 mm of the pupils on einstein, portrait and woman. Everywhere else only colours change. S1
     dropped no eye stage on the 13 images.
 
+- **IMG-026N done** (1 Nov 2026, branch `feature/img-026n-prompt-v7-model-input`). The results are in
+  `docs/results/IMG-026N/`.
+  - Prompt v7 (IS's skin lines) for every product. The Flat Sheet sends `size: auto`, the
+    whole-image line, no 60-across sentence, and the cut-out crop at 1024 px; vessels and the plate
+    are unchanged otherwise. BACKLOG row 77 now plans version 8.
+  - Real check, 3 provider calls: face ΔL\* +2.3 (freckles), +0.2 (flower crown), +12.7 (curls),
+    against +5.3, −0.2 and +23.5 in PatternNifty's listing designs. No RS v6 result exists for these
+    photos.
+  - Not foreseen: on the two darker faces the service's colour step makes the face stones 2 to 4 L\*
+    lighter than the AI image.
+
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
 - the face defaults, with `soft_outlines` off as IS has it (IS measured why);
@@ -263,7 +274,7 @@ Size: S = under a day, M = 1–3 days, L = 3–5 days.
 | RS place | `server/redraw/prompt.mjs` (`V6_HEAD`, `V6_TAIL`, `PROMPT_VERSION`); `server/redraw/handler.mjs:114` (`size`); `src/redraw/index.js:67` (input fitted to 1536 px) |
 | Fits rules | Yes. These are text and request changes; no geometry. |
 | Goes in | redraw (server prompt and handler; the browser for the crop) |
-| How | **Copy** P3 and P4 as prompt v7. **Option B (decided):** before the provider call, the product type picks the shape. On the Flat Sheet the request sends `size: 'auto'` and the prompt has the whole-image line (P1, C1). Vessels and the plate send `1024x1024` with today's "Square image" line. P2 (dropping the 60-across sentence) and C2 (the cut-out crop) are not decided; both texts keep the sentence until Alex says otherwise. The smallest RS crop: when the upload has real transparency, crop to its alpha box + 3 % before the fit to 1536 px. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
+| How | **Copy** P3 and P4 as prompt v7. **Option B (decided):** before the provider call, the product type picks the shape. On the Flat Sheet the request sends `size: 'auto'` and the prompt has the whole-image line (P1, C1). Vessels and the plate send `1024x1024` with today's "Square image" line. P2 and C2, decided for IMG-026N (1 Nov 2026): on the Flat Sheet the 60-across sentence is dropped, and an upload with a transparent background is cropped to its alpha box + 3 %, then fitted to 1024 px on the long side (without transparency the whole image, fitted the same way); vessels and the plate keep the sentence and today's input. RS has no background removal, and adding rembg/BiRefNet would be a separate, larger decision. |
 | Risk | Medium. A prompt change moves every new design. `size auto` changes natural sizes, and S14 cannot shrink them. Provider calls are needed to measure it. |
 | Size | S (P3/P4 only) to M (with C1/C2 and a measured run) |
 | Tests | Existing: `tools/test-img-022-redraw-provider.mjs` T1 (reads the spec appendix, so a new Appendix E is needed), `tools/test-img-026-redraw-jobs.mjs` (multipart request). Missing: a test for the alpha-box crop. |
@@ -444,7 +455,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | 1 | **IMG-026L — Face landmarks without dlib** (**done**, 31 Oct 2026) | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
 | 2 | **IMG-026M — Eyes, colour reading and skin rules** (**done**, 1 Nov 2026; S4 also moves stones near people's pupils, see Progress) | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` off in `DEFAULT` (IS-05b). | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. With `soft_outlines` off, only outline stones on human faces change colour (black stays black). 0 violations. `validateProject()` accepts `face: null` and the new report key. |
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
-| 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
+| 4 | **IMG-026N — Prompt v7 and model input** (**done**, 1 Nov 2026) | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
 | 5 | **IMG-026O — Service clean-up and hole fill** | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
 | 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
@@ -513,5 +524,5 @@ the local IS checkout.
 Still the plan's proposal, not decided:
 - the prompt numbering for Bold and Shaded (section 4);
 - the milestone names (IMG-026L… rather than a fresh number);
-- on the Flat Sheet, whether to drop the 60-across sentence (P2) and crop to the cut-out (C2);
-  IS-03b recommends dropping P2 with non-square output.
+- ~~on the Flat Sheet, whether to drop the 60-across sentence (P2) and crop to the cut-out (C2)~~:
+  decided in the IMG-026N brief (1 Nov 2026): both, on the Flat Sheet only.

@@ -5844,6 +5844,9 @@ async function startImageRedraw(){
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
   // IMG-026 (C2, D3): always the stone picture; the flat style stays dormant.
   const style='stones';
+  // IMG-026 (build N): read before the provider call. The Flat Sheet asks for the photo's own shape
+  // (cropped model input, size auto); vessels and the plate keep the square output.
+  const shape=currentObjectTemplate().id==='sheet'?'auto':'square';
   redrawRun=new AbortController();
   runningLayerId=layerId;
   setImageRedrawStatus('Redrawing… this can take up to five minutes.');
@@ -5851,7 +5854,7 @@ async function startImageRedraw(){
   syncImageRedrawControls(layer);
   renderImageStudio();
   try{
-    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])}});
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])},shape});
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
     const current=project.layers.find(x=>x.id===layerId);
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}

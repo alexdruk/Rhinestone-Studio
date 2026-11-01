@@ -185,10 +185,10 @@ async function runJob(handler, opts) {
 
 // ---- T1. Prompt --------------------------------------------------------------------------------
 
-await test('T1. prompt: IMG-026 v6 text (the spec\'s Appendix D) with the generated palette line, which is every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 6', async () => {
-  assert.equal(PROMPT_VERSION, 6);
+await test('T1. prompt: IMG-026 v7 square text (the spec\'s Appendix E, first block) with the generated palette line, which is every STONE_COLORS entry once as "Name #hex" in catalogue order, PROMPT_VERSION 7', async () => {
+  assert.equal(PROMPT_VERSION, 7);
   const spec = await readFile(fileURLToPath(new URL('../docs/specifications/IMG-026-StrassLayoutService.md', import.meta.url)), 'utf8');
-  const appendix = spec.slice(spec.indexOf('## Appendix D'));
+  const appendix = spec.slice(spec.indexOf('## Appendix E'));
   const block = appendix.slice(appendix.indexOf('```\n') + 4, appendix.indexOf('\n```', appendix.indexOf('```\n') + 4));
   assert.ok(block.includes('\n<palette line>\n'));
   const prompt = buildRedrawPrompt();
@@ -259,7 +259,7 @@ await test('T4. retry: 500 then 200 succeeds on the 2nd call; 500 twice is provi
 await test('T5. the outgoing request: images/edits, Bearer key, model/quality/size/background/output_format/n/prompt and a PNG image', async () => {
   let spy = spyFetch(okImage);
   let { final } = await runJob(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }));
-  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 6 });
+  assert.deepEqual(final.result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 7 });
   const { url, init } = spy.calls[0];
   assert.equal(url, OPENAI_IMAGE_EDITS_URL);
   assert.equal(url, 'https://api.openai.com/v1/images/edits');
@@ -457,7 +457,7 @@ await test('T8b. the proxy provider posts the upload with the access code and ma
   assert.equal(posts[0].url, '/api/redraw');
   assert.equal(posts[0].init.headers['X-Redraw-Access-Code'], 'letmein');
   assert.equal(posts[0].init.headers['Content-Type'], 'application/json');
-  assert.deepEqual(JSON.parse(posts[0].init.body), { image: `${PNG_PREFIX}UPLOAD`, style: 'stones' });
+  assert.deepEqual(JSON.parse(posts[0].init.body), { image: `${PNG_PREFIX}UPLOAD`, style: 'stones', shape: 'square' });
   assert.deepEqual([posts[1].url, posts[1].init.method, posts[1].init.headers['X-Redraw-Access-Code']], ['/api/redraw/job-1', 'GET', 'letmein']);
   for (const [code, detail] of [['unauthorized', 'The access code was not accepted.'], ['provider-failed', 'safety system'], ['not-configured', ''], ['provider-failed', '']]) {
     await assert.rejects(redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` }), (e) => e instanceof RedrawError && e.code === code && e.detail === detail);

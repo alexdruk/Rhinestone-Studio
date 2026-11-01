@@ -1817,6 +1817,32 @@ Plan: `docs/IS-PORT-PLAN.md` section 3.2. Each rule is a `Rules` flag, off in `P
   AI image falls from 9.21 to 9.10 (all pixels) and from 7.70 to 7.45 (stone pixels). It rises on
   Jesus, the woman (all pixels only), the tulips, the logo (all pixels only), the dog and the cat.
 
+## Prompt v7 and model input (build N)
+
+Build N ports PatternNifty's colour prompt v4 and model input (IS commit `e9e7014`; IS spec 7.1 to
+7.3, IS-03b, PN-09, PN-10). Plan: `docs/IS-PORT-PLAN.md` section 3.3, option B.
+
+- **Prompt v7** (Appendix E), for every product: IS's skin ramp line and skin-tone rule.
+  `PROMPT_VERSION` is 7; `layer.redraw.promptVersion` records it as before. The BACKLOG row that
+  planned version 7 now plans version 8.
+- **Shape.** `startImageRedraw()` reads the product before the provider call: the Flat Sheet sends
+  `shape: 'auto'`, every other product `'square'`. `redrawImage()`, the proxy provider and the
+  `POST /api/redraw` body carry it; a body without `shape` is `'square'`, any other value is a 400.
+  - `'auto'`: `size: 'auto'` (the output keeps the input's shape), the whole-image prompt, and the
+    model input of `src/redraw/ModelInput.js`: with a transparent background (any pixel below
+    alpha 128), the box of the pixels with alpha 128 or more plus 3 % of its longest side on every
+    side, transparent past the image edge; then 1024 px on the longest side, aspect kept, no
+    padding. Without transparency, the whole image, resized the same way.
+  - `'square'`: `size: 1024x1024`, the square prompt with the 60-across sentence, and today's input
+    (the upload fitted inside 1536 px).
+- **Fake mode** (`REDRAW_FAKE=1`) checks the shape too and answers version 7, with no provider call.
+- **Tests:** `tools/test-img-026-prompt-v7.mjs`.
+- **Measured** (`docs/results/IMG-026N/`, 3 provider calls, Flat Sheet): face skin ΔL\* of the AI
+  image against the photo, with IS's skin check: freckles +2.3, flower crown +0.2, curls +12.7
+  (PatternNifty's listing designs: +5.3, −0.2, +23.5). The output follows the photo's shape. On the two
+  darker faces the colour step makes the face stones 2 to 4 L\* lighter than the AI image (Silk on lit
+  cheeks).
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -2402,6 +2428,13 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - Build J changes text this file greps: `services/strass-layout/tests/test_build_i.py` (`BUILD_I`
   instead of `DEFAULT`).
 
+- Build N changes text these files grep (version 6 → 7, Appendix D → E, the `shape` key in the
+  request body):
+  - `tools/test-img-022-redraw-provider.mjs` T1, T5 and the client's POST body;
+  - `tools/test-img-024-flat-artwork-style.mjs` (the version and the POST bodies);
+  - `tools/test-img-026-redraw-jobs.mjs` (the version);
+  - `tools/test-img-026-ai-colours-sheet.mjs` (the version).
+
 ## Anchors (grepped at `7a9e482`)
 
 | Anchor | Location |
@@ -2710,3 +2743,131 @@ Use only the colours below, with exactly these hex values, as flat fills:
 
 Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
 ```
+
+## Appendix E — Redraw prompt v7 (`PROMPT_VERSION = 7`)
+
+Prompt v7 is Appendix D with PatternNifty's two skin lines (IS colour prompt v4, PN-10) in section 4:
+the skin ramp says it covers every skin tone, and a rule after the Topaz rule keeps each person's
+skin tone and lightness. It comes in two shapes, picked from the product before the provider call
+(build N). Both are version 7.
+
+- **Square** (`shape: 'square'`; vessels and the plate): Appendix D's section 1 and section 6.
+- **Whole image** (`shape: 'auto'`; the Flat Sheet): rule 1 has no "about 60 stones across"
+  sentence, and section 6's first rule asks for the uploaded image's shape. This text equals IS's
+  colour prompt v4 at IS commit `e9e7014`.
+
+`buildRedrawPrompt(colors, 'stones', shape)` returns the block of its shape with `<palette line>`
+replaced by `buildPaletteLine(colors, true)` (all 47 colours).
+
+Square:
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design. Make the stones large: about 60 stones across the full width of the image.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin (every skin tone, from the lightest to the deepest; deep skin uses the dark end of this ramp): Silk, Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Rose Peach and Vintage Rose for cheeks and Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Silk, Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Greige, Grey, Black Diamond, Graphite, Jet Hematite, Hematite, Jet;
+  greens: Chrysolite, Citrus Green, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire, Capri Blue; reds and pinks: Rose, Rose Peach, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Indian Siam, Fuchsia; yellows and oranges: Citrine, Light Topaz, Metallic Sunshine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Keep each person's skin tone, lightness and undertone as the photo shows them. Never lighten or whiten skin: each face stays as light or as dark as it is in the photo.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Square image at the highest resolution available.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
+Whole image:
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin (every skin tone, from the lightest to the deepest; deep skin uses the dark end of this ramp): Silk, Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Rose Peach and Vintage Rose for cheeks and Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Silk, Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Greige, Grey, Black Diamond, Graphite, Jet Hematite, Hematite, Jet;
+  greens: Chrysolite, Citrus Green, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire, Capri Blue; reds and pinks: Rose, Rose Peach, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Indian Siam, Fuchsia; yellows and oranges: Citrine, Light Topaz, Metallic Sunshine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Keep each person's skin tone, lightness and undertone as the photo shows them. Never lighten or whiten skin: each face stays as light or as dark as it is in the photo.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Use the whole image at the highest resolution available, in the same shape (width to height) as the uploaded image.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
