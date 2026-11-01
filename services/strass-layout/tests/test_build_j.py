@@ -1,14 +1,15 @@
-"""IMG-026J: the DEFAULT rules (skin and fur stones take their nearest skin colour) against BUILD_I.
+"""IMG-026J: the BUILD_J rules (skin and fur stones take their nearest skin colour) against BUILD_I.
 
 See docs/specifications/IMG-026-StrassLayoutService.md, "Skin and fur tones (build J)" and the
-Build J acceptance figures.
+Build J acceptance figures. IMG-026M froze build J's DEFAULT as BUILD_J, so this file compares the
+same two rule sets as before.
 """
 import unittest
 
 import numpy as np
 from skimage.color import rgb2lab
 
-from strass_layout import BUILD_I, DEFAULT
+from strass_layout import BUILD_I, BUILD_J
 from strass_layout.colour import CAT_IDS, PLUS_REAL_SKIN, palette
 from strass_layout.distinct import SKIN
 from strass_layout.faces import skin_nearest
@@ -36,17 +37,17 @@ class SkinNearest(unittest.TestCase):
 
     def test_rules(self):
         self.assertFalse(BUILD_I.skin_nearest)
-        self.assertTrue(DEFAULT.skin_nearest)
-        self.assertIs(palette(DEFAULT), PLUS_REAL_SKIN)
+        self.assertTrue(BUILD_J.skin_nearest)
+        self.assertIs(palette(BUILD_J), PLUS_REAL_SKIN)
 
 
-class DefaultAgainstBuildI(unittest.TestCase):
+class BuildJAgainstBuildI(unittest.TestCase):
     def test_images(self):
         changed = 0
         for name in IMAGES:
             with self.subTest(image=name):
                 i = support.layout_result(name, BUILD_I)
-                j = support.layout_result(name, DEFAULT)
+                j = support.layout_result(name, BUILD_J)
                 ri, rj = i["report"], j["report"]
                 self.assertEqual(rj["violations"], 0)
                 self.assertGreaterEqual(rj["minGapMm"], MIN_GAP_MM)

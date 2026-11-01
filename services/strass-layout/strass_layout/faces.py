@@ -1,4 +1,4 @@
-"""IMG-026I and J: finishing passes for faces, run after tone separation.
+"""IMG-026I, J and M: finishing passes for faces, run after tone separation.
 
 skin_nearest (IMG-026J) gives every SS4 or SS6 skin and fur stone the skin colour nearest its own
 mean colour, undoing the tone-separation moves inside the skin ramp.
@@ -6,6 +6,10 @@ mean colour, undoing the tone-separation moves inside the skin ramp.
 soften_outlines turns a person's black outline stones that sit on skin into Smoked Topaz, away
 from the eyes. calm_skin gives a lone skin stone the shade most of its neighbours share, when
 that shade is a close neighbour on the skin ramp.
+
+IMG-026M (from IS): Rules.warm_shadow (IS-05d) lets skin_nearest prefer Colorado Topaz to a near-tie
+Smoked Topaz; Rules.lone_white_skin (IS PN-04h, lone_white_skin, after calm_skin) gives a lone white
+stone in skin, which reads as a hole, its skin neighbours' colour.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -73,9 +77,16 @@ def calm_skin(P, D, C, pal, eyes, nb=None, max_de=15.0):
     return out, n
 
 
-def skin_nearest(D, C, lab, pal):
+# IMG-026M (IS-05d): the two stones the AI's shadow skin lies between (Rules.warm_shadow).
+SMOKED, COLORADO = "smoked-topaz", "colorado-topaz"
+
+
+def skin_nearest(D, C, lab, pal, warm_de=None):
     """Recolour each SS4 or SS6 stone whose colour is in distinct.SKIN to the SKIN colour (Topaz
-    excepted) nearest its Lab colour in ΔE2000. Returns (colours, count)."""
+    excepted) nearest its Lab colour in ΔE2000. Returns (colours, count).
+
+    IMG-026M (IS-05d): with warm_de (Rules.warm_shadow), a stone whose nearest is Smoked Topaz takes
+    Colorado Topaz when that is at most warm_de further away."""
     ids = [k for k in pal.ids if k in SKIN and k != "topaz"]
     cat = pal.lab[[pal.ids.index(k) for k in ids]]
     out = list(C)
@@ -83,21 +94,52 @@ def skin_nearest(D, C, lab, pal):
     for i, c in enumerate(C):
         if c not in SKIN or D[i] not in (1.5, 2.0):
             continue
-        new = ids[int(np.argmin(deltaE_ciede2000(np.repeat(lab[i][None], len(ids), 0), cat)))]
+        de = deltaE_ciede2000(np.repeat(lab[i][None], len(ids), 0), cat)
+        new = ids[int(np.argmin(de))]
+        if warm_de is not None and new == SMOKED and de[ids.index(COLORADO)] - de.min() <= warm_de:
+            new = COLORADO
         if new != c:
             out[i] = new
             n += 1
     return out, n
 
 
+# IMG-026M (IS PN-04h): the near-white stones lone_white_skin recolours.
+WHITE = {"crystal-clear", "crystal", "silver"}
+
+
+def lone_white_skin(P, D, C, pal, eyes, nb=None):
+    """IMG-026M (IS PN-04h): an SS4 or SS6 WHITE stone with at least four neighbours, all of them in
+    skin colours, outside 1.5 eye-zone radii (so a pupil's catch-light stays), takes the colour most
+    of its neighbours have (on a tie the lighter one). The AI paints such a stone as a highlight on
+    skin; in stones it reads as a hole. Returns (colours, count)."""
+    nb = nb if nb is not None else _neighbours(P, D)
+    out = list(C)
+    n = 0
+    for i, c in enumerate(C):
+        if c not in WHITE or D[i] not in (1.5, 2.0) or len(nb[i]) < 4 or _near_eye(P[i], eyes, 1.5):
+            continue
+        cs = [C[j] for j in nb[i]]
+        if not all(x in SKIN for x in cs):
+            continue
+        vals, cnt = np.unique(cs, return_counts=True)
+        best = [str(v) for v, k in zip(vals, cnt) if k == cnt.max()]
+        out[i] = max(best, key=lambda k: pal.lab[pal.ids.index(k)][0])
+        n += 1
+    return out, n
+
+
 def finish_faces(P, D, C, pal, face, eyes, rules, lab=None):
     nb = None
     if rules.skin_nearest:
-        C, _ = skin_nearest(D, C, lab, pal)
+        C, _ = skin_nearest(D, C, lab, pal, rules.warm_shadow_de if rules.warm_shadow else None)
     if rules.soft_outlines and face == "human":
         nb = _neighbours(P, D)
         C, _ = soften_outlines(P, D, C, eyes, nb)
     if rules.calm_skin:
         nb = nb if nb is not None else _neighbours(P, D)
         C, _ = calm_skin(P, D, C, pal, eyes, nb)
+    if rules.lone_white_skin:  # IMG-026M (IS PN-04h)
+        nb = nb if nb is not None else _neighbours(P, D)
+        C, _ = lone_white_skin(P, D, C, pal, eyes, nb)
     return C

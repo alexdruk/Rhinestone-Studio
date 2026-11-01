@@ -83,12 +83,17 @@ answers 200 with the layout:
 { "version": 1, "widthMm": 103.0, "heightMm": 130.8,
   "stones": [[x, y, "ss6", "jet"], ...],
   "report": { "stones", "bySize", "colours", "minGapMm", "violations", "coverage",
-              "largestEmptyCircleMm", "face", "pupilsMm", "frameMm", "offsetMm", "mmPerPx",
+              "largestEmptyCircleMm", "face", "pupilsMm", "pupilsAtMm", "frameMm", "offsetMm", "mmPerPx",
               "stagesMs": { "detect", "layout", "eyes", "colour", "check" }, "ms" } }
 ```
 
 Stone coordinates are centres in mm from the top-left corner of the stones' bounding box (S1).
 Size ids are `ss4 ss6 ss10 ss16 ss20 ss30` (1.5, 2.0, 2.8, 4.0, 4.7, 6.4 mm).
+
+`face` is `"human"` (a person's face was found), `"animal"` (no person's face; the logo and flowers
+say this too) or, since IMG-026M, `null`: the design's pupils are not one plausible pair, so no eye
+stones were placed. `pupilsMm` holds the pupil diameters; `pupilsAtMm` (IMG-026M) holds each pupil
+stone's centre `[x, y]`, in stone coordinates and the same order.
 
 Errors are `{ "error": code, "message": text }`:
 
@@ -170,6 +175,9 @@ python -m unittest -v
   within 1 % of `prototype/expected/` and coverage within 3 % of it.
 - `test_contract` checks the response shape and every error code through the HTTP app.
 - `test_report` recomputes the report from the returned stones.
+- `test_build_f` to `test_build_j` compare each build's frozen rules (`BUILD_F` … `BUILD_J` in
+  `strass_layout/rules.py`) with the build before; `test_build_m` (IMG-026M) checks the rules
+  ported from PatternNifty, each by switching it off in `DEFAULT`, and the two edge crashes.
 
 The full run lays out each of the 12 images once for the package and once for the prototype, about
 one to two minutes each. Run long jobs under `caffeinate -i`.

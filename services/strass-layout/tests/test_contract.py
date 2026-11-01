@@ -13,7 +13,7 @@ from tests import support
 
 SIZE_IDS = {"ss4", "ss6", "ss10", "ss16", "ss20", "ss30"}
 REPORT_KEYS = {"stones", "bySize", "colours", "minGapMm", "violations", "coverage", "largestEmptyCircleMm", "face",
-               "pupilsMm", "frameMm", "offsetMm", "mmPerPx", "stagesMs", "ms"}
+               "pupilsMm", "pupilsAtMm", "frameMm", "offsetMm", "mmPerPx", "stagesMs", "ms"}
 STAGES = {"detect", "layout", "eyes", "colour", "check"}
 EDGE_TOLERANCE_MM = 0.001
 

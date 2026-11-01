@@ -1,5 +1,8 @@
 """IMG-026L: the service finds faces with MediaPipe and never imports dlib or loads its model (the dlib
-68-point model's iBUG 300-W training data excludes commercial use). Ported from IS-07a."""
+68-point model's iBUG 300-W training data excludes commercial use). Ported from IS-07a.
+
+IMG-026M: FaceEquivalence lays out with BUILD_J, build L's DEFAULT, so it keeps comparing the face
+models under the rules it was written for."""
 import hashlib
 import os
 import re
@@ -10,7 +13,7 @@ import unittest
 
 import numpy as np
 
-from strass_layout import DEFAULT
+from strass_layout import BUILD_J
 from strass_layout.imageio import decode_png
 from strass_layout.models import LANDMARKER_FILE, MP_EYES, load_models
 from tests import dlib_faces, support
@@ -188,15 +191,15 @@ class FaceEquivalence(unittest.TestCase):
     def test_faces_and_pupils_of_the_layout(self):
         for name in support.IMAGES:
             with self.subTest(image=name):
-                old = support.layout_result(name, DEFAULT, dlib=True)["report"]
-                new = support.layout_result(name, DEFAULT)["report"]
+                old = support.layout_result(name, BUILD_J, dlib=True)["report"]
+                new = support.layout_result(name, BUILD_J)["report"]
                 if name in FACE_DIFFERS:
                     self.assertEqual((old["face"], new["face"]), ("human", "animal"))
                 else:
                     self.assertEqual(old["face"], new["face"])
                 self.assertEqual(old["pupilsMm"], new["pupilsMm"])
-                a = support.pupil_centres(name, DEFAULT, dlib=True)
-                b = support.pupil_centres(name, DEFAULT)
+                a = support.pupil_centres(name, BUILD_J, dlib=True)
+                b = support.pupil_centres(name, BUILD_J)
                 self.assertEqual(len(a), len(b))
                 apart = [float(np.hypot(p[0] - q[0], p[1] - q[1])) for p, q in zip(a, b)]
                 print("PUPILS %s apart mm %s" % (name, ", ".join("%.3f" % v for v in apart) or "-"))
