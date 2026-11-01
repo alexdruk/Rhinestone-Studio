@@ -110,7 +110,7 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
   for (const body of [JSON.stringify({ image: FAKE_REDRAW_DATA_URL }), bodyWith({ style: 'stones' })]) {
     const spy = spyFetch(okImage);
     const result = await jobResult(createRedrawHandler({ settings: KEY_SETTINGS, fetch: spy.fetch }), body);
-    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 6 });
+    assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 7 });
     assert.equal(spy.calls[0].init.body.get('prompt'), buildRedrawPrompt());
   }
   const spy = spyFetch(okImage);
@@ -128,16 +128,16 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
 
   const fake = createRedrawHandler({ settings: FAKE_SETTINGS });
   assert.equal((await jobResult(fake, bodyWith({ style: 'flat' }))).promptVersion, 1);
-  assert.equal((await jobResult(fake, bodyWith({ style: 'stones' }))).promptVersion, 6);
-  assert.equal((await jobResult(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).promptVersion, 6);
+  assert.equal((await jobResult(fake, bodyWith({ style: 'stones' }))).promptVersion, 7);
+  assert.equal((await jobResult(fake, JSON.stringify({ image: FAKE_REDRAW_DATA_URL }))).promptVersion, 7);
 });
 
 // ---- T2. Flat prompt text and version -----------------------------------------------------------
 
 await test('T2. prompt: versions; the flat prompt is exactly line 1, the palette header and buildPaletteLine(); the stones prompt is unchanged; REDRAW_STYLES agree', () => {
   assert.equal(FLAT_PROMPT_VERSION, 1);
-  assert.equal(PROMPT_VERSION, 6);
-  assert.deepEqual(PROMPT_VERSIONS, { stones: 6, flat: 1 });
+  assert.equal(PROMPT_VERSION, 7);
+  assert.deepEqual(PROMPT_VERSIONS, { stones: 7, flat: 1 });
   assert.deepEqual(buildRedrawPrompt(undefined, 'flat').split('\n'), [FLAT_LINE_1, 'Palette (name and hex):', buildPaletteLine()]);
   assert.equal(buildRedrawPrompt(), buildRedrawPrompt(undefined, 'stones'));
   assert.equal(buildRedrawPrompt(STONE_COLORS), buildRedrawPrompt());
@@ -176,7 +176,7 @@ await test('T3. client: the proxy posts style (stones by default); an unknown st
   const flatResult = await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE`, style: 'flat' });
   assert.deepEqual(Object.keys(flatResult), ['dataUrl', 'providerId', 'model', 'promptVersion', 'layout', 'layoutError'], 'the resolved value gains only the IMG-026 layout keys');
   await redrawImage({ dataUrl: `${PNG_PREFIX}SOURCE` });
-  assert.deepEqual(posts, [{ image: `${PNG_PREFIX}UPLOAD`, style: 'flat' }, { image: `${PNG_PREFIX}UPLOAD`, style: 'stones' }]);
+  assert.deepEqual(posts, [{ image: `${PNG_PREFIX}UPLOAD`, style: 'flat', shape: 'square' }, { image: `${PNG_PREFIX}UPLOAD`, style: 'stones', shape: 'square' }]);
 
   configureRedraw({ fetch, decodeImage: () => { throw new Error('must not decode'); }, encodePng: () => `${PNG_PREFIX}UPLOAD` });
   const before = requests;

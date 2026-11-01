@@ -9,7 +9,7 @@
 // docs/specifications/IMG-026-StrassLayoutService.md, "Node jobs, prompt and colours (build B)".
 import { randomUUID as cryptoRandomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { buildRedrawPrompt, PROMPT_VERSIONS, REDRAW_STYLES } from './prompt.mjs';
+import { buildRedrawPrompt, PROMPT_VERSIONS, REDRAW_STYLES, REDRAW_SHAPES } from './prompt.mjs';
 import { redrawConfigStatus, REDRAW_ENV_DEFAULTS } from './env.mjs';
 import { createJobStore, callLayoutService, jobView, DEFAULT_TIMERS } from './jobs.mjs';
 import { FAKE_REDRAW_DATA_URL } from '../../src/redraw/FakeRedrawProvider.js';
@@ -100,7 +100,8 @@ export function createRedrawHandler({
   }
 
   // One OpenAI request. Resolves a Response, or TIMEOUT; rejects if fetch itself rejects.
-  async function attemptOpenAi(pngBuffer, clientGone, style) {
+  // IMG-026 (build N): shape 'auto' (the Flat Sheet) lets OpenAI follow the input's shape.
+  async function attemptOpenAi(pngBuffer, clientGone, style, shape) {
     const controller = new AbortController();
     const onGone = () => controller.abort();
     clientGone.addEventListener('abort', onGone, { once: true });
@@ -108,10 +109,10 @@ export function createRedrawHandler({
     try {
       const form = new FormData();
       form.append('model', settings.imageModel);
-      form.append('prompt', buildRedrawPrompt(undefined, style));
+      form.append('prompt', buildRedrawPrompt(undefined, style, shape));
       form.append('image', new Blob([pngBuffer], { type: 'image/png' }), 'source.png');
       form.append('quality', settings.imageQuality);
-      form.append('size', '1024x1024');
+      form.append('size', shape === 'auto' ? 'auto' : '1024x1024');
       form.append('background', 'transparent');
       form.append('output_format', 'png');
       form.append('n', '1');
@@ -132,14 +133,14 @@ export function createRedrawHandler({
 
   // Resolves null when the job was cancelled (DELETE or orphan; the signal aborts the upstream
   // call so no paid call is left running for nobody), otherwise { result } or { error }.
-  async function callOpenAi(clientGone, pngBuffer, style) {
+  async function callOpenAi(clientGone, pngBuffer, style, shape) {
     let response = null;
     let body = null;
     let timedOut = false;
     for (let attempt = 1; attempt <= 2 && !clientGone.signal.aborted; attempt++) {
       let outcome;
       try {
-        outcome = await attemptOpenAi(pngBuffer, clientGone.signal, style);
+        outcome = await attemptOpenAi(pngBuffer, clientGone.signal, style, shape);
       } catch {
         outcome = null; // fetch rejected (DNS, reset, abort)
       }
@@ -184,8 +185,8 @@ export function createRedrawHandler({
   }
 
   // drawing (OpenAI) -> placing (waiting for or running the layout) -> done, or failed.
-  async function runJob(job, pngBuffer, style) {
-    const openAi = await callOpenAi(job.controller, pngBuffer, style);
+  async function runJob(job, pngBuffer, style, shape) {
+    const openAi = await callOpenAi(job.controller, pngBuffer, style, shape);
     if (!openAi) return;
     if (openAi.error) return store.fail(job, openAi.error);
     store.setStage(job, 'placing');
@@ -219,6 +220,9 @@ export function createRedrawHandler({
       // IMG-024 (D1): a body with no style key is 'stones', so older clients keep working.
       const style = 'style' in parsed ? parsed.style : 'stones';
       if (!REDRAW_STYLES.includes(style)) return sendFailure(res, 400, 'provider-failed', 'Unknown redraw style.');
+      // IMG-026 (build N): likewise a body with no shape key is 'square', today's request.
+      const shape = 'shape' in parsed ? parsed.shape : 'square';
+      if (!REDRAW_SHAPES.includes(shape)) return sendFailure(res, 400, 'provider-failed', 'Unknown redraw shape.');
       const job = store.create();
       if (!job) return sendFailure(res, 429, 'rate-limited', 'Too many redraws are in progress. Try again later.');
       if (settings.fake) {
@@ -226,7 +230,7 @@ export function createRedrawHandler({
         job.fakePolls = 0;
         job.fakeResult = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: PROMPT_VERSIONS[style], layout: FAKE_LAYOUT };
       } else {
-        runJob(job, Buffer.from(parsed.image.slice(PNG_DATA_URL_PREFIX.length), 'base64'), style).catch((error) => {
+        runJob(job, Buffer.from(parsed.image.slice(PNG_DATA_URL_PREFIX.length), 'base64'), style, shape).catch((error) => {
           console.error('Redraw job failed:', error && error.message ? error.message : error);
           store.fail(job, { code: 'provider-failed', message: '' });
         });

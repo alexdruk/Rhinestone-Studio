@@ -8,7 +8,8 @@
  *   { id, consent, redraw({ pngDataUrl, accessCode, signal, style, onStage }) -> Promise<{ dataUrl, model, promptVersion, layout?, layoutError? }> }
  * where consent is null (nothing leaves the browser) or { recipientName, costLabel, needsAccessCode }.
  * IMG-024: `style` is one of REDRAW_STYLES; a provider that sends no prompt (the fake, a future
- * Worker) ignores it.
+ * Worker) ignores it. IMG-026 build N: likewise `shape`, one of REDRAW_SHAPES ('auto' on the Flat
+ * Sheet: the output keeps the input's shape and the input is flatSheetModelInput()'s crop).
  * A provider signals failure by throwing an Error whose `code` is one of REDRAW_ERROR_CODES, and
  * rethrows an AbortError unchanged.
  * IMG-026 build B: the proxy provider runs a server job (OpenAI, then the layout service) and
@@ -22,6 +23,7 @@ import { decodeDataUrlToBuffer, computeSubjectMask } from '../image/index.js';
 // SubjectMask.js.
 import { resizeImageBuffer, SUBJECT_MASK_RESIZE_TRIGGER_PX, SUBJECT_MASK_MAX_DIMENSION_PX } from '../image/ImageFieldPipeline.js';
 import { createOpenAiProxyProvider, OPENAI_PROXY_PROVIDER_ID } from './OpenAiProxyProvider.js';
+import { flatSheetModelInput } from './ModelInput.js';
 
 export { applyRedraw, restoreOriginal, fitAiStoneBox, fitAiLayoutCanvas, aiStoneEffectiveShrink, aiStoneMmPerPx, aiLayoutBoxSize, aiLayoutImageBox } from './RedrawLayerTransform.js';
 // IMG-026 (D): the pure edits behind app.js's editAiLayoutStones().
@@ -33,6 +35,9 @@ export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized
 // IMG-024 (D1): the same value as server/redraw/prompt.mjs's REDRAW_STYLES, restated because src/**
 // never imports server/**; a test keeps the two deepEqual.
 export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
+// IMG-026 (build N): the same value as server/redraw/prompt.mjs's REDRAW_SHAPES, restated for the
+// same reason; a test keeps the two deepEqual.
+export const REDRAW_SHAPES = Object.freeze(['square', 'auto']);
 // IMG-026 (C1): the status text for each job stage reported through onStage. Kept here, not in
 // app.js, because app.js never names the image provider.
 export const REDRAW_STAGE_MESSAGES = Object.freeze({ drawing: 'OpenAI is drawing… (up to five minutes)', placing: 'Placing stones…' });
@@ -151,19 +156,20 @@ function untilAborted(promise, signal) {
 }
 
 /**
- * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat'), onStage?:function(string):void}} request
+ * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat'), shape?:('square'|'auto'), onStage?:function(string):void}} request
  * @returns {Promise<{dataUrl:string, providerId:string, model:string, promptVersion:(number|null), layout:(object|null), layoutError:({code:string,message:string}|null)}>}
  */
-export async function redrawImage({ dataUrl, signal, style = 'stones', onStage } = {}) {
+export async function redrawImage({ dataUrl, signal, style = 'stones', shape = 'square', onStage } = {}) {
   if (signal && signal.aborted) throw abortError();
   if (!REDRAW_STYLES.includes(style)) throw new RedrawError('provider-failed', 'Unknown redraw style.');
+  if (!REDRAW_SHAPES.includes(shape)) throw new RedrawError('provider-failed', 'Unknown redraw shape.');
   const provider = await untilAborted(activeProvider(), signal);
   if (!provider) throw new RedrawError('not-configured');
 
   let pngDataUrl;
   try {
     const source = await untilAborted(Promise.resolve(deps.decodeImage(dataUrl)), signal);
-    pngDataUrl = await deps.encodePng(resizeImageBuffer(source, REDRAW_MAX_UPLOAD_PX, REDRAW_MAX_UPLOAD_PX));
+    pngDataUrl = await deps.encodePng(shape === 'auto' ? flatSheetModelInput(source) : resizeImageBuffer(source, REDRAW_MAX_UPLOAD_PX, REDRAW_MAX_UPLOAD_PX));
   } catch (error) {
     if (error && error.name === 'AbortError') throw error;
     throw new RedrawError('provider-failed', `The image could not be prepared for upload: ${error && error.message ? error.message : error}`);
@@ -172,7 +178,7 @@ export async function redrawImage({ dataUrl, signal, style = 'stones', onStage }
   for (let attempt = 1; attempt <= 2; attempt++) {
     let result;
     try {
-      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal, style, onStage })), signal);
+      result = await untilAborted(Promise.resolve().then(() => provider.redraw({ pngDataUrl, accessCode, signal, style, shape, onStage })), signal);
     } catch (error) {
       if (error && error.name === 'AbortError') throw error;
       const code = error && REDRAW_ERROR_CODES.includes(error.code) ? error.code : 'provider-failed';

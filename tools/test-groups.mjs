@@ -146,6 +146,9 @@ export const GROUPS = {
     // IMG-026 build C1: validateProject() for ai-layout layers, the redraw paths, the Fill style
     // option, the exporters with a 1.5 mm stone and byte identity for gallery and legacy image stones.
     'test-img-026-ai-layout-app.mjs',
+    // IMG-026 build N: prompt v7 and the model input -- the shape the product picks, the request it
+    // makes, the Flat Sheet crop, and fake mode for every product.
+    'test-img-026-prompt-v7.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
