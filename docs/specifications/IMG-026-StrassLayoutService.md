@@ -1748,6 +1748,41 @@ instanced draw call; the per-stone CPU loop is unchanged.
 | `STONE_DEPTH_RATIO` | `src/preview3d/Preview3DRenderer.js:93` |
 | `OctahedronGeometry(1, 0)` | `src/preview3d/Preview3DRenderer.js:466` |
 
+## Face landmarks without dlib (build L)
+
+The service found faces with dlib's 68-point model (S6, S8). That model was trained on iBUG 300-W,
+whose licence excludes commercial use. Build L ports PatternNifty's IS-07a (IS commit `e9e7014`)
+and replaces it with MediaPipe Face Landmarker (library and model Apache 2.0). Plan:
+`docs/IS-PORT-PLAN.md` section 3.1. **The dlib model must never be shipped or used in production**
+(`CLAUDE.md`).
+
+- **Models.** `strass_layout/models.py` loads `models/mediapipe/face_landmarker.task` (committed,
+  SHA-256 checked). `landmarks()` (68 points) becomes `eye_contours()`, which returns dlib's points
+  36–41 and 42–47 from the mesh.
+  - The search is kept: three blurs, the largest face, wider than 0.12 of the image.
+  - dlib's 2× upsampling is dropped.
+  - Two rules are added: detection and presence confidence 0.6, and a mesh whose iris centres are
+    closer than 0.25 of its width is not a face.
+  - `post._eye_boxes` reads the contours; nothing after it changes.
+- **Install.** `mediapipe==0.10.15` is in `requirements-nodeps.txt`, installed with `pip --no-deps`.
+  It is the last release whose Intel Mac binaries run on macOS 13; its declared jax needs an
+  ml-dtypes that tensorflow 2.16.2 refuses. `attrs==26.1.0` joins `requirements.txt`, because
+  `import mediapipe` needs it (IS got it through rembg). The Dockerfile copies `models/mediapipe/`
+  and no longer fetches the dlib model.
+- **dlib is test-only.**
+  - `setup_mac.sh --with-dlib-tests` installs `requirements-dlib-tests.txt` and the model.
+  - `tests/dlib_faces.py` gives the old landmarks to `test_equivalence` (the prototype uses dlib)
+    and to `test_build_l`'s `FaceEquivalence`; both skip without it.
+  - `tests/test_build_l.py` fails if any Python file in the repository outside the service's
+    `tests/` and `prototype/` imports dlib, if loading the service imports it, or if the Dockerfile
+    or the setup script without the flag fetches the model.
+- **Licences.** `services/strass-layout/THIRD_PARTY_LICENCES.md`.
+- **Measured** (`docs/results/IMG-026L/`): on the 13 test images, faces and pupils are the same, and
+  pupils are 0.00 mm apart, except:
+  - **lake:** dlib saw a face in the clouds. With `soft_outlines` on, 20 Jet stones had turned
+    Smoked Topaz; they now stay Jet.
+  - **woman:** one SS4 Jet stone by an eye is no longer added.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are

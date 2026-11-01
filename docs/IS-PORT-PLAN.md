@@ -2,6 +2,16 @@
 
 Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no service started.
 
+**Progress.**
+- **IMG-026L done** (31 Oct 2026, branch `feature/img-026l-face-landmarks`). The results are in
+  `docs/results/IMG-026L/`.
+  - Faces and pupils match dlib on every test image except the lake.
+  - The lake, under RS's `soft_outlines`, keeps 20 Jet stones that used to turn Smoked Topaz.
+  - The woman loses one SS4 Jet stone, as IS found.
+  - Two things this plan did not foresee: `attrs` had to be pinned, and the macOS OpenCV wheel
+    bundles GPL x264/x265 (section 6). Both are recorded in
+    `services/strass-layout/THIRD_PARTY_LICENCES.md`.
+
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
 - the face defaults, with `soft_outlines` off as IS has it (IS measured why);
@@ -379,6 +389,7 @@ model sources.
 | fastapi | MIT | OK |
 | pillow | MIT-CMU (HPND) | OK |
 | FFmpeg inside opencv-python-headless | LGPL-2.1 (dynamic libraries in `cv2/.dylibs`) | OK unmodified (keep the licence file) |
+| *Found by IMG-026L:* x264 and x265 inside the **macOS** opencv-python-headless wheel (linked by its `libavcodec`, not listed in the wheel's licence file) | GPL-2.0-or-later | OK to run; GPL obligations apply only if the Mac environment is distributed. The Linux wheel in Docker has neither. |
 | certifi, tqdm (transitive) | MPL-2.0 (tqdm MPL-2.0 AND MIT) | OK unmodified |
 | *After the fix:* mediapipe 0.10.15 + `face_landmarker.task` | Apache 2.0 (library; Google's model card for the model, as IS recorded) | OK |
 
@@ -419,7 +430,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 
 | # | Milestone | Scope (one line) | Done when |
 | --- | --- | --- | --- |
-| 1 | **IMG-026L — Face landmarks without dlib** | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
+| 1 | **IMG-026L — Face landmarks without dlib** (**done**, 31 Oct 2026) | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
 | 2 | **IMG-026M — Eyes, colour reading and skin rules** | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` off in `DEFAULT` (IS-05b). | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. With `soft_outlines` off, only outline stones on human faces change colour (black stays black). 0 violations. `validateProject()` accepts `face: null` and the new report key. |
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
 | 4 | **IMG-026N — Prompt v7 and model input** | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |

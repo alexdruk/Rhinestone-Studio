@@ -6,19 +6,16 @@ RUN apt-get update \
 
 WORKDIR /srv/strass-layout
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-nodeps.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --no-deps -r requirements-nodeps.txt
 
 COPY strass_layout/ strass_layout/
 COPY app.py .
 COPY models/stardist/ models/stardist/
-
-RUN pip download --no-deps -d /tmp/dl face_recognition_models==0.3.0 \
-    && mkdir /tmp/dl/x \
-    && tar -xzf /tmp/dl/face_recognition_models-0.3.0.tar.gz -C /tmp/dl/x \
-    && cp /tmp/dl/x/face_recognition_models-0.3.0/face_recognition_models/models/shape_predictor_68_face_landmarks.dat models/ \
-    && echo "fbdc2cb80eb9aa7a758672cbfdda32ba6300efe9b6e6c7a299ff7e736b11b92f  models/shape_predictor_68_face_landmarks.dat" | sha256sum -c - \
-    && rm -rf /tmp/dl
+# IMG-026L: MediaPipe's face landmarker (Apache 2.0). The dlib model must never be in the image:
+# its iBUG 300-W training data excludes commercial use.
+COPY models/mediapipe/ models/mediapipe/
 
 EXPOSE 8000
 

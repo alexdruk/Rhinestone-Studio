@@ -30,12 +30,12 @@ SIZE_KEYS = {1.5: "ss4", 2.0: "ss6", 2.8: "ss10", 4.0: "ss16", 4.7: "ss20", 6.4:
 
 
 def _eye_boxes(px, models):
-    p = models.landmarks(px.onwhite)
-    if p is None:
+    # IMG-026L: the eye contours (dlib points 36-41 and 42-47) come from models.eye_contours.
+    eyes = models.eye_contours(px.onwhite)
+    if eyes is None:
         return None
     out = []
-    for sl in (slice(36, 42), slice(42, 48)):
-        e = p[sl]
+    for e in eyes:
         c = e.mean(0)
         wd = np.ptp(e[:, 0])
         out.append((c[0], c[1], max(wd, 20)))

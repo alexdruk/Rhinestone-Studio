@@ -1,0 +1,9 @@
+# IMG-026L: MediaPipe Face Landmarker (Apache 2.0), installed with pip --no-deps (setup_mac.sh,
+# Dockerfile). Its declared dependencies jax/jaxlib need ml-dtypes >= 0.4, which tensorflow 2.16.2
+# (ml-dtypes ~= 0.3.1) refuses, and opencv-contrib-python would sit on opencv-python-headless; the
+# Face Landmarker needs neither. What it does import is installed by requirements.txt: absl-py,
+# flatbuffers, matplotlib, numpy, opencv and protobuf come with tensorflow and csbdeep, and attrs
+# (import mediapipe needs it) is pinned there for MediaPipe alone.
+# 0.10.15 is the last release whose macOS x86_64 binaries run on macOS 13 (0.10.18 and later are
+# built for macOS 14.5).
+mediapipe==0.10.15
