@@ -1783,6 +1783,40 @@ and replaces it with MediaPipe Face Landmarker (library and model Apache 2.0). P
     Smoked Topaz; they now stay Jet.
   - **woman:** one SS4 Jet stone by an eye is no longer added.
 
+## Eyes, colour reading and skin rules (build M)
+
+Build M ports PatternNifty's face rules (IS commit `e9e7014`, IS-05b, IS-05c, IS-05d and PN-04h).
+Plan: `docs/IS-PORT-PLAN.md` section 3.2. Each rule is a `Rules` flag, off in `PROTOTYPE` and every
+`BUILD_*`; `BUILD_J` freezes the build J `DEFAULT` (so `test_build_j` compares `BUILD_J` with
+`BUILD_I`).
+
+- **Rules in `DEFAULT`:**
+  - `plausible_eyes` (`post._plausible_pupils`): pupils that are not one plausible pair drop the
+    eye stage and give `report.face: null`.
+  - `sample_delivered` (`ordered.delivered_lab`): colours read at the stone's delivered position,
+    inner 60 % of its radius.
+  - `human_iris` off: no SS4 iris rings round a person's pupils; animals keep them.
+  - `skin_nearest_inner`: `skin_nearest` reads the inner 60 % of the stone.
+  - `warm_shadow`, `warm_shadow_de` 3 (`faces.skin_nearest`): Smoked Topaz → Colorado Topaz on a
+    near tie.
+  - `lone_white_skin` (`faces.lone_white_skin`): a lone white stone in skin takes the skin colour.
+  - `soft_outlines` off.
+- **Fixes:** `colour.stone_colours` gives a stone whose window lies outside the image the nearest
+  pixel's colour (S10); `eyes._find_inscribed`'s window ends at the image edge, which fixes an
+  `IndexError` on a dark disc cut by the border (S11).
+- **Report:** `pupilsAtMm`, the pupil stones' centres in returned coordinates, one per `pupilsMm`
+  entry. `face` may be `null`. The app keeps neither new key in `aiLayout.report`
+  (`AI_LAYOUT_REPORT_KEYS`), and `validateProject()` checks only `offsetMm` and `mmPerPx`, so old
+  and new projects load unchanged.
+- **Not ported:** `mixed_shadow`, `fill_exact`, `fill_cover_mask`, `report.fillAtMm`,
+  `report.discsAtMm` (IS experiments or unused).
+- **Tests:** `tests/test_build_m.py`.
+- **Measured** (`docs/results/IMG-026M/`, 13 test images): 0 violations. Stone positions and sizes
+  are those of `BUILD_J` except within 7.4 mm of people's pupils, where `human_iris` off replaces
+  the ring stones (einstein, portrait, woman). S1 drops no eye stage. Mean cell ΔE2000 against the
+  AI image falls from 9.21 to 9.10 (all pixels) and from 7.70 to 7.45 (stone pixels). It rises on
+  Jesus, the woman (all pixels only), the tulips, the logo (all pixels only), the dog and the cat.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are

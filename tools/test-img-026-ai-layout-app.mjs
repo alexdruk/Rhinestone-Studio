@@ -146,6 +146,23 @@ await test('2. validateProject() rejects each listed bad aiLayout / colorSwaps i
   assert.doesNotThrow(() => validateProject({ ...defaultProject(), layers: [ok] }), 'out-of-box coordinates, SS4 and a D2 colour are allowed');
 });
 
+await test('2b. IMG-026M: a layout with face null (no plausible pupil pair) and the new pupilsAtMm key redraws and validates; a layer saved before IMG-026M, without pupilsAtMm, still loads', () => {
+  const noFace = { ...FAKE_LAYOUT, report: { ...FAKE_LAYOUT.report, face: null, pupilsMm: [], pupilsAtMm: [] } };
+  const l = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: noFace }, { ...OPTS, layout: noFace });
+  assert.equal(l.aiLayout.report.face, null, 'face null is kept, not dropped or turned into a string');
+  assert.ok(!('pupilsAtMm' in l.aiLayout.report), 'the layer keeps only the report keys the app shows');
+  const p = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [l] })));
+  assert.equal(p.layers[0].aiLayout.report.face, null);
+  // A project written by hand (or by a later build) that carries the key loads unchanged.
+  const withKey = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { ...aiLayer().aiLayout.report, pupilsAtMm: FAKE_LAYOUT.report.pupilsAtMm } } };
+  const p2 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [withKey] })));
+  assert.deepEqual(p2.layers[0].aiLayout.report.pupilsAtMm, [[11.6, 12.935], [22.6, 12.935]]);
+  // An old layer: the report as builds C1 to L saved it, face 'human' and no pupilsAtMm.
+  const old = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { minGapMm: 0.2993, violations: 0, coverage: 0.7, face: 'human', ms: 0 } } };
+  const p3 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [old] })));
+  assert.equal(JSON.stringify(p3.layers[0]), JSON.stringify(old));
+});
+
 // ---- redraw writes the layout -------------------------------------------------------------------
 
 await test('3. applyRedraw() with a layout: fillMode ai-layout, aiLayout with the kept report keys and editCount 0, colorSwaps {}, previousFillMode, box exactly widthMm x heightMm centred where the layer was', () => {

@@ -8,6 +8,13 @@ brown ones are recoloured; any remaining gap violation is removed.
 Rules.human_iris gives people the iris rings animals get, without their dark stones;
 Rules.eye_keep removes only the stones that overlap an eye stone instead of the whole
 eye zone.
+
+IMG-026M (from IS IS-05b): Rules.plausible_eyes keeps only pupils that can be one face's eyes
+(_plausible_pupils): of more than two, the one plausible pair when exactly one pair passes;
+otherwise the eye stage is skipped and info["face"] is None. info["pupilsAtMm"] holds the pupil
+stones' centres (frame mm), in the order of info["pupilsMm"]. With Rules.sample_delivered a stone
+added by the fill here takes the catalogue colour of its own pixels (ordered.delivered_lab) instead
+of its neighbours' most common colour.
 """
 from collections import Counter
 
@@ -17,7 +24,7 @@ from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 from skimage.feature import peak_local_max
 
-from . import darkdots
+from . import darkdots, ordered
 from .colour import palette, snap_colours, stone_colours
 from .chains import chain_mask
 from .colsmooth import family_fix
@@ -72,6 +79,37 @@ def _best_disc(dt, hl, cx, cy, min_r):
         if best is None or key < best[0]:
             best = (key, yy, xx)
     return best[1], best[2]
+
+
+PAIR_MAX_RATIO = 1.6
+PAIR_MAX_SLOPE = 0.5
+PAIR_MAX_SPAN = 0.45
+
+
+def _plausible_pair(a, b, width):
+    """IMG-026M (IS-05b): two pupils can be one face's eyes: diameters within a factor
+    PAIR_MAX_RATIO (before they are equalised), the vertical offset at most PAIR_MAX_SLOPE of the
+    horizontal one, and centres at most PAIR_MAX_SPAN of the subject width apart."""
+    dx, dy = abs(a["x"] - b["x"]), abs(a["y"] - b["y"])
+    ratio = max(a["diam_mm"], b["diam_mm"]) / min(a["diam_mm"], b["diam_mm"])
+    return ratio < PAIR_MAX_RATIO and dy <= PAIR_MAX_SLOPE * dx and np.hypot(dx, dy) <= PAIR_MAX_SPAN * width
+
+
+def _plausible_pupils(cands, mask):
+    """IMG-026M (IS-05b): the pupils to keep, or None when the design has no face. No pupil or one
+    pupil is kept as it is; two are kept when they are a plausible pair (_plausible_pair, the width
+    being the subject mask's). Of more than two, the pair is kept when exactly one pair passes; the
+    others are then laid out as ordinary stones. Several passing pairs, or none, are no face (a car's
+    wheels give a dozen pupils and dozens of passing pairs; a giraffe's ossicone and neck add two
+    false pupils to its eyes, and only the eyes pass)."""
+    if len(cands) < 2:
+        return list(cands)
+    cols = np.nonzero(mask.any(0))[0]
+    width = cols[-1] - cols[0] + 1 if len(cols) else mask.shape[1]
+    pairs = [(i, j) for i in range(len(cands)) for j in range(i + 1, len(cands)) if _plausible_pair(cands[i], cands[j], width)]
+    if len(pairs) != 1:
+        return None
+    return [cands[k] for k in pairs[0]]
 
 
 def post_process(px, det, state, first, models, clock, rules=DEFAULT):
@@ -129,6 +167,13 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
                         hy, hx = yy - Di / 3, xx + Di / 3
                     cands.append(dict(x=float(xx + x0), y=float(yy + y0), diam_mm=float(Di * s * (1.0 if rules.lively_eyes else 1.15)), roundness=1.0, hx=float(hx + x0), hy=float(hy + y0)))
                     break
+    no_face = False
+    if rules.plausible_eyes:  # IMG-026M (IS-05b)
+        kept = _plausible_pupils(cands, mask)
+        no_face = kept is None
+        cands = [] if no_face else kept
+    if no_face:
+        boxes = None
     if len(cands) == 2:
         d0, d1 = cands[0]["diam_mm"], cands[1]["diam_mm"]
         if max(d0, d1) / min(d0, d1) < 1.6:
@@ -157,6 +202,7 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
                 pre = [p for k, p in enumerate(pre) if k not in dark_ring]
         pre = [p[:4] for p in pre]
     pupils = [round(c["diam_mm"], 2) for c in cands]
+    pupils_at = [[round(float(c["x"] * s), 3), round(float(c["y"] * s), 3)] for c in cands]
 
     col = first["col"]
     dmm = 2 * det[:, 2] * s
@@ -215,6 +261,9 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     t = cKDTree(P)
     dark_ids = darkdots.DARK
     for i in [k for k in range(len(P)) if C[k] is None]:
+        if rules.sample_delivered:  # IMG-026M (IS-05b)
+            C[i] = snap_colours(ordered.delivered_lab(rgb, a, s, P[i:i + 1], D[i:i + 1], mean), pal)[0][0]
+            continue
         nb = [j for j in t.query_ball_point(P[i], 2.6) if j != i and C[j] is not None and not fixed[j]]
         if nb:
             cs = [C[j] for j in nb]
@@ -253,5 +302,6 @@ def post_process(px, det, state, first, models, clock, rules=DEFAULT):
     stones = [{"x": round(float(x), 3), "y": round(float(y), 3), "size": SIZE_KEYS[float(d)], "d": float(d), "color": c}
               for (x, y), d, c in zip(P, D, C)]
     clock.lap("check")
-    info = {"mask": mask, "face": "human" if boxes is not None else "animal", "pupilsMm": pupils, "eyeZones": zones}
+    face = None if no_face else "human" if boxes is not None else "animal"
+    info = {"mask": mask, "face": face, "pupilsMm": pupils, "pupilsAtMm": pupils_at, "eyeZones": zones}
     return stones, info

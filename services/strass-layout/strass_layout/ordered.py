@@ -4,6 +4,10 @@ Ported from rs_fix.run. Detected stones become production stones: shadows, paint
 gap dots, interstitial dots and stones inside big ones are dropped, big stones are
 tiled, positions are legalised to gap >= 0.1 mm, holes OpenAI left are filled, and
 every stone gets its nearest catalogue colour.
+
+IMG-026M (from IS IS-05b): with Rules.sample_delivered each stone's colour is read at its final
+position, from the inner SAMPLE_SHARE of its radius (delivered_lab, _delivered_colours), fill
+stones included, instead of at its detection.
 """
 import cv2
 import numpy as np
@@ -17,6 +21,26 @@ from .geometry import GAP, SS4, SS6, fill, resolve_idx, subject_mask
 from .rules import DEFAULT
 
 CATCH_LAB = np.array([99.0, 0.0, 0.0])
+
+# IMG-026M (IS-05b): the share of a delivered stone's radius its colour is read from. The whole disc
+# of a stone that moved, or is larger than the stone the AI drew, reaches into the AI's gaps, which
+# most AI images paint dark; the inner 60 % does not.
+SAMPLE_SHARE = 0.6
+
+
+def delivered_lab(rgb, a, s, P, D, mean):
+    """IMG-026M (IS-05b): the Lab colour under each stone at its delivered position (P, mm, rounded
+    as the layout returns it) within SAMPLE_SHARE of its radius (D, mm), by the rule the detections
+    are read with (stone_colours)."""
+    Pr = np.round(P, 3)
+    return stone_colours(rgb, a, np.stack([Pr[:, 1] / s, Pr[:, 0] / s, SAMPLE_SHARE * 0.5 * D / s, np.zeros(len(P))], 1), mean)
+
+
+def _delivered_colours(rgb, a, s, P, D, C, mean):
+    """IMG-026M (IS-05b): delivered_lab for every stone; a catch-light (CATCH_LAB) keeps its colour."""
+    lab = delivered_lab(rgb, a, s, P, D, mean)
+    lab[np.all(C == CATCH_LAB, axis=1)] = CATCH_LAB
+    return lab
 
 
 def scale_from(pitch_mm, det):
@@ -149,6 +173,8 @@ def ordered_layout(px, det, state, rules=DEFAULT):
     MN = np.r_[np.zeros(len(P2), bool), np.ones(len(fP), bool)]
     P3, D3, A3, k3 = resolve_idx(PP, DD.copy(), AA, SS_, MN)
     CC = CC[k3]
+    if rules.sample_delivered:  # IMG-026M (IS-05b)
+        CC = _delivered_colours(rgb, a, s, P3, D3, CC, rules.mean_colour)
     ids, _ = snap_colours(CC, palette(rules))
     P3 = np.array([[round(float(x), 3), round(float(y), 3)] for x, y in P3])
     return {"s": s, "mask": mask, "col": col, "P": P3, "D": D3, "ids": ids}

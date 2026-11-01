@@ -532,7 +532,14 @@ await test('14. fake-layout.json: about 200 stones in the build A response shape
   assert.equal(violations, 0);
   assert.ok(minGap >= 0.1);
   const r = layout.report;
-  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'face', 'pupilsMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  // IMG-026M: the service reports pupilsAtMm, each pupil stone's centre, after pupilsMm.
+  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'face', 'pupilsMm', 'pupilsAtMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  assert.equal(r.pupilsAtMm.length, r.pupilsMm.length);
+  for (const [i, [x, y]] of r.pupilsAtMm.entries()) {
+    const stone = layout.stones.find((s) => s[0] === x && s[1] === y);
+    assert.ok(stone, `pupil ${i} is a stone centre`);
+    assert.equal(DIAMETERS[stone[2]], r.pupilsMm[i]);
+  }
   assert.equal(r.stones, layout.stones.length);
   assert.equal(r.violations, 0);
   assert.equal(r.minGapMm, Math.round(minGap * 10000) / 10000);
