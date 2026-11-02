@@ -4,13 +4,16 @@ See docs/specifications/IMG-026-StrassLayoutService.md, "Eyes, colour reading an
 (build M)", and docs/IS-PORT-PLAN.md section 3.2. Each class names the IS test it was ported from
 (IS tests/test_is05b.py, test_is05c.py, test_is05d.py, test_pn04h.py, test_exp_holes.py). IS
 compared DEFAULT with BUILD_I; here every rule is checked by switching it off in DEFAULT.
+
+IMG-026O froze build M's DEFAULT as BUILD_M, so the layout comparisons here use BUILD_M and off()
+switches rules off in BUILD_M.
 """
 import dataclasses
 import unittest
 
 import numpy as np
 
-from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, DEFAULT, PROTOTYPE
+from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, DEFAULT, PROTOTYPE
 from strass_layout.colour import PLUS_REAL_SKIN, stone_colours
 from strass_layout.distinct import SKIN
 from strass_layout.eyes import find_pupils
@@ -27,7 +30,7 @@ SAME_KEYS = ("face", "pupilsMm", "pupilsAtMm", "bySize", "violations", "coverage
 
 
 def off(**change):
-    return dataclasses.replace(DEFAULT, **change)
+    return dataclasses.replace(BUILD_M, **change)
 
 
 def hex_grid(rows, cols, pitch=2.1):
@@ -162,7 +165,7 @@ class PupilPositions(unittest.TestCase):
     def test_each_reported_pupil_is_a_stone_centre(self):
         for name in ("cat", "woman"):
             with self.subTest(image=name):
-                result = support.layout_result(name, DEFAULT)
+                result = support.layout_result(name, BUILD_M)
                 report = result["report"]
                 self.assertEqual(len(report["pupilsAtMm"]), len(report["pupilsMm"]))
                 self.assertEqual(len(report["pupilsAtMm"]), 2)
@@ -194,7 +197,7 @@ class SampleDelivered(unittest.TestCase):
     def test_only_colours_change(self):
         for name in ("cat", "woman"):
             with self.subTest(image=name):
-                on = support.layout_result(name, DEFAULT)
+                on = support.layout_result(name, BUILD_M)
                 no = support.layout_result(name, off(sample_delivered=False))
                 self.assertEqual([s[:3] for s in on["stones"]], [s[:3] for s in no["stones"]])
                 for key in SAME_KEYS:
@@ -209,7 +212,7 @@ class HumanIris(unittest.TestCase):
         for name in ("woman", "portrait"):
             with self.subTest(image=name):
                 rings = iris_stones(support.frame_result(name, off(human_iris=True)))
-                none = iris_stones(support.frame_result(name, DEFAULT))
+                none = iris_stones(support.frame_result(name, BUILD_M))
                 print("IRIS %s %d->%d" % (name, rings, none))
                 self.assertLess(none, rings)
 
@@ -217,7 +220,7 @@ class HumanIris(unittest.TestCase):
         for name in ("cat", "dog"):
             with self.subTest(image=name):
                 rings = support.layout_result(name, off(human_iris=True))
-                none = support.layout_result(name, DEFAULT)
+                none = support.layout_result(name, BUILD_M)
                 self.assertEqual(rings["report"]["face"], "animal")
                 self.assertEqual(rings["stones"], none["stones"])
 
@@ -228,7 +231,7 @@ class SkinNearestInner(unittest.TestCase):
     def test_only_skin_colours_change(self):
         for name in ("woman", "dog"):
             with self.subTest(image=name):
-                on = support.layout_result(name, DEFAULT)
+                on = support.layout_result(name, BUILD_M)
                 no = support.layout_result(name, off(skin_nearest_inner=False))
                 self.assertEqual([s[:3] for s in on["stones"]], [s[:3] for s in no["stones"]])
                 for key in SAME_KEYS:
@@ -239,7 +242,7 @@ class SkinNearestInner(unittest.TestCase):
 
     def test_the_woman_has_less_smoked_topaz(self):
         count = lambda r: sum(s[3] == SMOKED for s in r["stones"])
-        on = count(support.layout_result("woman", DEFAULT))
+        on = count(support.layout_result("woman", BUILD_M))
         no = count(support.layout_result("woman", off(skin_nearest_inner=False)))
         print("SMOKED TOPAZ woman %d->%d" % (no, on))
         self.assertLess(on, no)
@@ -258,7 +261,7 @@ class WarmShadow(unittest.TestCase):
         self.assertEqual(skin_nearest(D, C, PAL.lab[PAL.ids.index(SMOKED)][None], PAL, warm_de=3.0)[0], [SMOKED])
 
     def test_only_smoked_topaz_becomes_colorado_topaz(self):
-        on = support.layout_result("woman", DEFAULT)
+        on = support.layout_result("woman", BUILD_M)
         no = support.layout_result("woman", off(warm_shadow=False))
         self.assertEqual([s[:3] for s in on["stones"]], [s[:3] for s in no["stones"]])
         self.assertEqual(set(colour_diff(no, on)), {(SMOKED, COLORADO)})
@@ -308,7 +311,7 @@ class LoneWhiteSkin(unittest.TestCase):
         self.assertEqual(lone_white_skin(self.P, self.D, self.colours("crystal-clear", "crystal-clear"), PAL, [])[1], 0)
 
     def test_on_a_layout_only_white_stones_become_skin(self):
-        on = support.layout_result("woman", DEFAULT)
+        on = support.layout_result("woman", BUILD_M)
         no = support.layout_result("woman", off(lone_white_skin=False))
         self.assertEqual([s[:3] for s in on["stones"]], [s[:3] for s in no["stones"]])
         for a, b in colour_diff(no, on):
@@ -326,14 +329,15 @@ def places(r):
 
 
 class ImagesAgainstBuildJ(unittest.TestCase):
-    """The new DEFAULT on every RS test image: positions and sizes as BUILD_J, except an eye stage
-    S1 drops (face null) and S4's iris rings near people's pupils; otherwise only colours change."""
+    """Build M's DEFAULT (BUILD_M) on every RS test image: positions and sizes as BUILD_J, except an
+    eye stage S1 drops (face null) and S4's iris rings near people's pupils; otherwise only colours
+    change."""
 
     def test_images(self):
         for name in IMAGES:
             with self.subTest(image=name):
                 j = support.layout_result(name, BUILD_J)
-                m = support.layout_result(name, DEFAULT)
+                m = support.layout_result(name, BUILD_M)
                 rj, rm = j["report"], m["report"]
                 self.assertEqual(rm["violations"], 0)
                 self.assertEqual(len(rm["pupilsAtMm"]), len(rm["pupilsMm"]))
@@ -362,7 +366,7 @@ class SoftOutlinesOff(unittest.TestCase):
         for name in PEOPLE + ("jesus", "cat", "dog"):
             with self.subTest(image=name):
                 soft = support.layout_result(name, off(soft_outlines=True))
-                m = support.layout_result(name, DEFAULT)
+                m = support.layout_result(name, BUILD_M)
                 self.assertEqual([s[:3] for s in m["stones"]], [s[:3] for s in soft["stones"]])
                 diff = colour_diff(soft, m)
                 if m["report"]["face"] == "human":

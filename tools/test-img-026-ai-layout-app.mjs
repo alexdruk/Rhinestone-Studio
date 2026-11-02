@@ -163,6 +163,31 @@ await test('2b. IMG-026M: a layout with face null (no plausible pupil pair) and 
   assert.equal(JSON.stringify(p3.layers[0]), JSON.stringify(old));
 });
 
+await test('2c. IMG-026O: a layout whose report carries the clean-up figures (capped, removed, removedShare, filled, cleanupCoverage, stagesMs.cleanup) redraws and validates, keeping only the report keys the app shows; layers saved before IMG-026O, and a project that carries the new keys, still load unchanged', () => {
+  for (const key of ['capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage']) assert.ok(key in FAKE_LAYOUT.report, `fixture has ${key}`);
+  const cleaned = { ...FAKE_LAYOUT, report: { ...FAKE_LAYOUT.report, capped: 2, removed: 3, removedShare: 0.0155, filled: 12, cleanupCoverage: 0.649 } };
+  const l = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: cleaned }, { ...OPTS, layout: cleaned });
+  const kept = ['minGapMm', 'violations', 'coverage', 'face', 'ms', 'offsetMm', 'mmPerPx'];
+  assert.deepEqual(Object.keys(l.aiLayout.report), kept, 'the app shows nothing new yet');
+  assert.equal(l.aiLayout.stones.length, cleaned.stones.length);
+  const p = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [l] })));
+  assert.equal(JSON.stringify(p.layers[0].aiLayout), JSON.stringify(l.aiLayout));
+  // A report without the new keys (every service before build O) redraws the same way.
+  const before = { ...FAKE_LAYOUT, report: Object.fromEntries(Object.entries(FAKE_LAYOUT.report).filter(([k]) => !['capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage'].includes(k))) };
+  const lb = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: before }, { ...OPTS, layout: before });
+  assert.equal(JSON.stringify(lb.aiLayout), JSON.stringify(l.aiLayout));
+  // A project that carries the new keys (written by hand or a later build) loads unchanged.
+  const withKeys = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { ...aiLayer().aiLayout.report, removed: 3, filled: 12, cleanupCoverage: 0.649 } } };
+  const p2 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [withKeys] })));
+  assert.equal(JSON.stringify(p2.layers[0]), JSON.stringify(withKeys));
+  // Old layers: builds C1 to L (no pupilsAtMm) and build M/N (face null) load byte for byte.
+  for (const report of [{ minGapMm: 0.2993, violations: 0, coverage: 0.7, face: 'human', ms: 0 }, { minGapMm: 0.11, violations: 0, coverage: 0.66, face: null, ms: 0, offsetMm: [2.9, 3.065], mmPerPx: 0.039062 }]) {
+    const old = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report } };
+    const p3 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [old] })));
+    assert.equal(JSON.stringify(p3.layers[0]), JSON.stringify(old));
+  }
+});
+
 // ---- redraw writes the layout -------------------------------------------------------------------
 
 await test('3. applyRedraw() with a layout: fillMode ai-layout, aiLayout with the kept report keys and editCount 0, colorSwaps {}, previousFillMode, box exactly widthMm x heightMm centred where the layer was', () => {
