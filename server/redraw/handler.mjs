@@ -9,11 +9,10 @@
 // docs/specifications/IMG-026-StrassLayoutService.md, "Node jobs, prompt and colours (build B)".
 import { randomUUID as cryptoRandomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { buildRedrawPrompt, PROMPT_VERSIONS, REDRAW_STYLES, REDRAW_SHAPES } from './prompt.mjs';
+import { buildRedrawPrompt, layoutRequestFor, PROMPT_VERSIONS, REDRAW_STYLES, REDRAW_SHAPES, BW_REDRAW_STYLES } from './prompt.mjs';
 import { redrawConfigStatus, REDRAW_ENV_DEFAULTS } from './env.mjs';
 import { createJobStore, callLayoutService, jobView, DEFAULT_TIMERS } from './jobs.mjs';
 import { FAKE_REDRAW_DATA_URL } from '../../src/redraw/FakeRedrawProvider.js';
-import { STONE_COLORS } from '../../src/renderer/StoneColors.js';
 
 export const OPENAI_IMAGE_EDITS_URL = 'https://api.openai.com/v1/images/edits';
 export const REDRAW_MAX_BODY_BYTES = 20 * 1024 * 1024;
@@ -25,6 +24,9 @@ const TIMEOUT = Symbol('timeout');
 
 // REDRAW_FAKE=1 answers every job with this layout (193 stones, build A response shape, 0 violations).
 export const FAKE_LAYOUT = JSON.parse(readFileSync(new URL('./fixtures/fake-layout.json', import.meta.url), 'utf8'));
+// IMG-026 (build P): and every Black & white job with this one: the same stones in Jet and Crystal only,
+// as the service's mode 'bw' answers (fixtures/fake-layout-bw.json).
+export const FAKE_LAYOUT_BW = JSON.parse(readFileSync(new URL('./fixtures/fake-layout-bw.json', import.meta.url), 'utf8'));
 
 function sendJson(res, status, body) {
   if (res.headersSent || res.writableEnded) return;
@@ -176,9 +178,11 @@ export function createRedrawHandler({
     return { result: { dataUrl: PNG_DATA_URL_PREFIX + b64, model: settings.imageModel, promptVersion: PROMPT_VERSIONS[style] }, png: Buffer.from(b64, 'base64') };
   }
 
-  function queueLayout(job, pngBuffer) {
+  // IMG-026 (build P): the style picks the layout mode and the palette sent (layoutRequestFor()).
+  function queueLayout(job, pngBuffer, style) {
+    const { mode, colorIds } = layoutRequestFor(style);
     const run = layoutChain.then(() => callLayoutService({
-      fetch, timers, url: layoutUrl, timeoutMs: layoutTimeoutMs, pngBuffer, colorIds: Object.keys(STONE_COLORS), signal: job.controller.signal
+      fetch, timers, url: layoutUrl, timeoutMs: layoutTimeoutMs, pngBuffer, colorIds, mode, signal: job.controller.signal
     }));
     layoutChain = run.catch(() => {});
     return run;
@@ -190,7 +194,7 @@ export function createRedrawHandler({
     if (!openAi) return;
     if (openAi.error) return store.fail(job, openAi.error);
     store.setStage(job, 'placing');
-    const placed = await queueLayout(job, openAi.png);
+    const placed = await queueLayout(job, openAi.png, style);
     if (placed.cancelled) return;
     if (placed.error) return store.fail(job, placed.error, openAi.result);
     return store.finish(job, { ...openAi.result, layout: placed.layout });
@@ -228,7 +232,7 @@ export function createRedrawHandler({
       if (settings.fake) {
         // No OpenAI call and no layout call: the first three polls see drawing, placing, done.
         job.fakePolls = 0;
-        job.fakeResult = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: PROMPT_VERSIONS[style], layout: FAKE_LAYOUT };
+        job.fakeResult = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: PROMPT_VERSIONS[style], layout: BW_REDRAW_STYLES.includes(style) ? FAKE_LAYOUT_BW : FAKE_LAYOUT };
       } else {
         runJob(job, Buffer.from(parsed.image.slice(PNG_DATA_URL_PREFIX.length), 'base64'), style, shape).catch((error) => {
           console.error('Redraw job failed:', error && error.message ? error.message : error);

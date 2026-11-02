@@ -6,6 +6,7 @@
 // Never touches the network (every fetch is injected), never needs OPENAI_API_KEY and never writes
 // to the source tree.
 import assert from 'node:assert/strict';
+import { redrawLookOf, redrawStyleForLook } from '../src/ui/index.js';
 import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
@@ -149,11 +150,14 @@ function bridge(handler) {
 
 await test('1. prompt v7: both shapes equal Appendix E, carry the skin lines, and differ only in the 60-across sentence and section 6\'s first line', () => {
   assert.equal(PROMPT_VERSION, 7);
-  assert.deepEqual(PROMPT_VERSIONS, { stones: 7, flat: 1 });
+  assert.deepEqual(PROMPT_VERSIONS, { stones: 7, flat: 1, bold: 1, shaded: 1 });
   assert.deepEqual(SERVER_REDRAW_SHAPES, ['square', 'auto']);
   assert.deepEqual(REDRAW_SHAPES, SERVER_REDRAW_SHAPES, 'client and server agree');
 
-  const appendix = spec.slice(spec.indexOf('## Appendix E'));
+  // IMG-026 (build P): Appendices F and G follow; read Appendix E only.
+  const appendixStart = spec.indexOf('## Appendix E');
+  const appendixEnd = spec.indexOf('\n## ', appendixStart + 1);
+  const appendix = spec.slice(appendixStart, appendixEnd === -1 ? undefined : appendixEnd);
   const blocks = [];
   for (let from = 0; ;) {
     const open = appendix.indexOf('```\n', from);
@@ -356,6 +360,7 @@ async function runApp(product, handler) {
     syncImageRedrawControls: () => {},
     redrawImage,
     REDRAW_STAGE_MESSAGES,
+    redrawLookOf, redrawStyleForLook,
     decodeDataUrlToBuffer: async (u) => decodeImage(u),
     project: state.project,
     aiStoneDetectionFor: () => ({ ok: false }),

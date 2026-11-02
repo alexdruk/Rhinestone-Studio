@@ -290,6 +290,17 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .image-redraw-row button.btn[hidden]{display:none}
 .image-redraw-row label[hidden]{display:none}
+/* IMG-026 (build P): the Colour / Black & white choice above the file button. The global label
+   style is small caps, so the choice labels set their own type. */
+.image-redraw-look{border:0;padding:0;margin:0 0 var(--space-3);min-width:0}
+.image-redraw-look legend{font-size:var(--font-size-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.02em;margin:0 0 4px;padding:0}
+.image-redraw-look label{display:flex;align-items:flex-start;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:var(--font-size-sm);font-weight:600;color:var(--color-text);cursor:pointer}
+.image-redraw-look input{accent-color:var(--color-primary);margin:2px 0 0}
+.image-redraw-look .look-modes{display:flex;flex-wrap:wrap;gap:var(--space-4)}
+.image-redraw-look .look-styles{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2);padding-left:var(--space-3);border-left:2px solid var(--color-primary-tint)}
+.image-redraw-look .look-styles .hint{display:block;font-weight:400;margin-top:0}
+/* Last, so [hidden] wins over the display rules above. */
+.image-redraw-look[hidden],.image-redraw-look [hidden]{display:none}
 /* IMG-025 (D10b): the style label sits inline with its select, at the button's height. */
 .image-redraw-style{display:flex;align-items:center;gap:6px;margin:0}
 .image-redraw-style select{width:auto;height:var(--control-height-sm)}
@@ -1173,6 +1184,21 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div id="imageStudioControls">
         <details class="advanced-section" id="imageStudioGroupSource" open>
           <summary>Source</summary>
+          <!-- IMG-026 (build P): the look of the AI redraw, stored on the image layer. Above the file
+               button because an upload starts the redraw at once. Shown only when a redraw provider
+               is available; set by syncImageRedrawControls() in app.js. -->
+          <fieldset id="imageRedrawLook" class="image-redraw-look" hidden>
+            <legend>Look</legend>
+            <div class="look-modes">
+              <label><input type="radio" name="imageRedrawMode" value="colour" checked>Colour</label>
+              <label><input type="radio" name="imageRedrawMode" value="bw">Black &amp; white</label>
+            </div>
+            <div id="imageRedrawBwStyles" class="look-styles" hidden>
+              <label><input type="radio" name="imageRedrawBwStyle" value="bold" checked><span>Bold<span class="hint">Solid black and clear areas: strong and graphic.</span></span></label>
+              <label><input type="radio" name="imageRedrawBwStyle" value="shaded"><span>Shaded<span class="hint">Black and clear stones mixed to show light and shade.</span></span></label>
+            </div>
+            <p class="hint" id="imageRedrawLookHint" hidden>This layer was made in another look. Redraw with AI to change it.</p>
+          </fieldset>
           <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
           <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
           <p class="hint" id="imageStudioFileName"></p>

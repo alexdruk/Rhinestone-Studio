@@ -33,8 +33,9 @@ export { aiLayoutPointFromAbsolute, aiLayoutDeltaFromAbsolute, applyAiLayoutEdit
 // IMG-026: the layout-* codes describe a layout failure after a good OpenAI image (layoutError).
 export const REDRAW_ERROR_CODES = Object.freeze(['not-configured', 'unauthorized', 'rate-limited', 'network', 'provider-failed', 'invalid-output', 'declined', 'layout-unavailable', 'layout-timeout', 'layout-failed']);
 // IMG-024 (D1): the same value as server/redraw/prompt.mjs's REDRAW_STYLES, restated because src/**
-// never imports server/**; a test keeps the two deepEqual.
-export const REDRAW_STYLES = Object.freeze(['stones', 'flat']);
+// never imports server/**; a test keeps the two deepEqual. IMG-026 (build P): 'bold' and 'shaded' are
+// the Black & white styles.
+export const REDRAW_STYLES = Object.freeze(['stones', 'flat', 'bold', 'shaded']);
 // IMG-026 (build N): the same value as server/redraw/prompt.mjs's REDRAW_SHAPES, restated for the
 // same reason; a test keeps the two deepEqual.
 export const REDRAW_SHAPES = Object.freeze(['square', 'auto']);
@@ -156,7 +157,7 @@ function untilAborted(promise, signal) {
 }
 
 /**
- * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat'), shape?:('square'|'auto'), onStage?:function(string):void}} request
+ * @param {{dataUrl:string, signal?:AbortSignal, style?:('stones'|'flat'|'bold'|'shaded'), shape?:('square'|'auto'), onStage?:function(string):void}} request
  * @returns {Promise<{dataUrl:string, providerId:string, model:string, promptVersion:(number|null), layout:(object|null), layoutError:({code:string,message:string}|null)}>}
  */
 export async function redrawImage({ dataUrl, signal, style = 'stones', shape = 'square', onStage } = {}) {

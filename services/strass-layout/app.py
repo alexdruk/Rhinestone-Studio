@@ -18,9 +18,25 @@ from fastapi.responses import JSONResponse
 
 import strass_layout
 from strass_layout import LayoutError, layout, load_models
+from strass_layout.bw import DEFAULT_BW_THRESHOLD
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 DEFAULT_PITCH_MM = 2.1
+MODES = ("colour", "bw")
+
+
+def bw_threshold_setting(environ=os.environ):
+    """IMG-026P: BW_THRESHOLD, the CIE L* below which a Black & white stone is Jet (default 55)."""
+    text = environ.get("BW_THRESHOLD", "").strip()
+    if not text:
+        return DEFAULT_BW_THRESHOLD
+    value = float(text)
+    if not math.isfinite(value) or not 0 < value < 100:
+        raise ValueError("BW_THRESHOLD must be a number between 0 and 100.")
+    return value
+
+
+BW_THRESHOLD = bw_threshold_setting()
 
 layout_lock = threading.Lock()
 log = logging.getLogger("strass_layout")
@@ -59,7 +75,11 @@ def parse_options(text):
     pitch = options.get("targetPitchMm", DEFAULT_PITCH_MM)
     if isinstance(pitch, bool) or not isinstance(pitch, (int, float)) or not math.isfinite(pitch) or pitch <= 0:
         raise ValueError("targetPitchMm must be a positive number.")
-    return color_ids, float(pitch)
+    # IMG-026P: "colour" (the default, and every request before build P) or "bw" (Black & white).
+    mode = options.get("mode", "colour")
+    if mode not in MODES:
+        raise ValueError("mode must be colour or bw.")
+    return color_ids, float(pitch), mode
 
 
 def unexpected_message(exc):
@@ -77,12 +97,12 @@ def post_layout(image: UploadFile = File(...), options: str = Form("{}")):
     if len(data) > MAX_IMAGE_BYTES:
         return error_response(413, "too-large", "The image is larger than 20 MB.")
     try:
-        color_ids, pitch = parse_options(options)
+        color_ids, pitch, mode = parse_options(options)
     except ValueError as exc:
         return error_response(400, "bad-request", str(exc))
     try:
         with layout_lock:
-            return layout(data, color_ids, pitch)
+            return layout(data, color_ids, pitch, mode=mode, bw_threshold=BW_THRESHOLD)
     except LayoutError as exc:
         return error_response(exc.status, exc.code, exc.message)
     except Exception as exc:

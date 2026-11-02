@@ -114,7 +114,7 @@ import { AI_STONE_NUDGE_STEP_MM, AI_STONE_NUDGE_STEP_LARGE_MM } from './src/edit
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
-import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows } from './src/ui/index.js';
+import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows, redrawLookOf, redrawStyleForLook, redrawLookFields, REDRAW_MODES, REDRAW_BW_STYLES } from './src/ui/index.js';
 import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
@@ -1309,6 +1309,9 @@ function validateProject(obj){
     // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
     if(l.type==='image'&&l.redraw!==undefined&&!(l.redraw&&typeof l.redraw==='object'&&!Array.isArray(l.redraw)&&typeof l.redraw.originalImageSrc==='string'&&l.redraw.originalImageSrc.startsWith('data:image/')))throw new Error(`Image layer "${l.id}" has an invalid 'redraw' record: originalImageSrc must be a data:image/ URL.`);
+    // IMG-026 (build P): the redraw look. Both fields are optional; a layer without them is Colour.
+    if(l.type==='image'&&l.redrawMode!==undefined&&!REDRAW_MODES.includes(l.redrawMode))throw new Error(`Image layer "${l.id}" has an invalid 'redrawMode': expected one of ${REDRAW_MODES.join(', ')}.`);
+    if(l.type==='image'&&l.redrawBwStyle!==undefined&&!REDRAW_BW_STYLES.includes(l.redrawBwStyle))throw new Error(`Image layer "${l.id}" has an invalid 'redrawBwStyle': expected one of ${REDRAW_BW_STYLES.join(', ')}.`);
     // IMG-026 (C1): an ai-layout layer's stone list and colour swaps. Size ids cover all six sizes
     // (SS4 included), colour ids all of STONE_COLORS. Coordinates outside the box are allowed.
     if(l.type==='image'&&l.aiLayout!==undefined){
@@ -5749,6 +5752,8 @@ el('importImageFile').addEventListener('change',async e=>{
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
     const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1.4,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true,cleanup:true};
+    // IMG-026 (build P): the new layer takes the look chosen in the lightbox; its redraw reads it.
+    Object.assign(layer,redrawLookFields(loadRedrawLook()));
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -5773,6 +5778,10 @@ function saveRedrawAccessCode(code){try{if(code)localStorage.setItem(REDRAW_ACCE
 const REDRAW_STYLE_STORAGE_KEY='rhinestoneStudio.redrawStyle';
 function loadRedrawStyle(){try{return localStorage.getItem(REDRAW_STYLE_STORAGE_KEY)==='flat'?'flat':'stones'}catch{return'stones'}}
 function saveRedrawStyle(style){try{localStorage.setItem(REDRAW_STYLE_STORAGE_KEY,style)}catch{}}
+// IMG-026 (build P): the look chosen while no image layer is selected; the next upload takes it.
+const REDRAW_LOOK_STORAGE_KEY='rhinestoneStudio.redrawLook';
+function loadRedrawLook(){try{const v=JSON.parse(localStorage.getItem(REDRAW_LOOK_STORAGE_KEY)||'null');return redrawLookOf(v&&typeof v==='object'?{redrawMode:v.mode,redrawBwStyle:v.bwStyle}:null)}catch{return redrawLookOf(null)}}
+function saveRedrawLook(look){try{localStorage.setItem(REDRAW_LOOK_STORAGE_KEY,JSON.stringify(look))}catch{}}
 let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
 // IMG-026 (C2): the layer of the running redraw, and the layers whose last run in this session failed,
 // was declined or cancelled, or fell back to the old method. See imageStudioState().
@@ -5810,7 +5819,33 @@ function syncImageRedrawControls(l){
   el('imageRedrawCancel').hidden=!busy;
   el('imageRedrawUseOriginal').hidden=!state.useOriginal;
   el('imageRedrawUseOriginal').disabled=busy;
+  syncImageRedrawLook(l,state,busy);
 }
+// IMG-026 (build P): the Colour / Black & white choice shows the selected image layer's look, or with
+// no image layer selected the remembered one. A change is written to the layer (one history step) and
+// takes effect at the next redraw.
+function syncImageRedrawLook(l,state,busy){
+  const box=el('imageRedrawLook'),look=l?redrawLookOf(l):loadRedrawLook();
+  box.hidden=!state.look;
+  for(const input of box.querySelectorAll('input')){input.checked=input.value===(input.name==='imageRedrawMode'?look.mode:look.bwStyle);input.disabled=busy}
+  el('imageRedrawBwStyles').hidden=look.mode!=='bw';
+  el('imageRedrawLookHint').hidden=!state.lookChanged;
+}
+function onRedrawLookChange(){
+  const box=el('imageRedrawLook'),checked=name=>{const input=box.querySelector(`input[name="${name}"]:checked`);return input?input.value:''};
+  const look=redrawLookOf({redrawMode:checked('imageRedrawMode'),redrawBwStyle:checked('imageRedrawBwStyle')});
+  saveRedrawLook(look);
+  const l=selectedLayer(),fields=redrawLookFields(look);
+  if(l&&l.type==='image'&&!redrawRun&&(l.redrawMode!==fields.redrawMode||l.redrawBwStyle!==fields.redrawBwStyle)){
+    commitHistory();
+    delete l.redrawBwStyle;
+    Object.assign(l,fields);
+    updateHistoryUI();
+    scheduleAutosave();
+  }
+  syncImageRedrawControlsForSelection();
+}
+for(const input of el('imageRedrawLook').querySelectorAll('input'))input.addEventListener('change',onRedrawLookChange);
 const redrawConsentLightbox=new Lightbox('lightboxRedrawConsent',{onClose(){if(redrawConsentResolve){const resolve=redrawConsentResolve;redrawConsentResolve=null;resolve(false)}}});
 function askRedrawConsent(consent){
   el('redrawConsentRecipient').textContent=consent.recipientName||'';
@@ -5842,8 +5877,9 @@ async function startImageRedraw(){
   // The request is bound to this layer and the source it started from (a re-redraw always starts
   // from the original image); a result that no longer matches is dropped, not applied.
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
-  // IMG-026 (C2, D3): always the stone picture; the flat style stays dormant.
-  const style='stones';
+  // IMG-026 (C2, D3): always a stone picture; the flat style stays dormant. Build P: the layer's look
+  // picks the colour picture ('stones') or a Black & white style ('bold', 'shaded').
+  const style=redrawStyleForLook(redrawLookOf(layer));
   // IMG-026 (build N): read before the provider call. The Flat Sheet asks for the photo's own shape
   // (cropped model input, size auto); vessels and the plate keep the square output.
   const shape=currentObjectTemplate().id==='sheet'?'auto':'square';
@@ -5860,10 +5896,10 @@ async function startImageRedraw(){
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
     // IMG-026 (C1): a stones redraw that came back with a layout becomes an ai-layout layer, its box
     // exactly the layout's size; on a Flat Sheet the sheet grows first to the box plus 20 mm.
-    const layout=style==='stones'&&result.layout?result.layout:null;
+    const layout=style!=='flat'&&result.layout?result.layout:null;
     // IMG-023 (D2(a)): otherwise the redrawn image becomes an AI stones layer sized from its own stone
     // pitch; on a Flat Sheet the sheet grows first (the size then fits without shrinking).
-    const detection=layout?null:style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
+    const detection=layout?null:style!=='flat'?aiStoneDetectionFor(result.dataUrl,buffer):null;
     const aiPitchPx=detection&&detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
     const grownCanvas=layout?(currentObjectTemplate().id==='sheet'?fitAiLayoutCanvas({canvas:project.canvas,widthMm:layout.widthMm,heightMm:layout.heightMm,sheetMaxMm:SHEET_MAX_MM}):null):aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
     commitHistory();
@@ -5874,7 +5910,7 @@ async function startImageRedraw(){
     if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('template')}else redrawFailedLayerIds.add(layerId);
     syncSelectedControlsFromLayer();
     await updateAll(true);
-    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style==='stones'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
+    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style!=='flat'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
   }catch(error){
     if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
     if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
@@ -5889,7 +5925,8 @@ async function startImageRedraw(){
 }
 // IMG-026 (C2): "Try again" first asks before it discards manual edits to the layout. The app has no
 // confirm dialog of its own, so this is window.confirm.
-el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0;if(imageStudioStateFor(l&&l.type==='image'?l:null).redrawButton==='Try again'&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
+// IMG-026 (build P): a redraw for a changed look discards them too.
+el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0,state=imageStudioStateFor(l&&l.type==='image'?l:null);if((state.redrawButton==='Try again'||state.lookChanged)&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
 el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');
 el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
 el('imageRedrawUseOriginal').onclick=async()=>{

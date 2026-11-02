@@ -6,4 +6,4 @@ export { Lightbox } from './Lightbox.js';
 export { el, parseIntOr } from './DomUtils.js';
 export { download, exportCanvas } from './DownloadHelpers.js';
 export { shippingInfo, syncShippingFieldsFromState, wireShippingApply } from './ShippingPanel.js';
-export { imageStudioState, aiLayoutColourRows } from './ImageStudioState.js';
+export { imageStudioState, aiLayoutColourRows, redrawLookOf, redrawStyleForLook, redrawLookFields, REDRAW_MODES, REDRAW_BW_STYLES } from './ImageStudioState.js';
