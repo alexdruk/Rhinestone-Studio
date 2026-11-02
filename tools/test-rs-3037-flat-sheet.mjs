@@ -471,12 +471,14 @@ function runExportHandler(id, templateId) {
   const layout = { layers: [] };
   const cupCanvas = {};
   const composeCombinedPreviewCanvas = () => ({});
+  // IMG-026Q: #exportCombined copies the 2D canvas inside withoutTintedView() (a pass-through here).
+  const withoutTintedView = (capture) => capture();
   // eslint-disable-next-line no-new-func
   const factory = new Function(
-    'el', 'currentObjectTemplate', 'layout', 'exportCanvas', 'cupCanvas', 'composeCombinedPreviewCanvas',
+    'el', 'currentObjectTemplate', 'layout', 'exportCanvas', 'cupCanvas', 'composeCombinedPreviewCanvas', 'withoutTintedView',
     `${src}\nel('${id}').onclick();`
   );
-  factory(el, currentObjectTemplate, layout, exportCanvas, cupCanvas, composeCombinedPreviewCanvas);
+  factory(el, currentObjectTemplate, layout, exportCanvas, cupCanvas, composeCombinedPreviewCanvas, withoutTintedView);
   return { exportCanvasCalls, status: el('status').textContent };
 }
 

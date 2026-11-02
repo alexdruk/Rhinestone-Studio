@@ -89,6 +89,7 @@ import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineM
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
+import { TintedViewCache } from './src/renderer/TintedView.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
@@ -3206,6 +3207,20 @@ function updateScaleBar(s,dpr){
 // drawLayout() also sets the canvas element's CSS background; White clears it back to the
 // stylesheet's --color-canvas-bg.
 function canvasBackgroundColor(){return el('canvasBackground').value==='product'&&currentObjectTemplate().preview.kind!=='sheet'?project.cupColor:'#fbfdff'}
+// IMG-026Q: the third choice, Tinted, shows image layers as the finished piece (TintedView.js): gaps
+// in a darker shade of their stone, true stone lightness, specks closed, thin pupil rims. White
+// background around them; other layers are drawn as on White. View only like Product: not saved,
+// not in history, never in exports, and Design (Paper.js) is unchanged. Black & white layers use the
+// lighter-gap rule. The cache keeps the last bitmap until those stones or the canvas scale change.
+// It renders in slices between frames (the stones show as on White until it is ready) and redraws
+// when done; window.__tintedView exposes its timing for QA, like window.__layout.
+const tintedViewCache=new TintedViewCache({createCanvas:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c},onReady:()=>drawLayout()});
+Object.defineProperty(window,'__tintedView',{get:()=>tintedViewCache,configurable:true});
+function canvasTintedOptions(){if(el('canvasBackground').value!=='tinted')return null;const images=project.layers.filter(l=>l.type==='image');return{cache:tintedViewCache,layerIds:new Set(images.map(l=>l.id)),crystalGapLayerIds:new Set(images.filter(l=>redrawLookOf(l).mode==='bw').map(l=>l.id))}}
+// Exports never show the tinted view: the two that copy the on-screen canvas (Export PNG and the
+// Combined preview) redraw it as on White for the copy (toBlob()/drawImage() copy it at once), then
+// redraw the tinted view from the cache.
+function withoutTintedView(capture){if(el('canvasBackground').value!=='tinted'||drawingTool.isActive)return capture();el('canvasBackground').value='white';drawLayout();try{return capture()}finally{el('canvasBackground').value='tinted';drawLayout()}}
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
   // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
@@ -3218,7 +3233,7 @@ function drawLayout(){
   // blocked by this guard.
   layoutCanvas.style.background=canvasBackgroundColor()==='#fbfdff'?'':canvasBackgroundColor();
   if(drawingTool.isActive)return;
-  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor()});layoutTransform={s,ox,oy,dpr};
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor(),tinted:canvasTintedOptions()});layoutTransform={s,ox,oy,dpr};
   updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
@@ -5379,7 +5394,7 @@ el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 // S-104: the workspace warning's own "Center Text" button -- same shared function, so it can only
 // ever move x/y (never any other property), exactly like the Text Lightbox's Center on Object.
 el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
-el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();el('status').textContent=el('canvasBackground').value==='product'?'Background: product colour':'Background: white'});
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();if(el('canvasBackground').value!=='tinted')tintedViewCache.cancel();el('status').textContent=({product:'Background: product colour',tinted:'Background: tinted'})[el('canvasBackground').value]||'Background: white'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');
 // S-110: singleOtherSelectedLayer() looks at the selection as it stood *before* the layer about to
@@ -5971,9 +5986,9 @@ el('exportProject').onclick=()=>{try{download('rhinestone-project.json','applica
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{withoutTintedView(()=>exportCanvas('rhinestone-layout.png',layoutCanvas))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{withoutTintedView(()=>exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
 // only options (like rotation/zoom) -- read live from their controls at click time, not part of
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one

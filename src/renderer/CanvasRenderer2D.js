@@ -196,12 +196,18 @@ export function renderStoneLayout(ctx, stoneLayout, transform, style = 'layout')
  * stone in the StoneLayout. Returns the transform used, so the caller can layer layer-aware
  * overlays (selection, HUD text) on top using the exact same mm->px mapping.
  *
+ * IMG-026 build Q: `tinted` ({ cache: TintedViewCache, layerIds: Set, crystalGapLayerIds?: Set })
+ * draws the stones of those layers in the tinted view (TintedView.js): their gap layer, stones and
+ * lightness hold come from the cache as one bitmap on top of the grid, and every other stone is
+ * drawn as before, on top. Until the cache has the bitmap, every stone is drawn as before. The
+ * stones themselves are never changed.
+ *
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
- * @param {{widthPx:number,heightPx:number,paddingPx:number,units?:'mm'|'in'}} viewport
+ * @param {{widthPx:number,heightPx:number,paddingPx:number,units?:'mm'|'in',backgroundColor?:string,tinted?:{cache:import('./TintedView.js').TintedViewCache,layerIds:Set<string>,crystalGapLayerIds?:Set<string>}|null}} viewport
  * @returns {{s:number,ox:number,oy:number}}
  */
-export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx, units = 'mm', backgroundColor = '#fbfdff' }) {
+export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx, units = 'mm', backgroundColor = '#fbfdff', tinted = null }) {
   ctx.clearRect(0, 0, widthPx, heightPx);
   ctx.fillStyle = backgroundColor;
   ctx.fillRect(0, 0, widthPx, heightPx);
@@ -210,7 +216,25 @@ export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, pa
   const transform = fitTransform(boundingBoxMm, widthPx, heightPx, paddingPx);
 
   drawGrid(ctx, boundingBoxMm, transform, units);
-  renderStoneLayout(ctx, stoneLayout, transform, 'layout');
+  const tintedStones = tinted ? stoneLayout.stones.filter((stone) => tinted.layerIds.has(stone.layerId)) : [];
+  if (tintedStones.length) {
+    const crystalGapLayerIds = tinted.crystalGapLayerIds || new Set();
+    const crystalGap = Uint8Array.from(tintedStones, (stone) => (crystalGapLayerIds.has(stone.layerId) ? 1 : 0));
+    const bitmap = tinted.cache.get(tintedStones, { ...transform, canvasWidthPx: widthPx, canvasHeightPx: heightPx, crystalGap });
+    if (bitmap) {
+      // The bitmap is in device px of this canvas: draw it untransformed.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(bitmap.canvas, bitmap.xPx, bitmap.yPx);
+      ctx.restore();
+      renderStoneLayout(ctx, { stones: stoneLayout.stones.filter((stone) => !tinted.layerIds.has(stone.layerId)) }, transform, 'layout');
+    } else {
+      // Still rendering (in slices; the cache asks for a redraw when done): the stones as usual.
+      renderStoneLayout(ctx, stoneLayout, transform, 'layout');
+    }
+  } else {
+    renderStoneLayout(ctx, stoneLayout, transform, 'layout');
+  }
 
   return transform;
 }
