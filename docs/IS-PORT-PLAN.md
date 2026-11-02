@@ -2,6 +2,9 @@
 
 Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no service started.
 
+**The port is complete (2 Nov 2026).** All seven milestones in section 7 are done. What is still
+open is listed in section 9.
+
 **Progress.**
 - **IMG-026L done** (31 Oct 2026, branch `feature/img-026l-face-landmarks`). The results are in
   `docs/results/IMG-026L/`.
@@ -75,6 +78,16 @@ Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no ser
   - Not foreseen: Export PNG and the Combined preview copy the on-screen canvas, so they needed
     `withoutTintedView()`. The view makes the layout's white highlight patches and large pupils
     much more visible.
+
+- **RS-3042 done** (2 Nov 2026, branch `feature/rs-3042-eps-ai-export`). Spec:
+  `docs/specifications/RS-3042-EpsAiExport.md`.
+  - Inch production sheets print the gap in mm with the inch value after it, for example
+    "Gap: 0.1 mm (0.004 in)"; before, 0.1 mm printed "Gap: 0 in". mm sheets are unchanged, and so
+    are the RS-3041 sheet hashes (all mm).
+  - EPS (`src/export/EpsExporter.js`) and AI (`src/export/AiExporter.js`) copied from IS, in the
+    Export dialog under DXF for every product. Both read the final StoneLayout only.
+  - Not ported: E4 (PDF Info) and E5 (PNG `pHYs`), which the brief left out, and IS's
+    PatternNifty sheet text.
 
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
@@ -496,7 +509,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | --- | --- | --- | --- |
 | 1 | **IMG-026L — Face landmarks without dlib** (**done**, 31 Oct 2026) | 3.1: MediaPipe Face Landmarker in the service, dlib test-only, nodeps pin, setup/Docker/README updated; `services/strass-layout/THIRD_PARTY_LICENCES.md`; a test that fails if dlib is imported outside the tests. | The service imports no dlib and starts and lays out with dlib uninstalled. `THIRD_PARTY_LICENCES.md` lists every model and dependency with its licence and whether commercial use is allowed. The dlib-import test passes, and fails when an `import dlib` is added outside `tests/`. `test_golden` passes. The 12 images give the IS-07a faces and pupils (only rs-lake differs). The equivalence test runs with `--with-dlib-tests` and skips cleanly without it. The Docker image contains no dlib model. `setup_mac.sh` has been run once on the iMac. |
 | 2 | **IMG-026M — Eyes, colour reading and skin rules** (**done**, 1 Nov 2026; S4 also moves stones near people's pupils, see Progress) | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` off in `DEFAULT` (IS-05b). | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. With `soft_outlines` off, only outline stones on human faces change colour (black stays black). 0 violations. `validateProject()` accepts `face: null` and the new report key. |
-| 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
+| 3 | **RS-3042 — Exporter fixes and EPS/AI** (**done**, 2 Nov 2026; the gap prints "0.1 mm (0.004 in)" on inch sheets, PDF Info not added, see Progress) | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
 | 4 | **IMG-026N — Prompt v7 and model input** (**done**, 1 Nov 2026) | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
 | 5 | **IMG-026O — Service clean-up and hole fill** (**done**, 1 Nov 2026) | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** (**done**, 2 Nov 2026) | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
@@ -569,3 +582,45 @@ Still the plan's proposal, not decided:
 - the milestone names (IMG-026L… rather than a fresh number);
 - ~~on the Flat Sheet, whether to drop the 60-across sentence (P2) and crop to the cut-out (C2)~~:
   decided in the IMG-026N brief (1 Nov 2026): both, on the Flat Sheet only.
+
+---
+
+## 9. Open items after the port
+
+Sizes are rough: S is a day or less, M a few days, L a milestone of a week or more.
+
+1. **No design fits the mug.** AI designs start at about 130 mm, and the mug's body is 95 mm. An
+   ai-layout layer can only be enlarged, so the redraw cannot be placed on the mug at all; the
+   bottle takes only the smaller designs. It needs a layout at a smaller scale (option E, section
+   8 item 8): a service layout with a smaller pitch or fewer stones, because scaling the positions
+   down would break the 0.1 mm gap. RS (PatternNifty has no products). Size L.
+2. **No warm reddish mid-brown stone.** The colour catalogue has nothing around L\* 40 to 45 with a
+   warm reddish hue, so the lit areas of deep skin go to Light Peach and look too light (IMG-026N,
+   curls). Fixing it means adding a real stone to the catalogue and checking the colour step on the
+   test images. Both apps. Size M.
+3. **Thin eye and lip lines are lost.** The thin lines the AI draws around the eyes and lips do not
+   survive the layout, and the eyes become single dots. It shows most in Black & white Bold
+   (IMG-026P, curls). It needs a service stage that keeps thin dark lines on faces. Both apps.
+   Size M to L.
+4. **White patches on light skin.** Groups of Crystal and Silver stones on light skin highlights
+   read as white patches, most visibly in the tinted view (IMG-026Q, portrait). `lone_white_skin`
+   only changes single stones; the rule needs to reach small groups. Both apps. Size M.
+5. **Grey rings on Jet in the tinted view.** RS's stone renderer draws a light-grey edge on every
+   Jet stone, so large black areas show grey rings in the tinted view. A change to how Jet is drawn
+   in the 2D renderer. RS. Size S.
+6. **Pupil size cap.** A single pupil is capped at SS16 and a pair at SS20, so the single pupils
+   of Jesus and the parrot went from SS20 to SS16 (IMG-026O). It is the same rule as PatternNifty;
+   revisit if pupils look small in use. Both apps. Size S (a setting).
+7. **The hole fill closes gaps between curls.** The hole fill puts stones into some of the white
+   gaps between curls that the AI image shows (IMG-026O, portrait). It needs a rule that leaves
+   narrow light gaps between dark areas open. Both apps. Size M.
+8. **Tinted view timing on Chrome 103.** The tinted view was timed on Chrome 156 only (0.73 s and
+   1.8 s first render for 4156 stones); the milestone's done criterion asked for Chrome 103, which
+   was not available. Needs one measurement on a Chrome 103 machine. RS. Size S.
+9. **Bold and Shaded give different sizes.** For the same photo, Shaded comes out 11 to 21 %
+   larger than Bold (IMG-026P); the cause is not known. It shows as a different natural size
+   when the user switches the look. Both apps. Size M (first find out whether the prompt or the
+   layout should even it out).
+10. **The full service suite takes about 4.5 hours** on the iMac. It slows every service
+    milestone. It needs a fast tier, for example the golden images on a smaller set, with the full
+    run kept for releases. RS. Size M.
