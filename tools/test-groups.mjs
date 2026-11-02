@@ -152,6 +152,9 @@ export const GROUPS = {
     // IMG-026 build P: Black & white in two styles -- the Bold and Shaded prompts, the layout mode and
     // palette each look sends, fake mode, the layer's look and the lightbox choice.
     'test-img-026-black-white.mjs',
+    // RS-3043: npm run studio (tools/studio.mjs) with a fake layout service and dev server, the
+    // LAYOUT_PORT setting in start_layout.sh, and .env.example's URL.
+    'test-rs-3043-studio.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

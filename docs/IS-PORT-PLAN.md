@@ -493,7 +493,7 @@ give the same faces.
 4. falls back to building dlib from source if `dlib-bin` has no wheel;
 5. downloads and SHA-checks the dlib model.
 
-`scripts/start_layout.sh` runs uvicorn on 127.0.0.1:8000. The `Dockerfile` (python:3.12-slim) does
+`scripts/start_layout.sh` runs uvicorn on 127.0.0.1:8000 (8001 since RS-3043, setting `LAYOUT_PORT`). The `Dockerfile` (python:3.12-slim) does
 the same and fetches the dlib model into the image. The fix changes all three as IS did:
 - MediaPipe from `requirements-nodeps.txt`;
 - the `.task` model committed and SHA-checked;

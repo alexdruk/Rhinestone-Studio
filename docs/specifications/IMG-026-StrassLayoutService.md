@@ -63,7 +63,7 @@ light-colorado, light-peach) exactly, and none of the 17 older entries.
 controls are shown only when such a layer is selected (S16).
 
 **D5. Where the service runs.** For now, natively on Sasha's Mac next to the Node server, bound to
-127.0.0.1:8000. Later, the same package in Docker on a rented server. Only `LAYOUT_SERVICE_URL`
+127.0.0.1:8000 (8001 since RS-3043: 8000 is PatternNifty's strass service on the iMac). Later, the same package in Docker on a rented server. Only `LAYOUT_SERVICE_URL`
 changes.
 
 Added on 6 Oct: "Redraw with AI" runs on every upload and its button is hidden; an Image→Strass
@@ -301,7 +301,7 @@ missing `flowrun` module (lines 79 and 244). `eyes4.build_eye` (the non-copy bra
 names `brew install python@3.12`), creates `services/strass-layout/.venv`, installs
 `requirements.txt`, and downloads and verifies the dlib model (S8). If `dlib-bin` has no wheel for
 the Mac, it says so and installs `cmake` then `dlib` from source. `scripts/start_layout.sh`
-activates the venv and runs `uvicorn app:app --host 127.0.0.1 --port 8000 --workers 1`. Neither
+activates the venv and runs `uvicorn app:app --host 127.0.0.1 --port 8000 --workers 1` (since RS-3043 the port is `LAYOUT_PORT`, default 8001). Neither
 script uses `#` comments. A `caffeinate -i` wrapper is printed as advice by `start_layout.sh`, not
 run by it.
 

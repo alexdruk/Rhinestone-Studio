@@ -1633,8 +1633,11 @@ separate layout service:
 - **Layout service.** `services/strass-layout/` is a FastAPI app (`app.py`: `POST /layout`,
   `GET /health`) around the `strass_layout` package. It is the one place Python is allowed
   (`CLAUDE.md`, decision D5). Nothing in `src/`, `app.js` or `server/` imports it; the Node server
-  reaches it only over HTTP. It runs natively on Alex's Mac on 127.0.0.1:8000
-  (`scripts/start_layout.sh`) until a server is rented; then the same package runs in Docker and
+  reaches it only over HTTP. It runs natively on Alex's Mac on 127.0.0.1:8001
+  (`scripts/start_layout.sh`, port `LAYOUT_PORT`; 8000 is PatternNifty's strass service) until a
+  server is rented. `npm run studio` (`tools/studio.mjs`, RS-3043) starts it with the dev server
+  and sets `LAYOUT_SERVICE_URL`; `GET /health` names the service so the studio never takes another
+  one on that port for it. When a server is rented, the same package runs in Docker and
   only `LAYOUT_SERVICE_URL` changes. Its tests read the research prototype kept in `prototype/`
   for the equivalence check.
 - **Layer data.** An ai-layout image layer stores `aiLayout` (`version`, `widthMm`, `heightMm`,

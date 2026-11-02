@@ -111,7 +111,7 @@ export function jobView(job) {
 // message } }, or { cancelled: true } when `signal` aborts. No retry. IMG-026 (build P): `mode` is
 // 'colour' or 'bw' (Black & white: the service makes every stone Jet or Crystal).
 export async function callLayoutService({ fetch, timers, url, timeoutMs, pngBuffer, colorIds, mode = 'colour', signal }) {
-  if (!url) return { error: { code: 'layout-unavailable', message: 'The layout service is not set up (LAYOUT_SERVICE_URL is empty).' } };
+  if (!url) return { error: { code: 'layout-unavailable', message: 'The layout service is not set up. Start Rhinestone Studio with npm run studio (or set LAYOUT_SERVICE_URL).' } };
   if (signal.aborted) return { cancelled: true };
   const controller = new AbortController();
   const onAbort = () => controller.abort();
@@ -145,7 +145,7 @@ export async function callLayoutService({ fetch, timers, url, timeoutMs, pngBuff
     if (signal.aborted) return { cancelled: true };
     if (timedOut) return timeoutError;
     const cause = error && error.cause ? error.cause : error;
-    if (cause && cause.code === 'ECONNREFUSED') return { error: { code: 'layout-unavailable', message: `The layout service at ${url} is not running.` } };
+    if (cause && cause.code === 'ECONNREFUSED') return { error: { code: 'layout-unavailable', message: `The layout service at ${url} is not answering. Start the layout service, or start Rhinestone Studio with npm run studio.` } };
     return { error: { code: 'layout-failed', message: error && error.message ? error.message : String(error) } };
   } finally {
     timers.clearTimeout(timer);

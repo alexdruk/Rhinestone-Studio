@@ -103,6 +103,6 @@ server.listen(requestedPort, () => {
     ? `Redraw with AI is on${redrawSettings.fake ? ' (fake mode, no OpenAI calls)' : ''}.`
     : `Redraw with AI is off: ${redrawStatus.missing.join(' and ')} not set.`);
   if (redrawStatus.configured && !redrawSettings.fake) {
-    console.log(redrawSettings.layoutServiceUrl ? `Layout service: ${redrawSettings.layoutServiceUrl}` : 'Layout service: not set (LAYOUT_SERVICE_URL), redraws stop after the AI image.');
+    console.log(redrawSettings.layoutServiceUrl ? `Layout service: ${redrawSettings.layoutServiceUrl}` : 'Layout service: not set, so redraws are placed with the old method. Start with npm run studio, or set LAYOUT_SERVICE_URL.');
   }
 });

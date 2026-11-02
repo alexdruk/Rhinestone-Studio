@@ -438,8 +438,9 @@ when one layer fails, Design framed on the sheet, and multi-page Production Shee
 **Browser baseline (`MAINT-007`, `MAINT-008`).** The oldest supported browser is Chrome 103
 (macOS Sierra). `MAINT-008` lets the module-graph test load Paper.js under Node.
 
-**Deployment.** The layout service runs natively on Alex's own computer, bound to 127.0.0.1:8000
-and started with `services/strass-layout/scripts/start_layout.sh`, until a server is rented
+**Deployment.** The layout service runs natively on Alex's own computer, bound to 127.0.0.1:8001
+(`LAYOUT_PORT`; 8000 is PatternNifty's strass service on the iMac) and started together with the app
+by `npm run studio` (`RS-3043`), or by hand with `services/strass-layout/scripts/start_layout.sh`, until a server is rented
 (`IMG-026` decision D5). Then the same package runs in Docker and only `LAYOUT_SERVICE_URL`
 changes. The Node server needs
 `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY` and `LAYOUT_SERVICE_URL` in
