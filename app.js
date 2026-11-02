@@ -96,6 +96,8 @@ import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { listStoneSizes, findStoneSizeByDiameterMm, listAllStoneSizes, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
+import { stoneLayoutToEps } from './src/export/EpsExporter.js';
+import { stoneLayoutToAi } from './src/export/AiExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
@@ -5985,6 +5987,9 @@ el('exportProject').onclick=()=>{try{download('rhinestone-project.json','applica
   }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// RS-3042: EPS and AI (a one-page true-size PDF saved as .ai), straight from the merged StoneLayout.
+el('exportEPS').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-design.eps','application/postscript',stoneLayoutToEps(layout,{title:project.name}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportAI').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-design.ai','application/pdf',stoneLayoutToAi(layout))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{withoutTintedView(()=>exportCanvas('rhinestone-layout.png',layoutCanvas))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};

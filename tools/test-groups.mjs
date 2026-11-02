@@ -368,6 +368,8 @@ export const GROUPS = {
     'test-rs-3038-prod-sheet-messages.mjs',
     // RS-3041: multi-page Production Sheets (cover + true-size tile pages, PDF only).
     'test-rs-3041-multi-page.mjs',
+    // RS-3042: EPS and AI exports, and the inch sheet's Gap line in mm.
+    'test-rs-3042-eps-ai-export.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
     // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)

@@ -341,7 +341,9 @@ exporter module needed); its schema is documented in `src/geometry/README.md`. "
 last drew — a real export of the rendered `StoneLayout`, but implemented as a render-then-capture
 step rather than a
 standalone `src/export/**` module. DXF export now exists as `src/export/DxfExporter.js`
-(RS-3036); Stone Reports do not.
+(RS-3036), and EPS and AI exports as `src/export/EpsExporter.js` and `src/export/AiExporter.js`
+(RS-3042: true-size vector files of the stones; AI is a one-page `PdfDocument` PDF saved as `.ai`);
+Stone Reports do not.
 
 As of RS-1005, a **Production Sheet** export exists: `src/export/ProductionSheetExporter.js`
 (`computeProductionSheetLayout()`, `productionSheetToSvg()`, `productionSheetToPdf()`) turns the
