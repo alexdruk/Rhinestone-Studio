@@ -110,10 +110,16 @@ def post_layout(image: UploadFile = File(...), options: str = Form("{}")):
         return error_response(500, "layout-failed", unexpected_message(exc))
 
 
+# RS-3043: names this service, so `npm run studio` can tell it from another one on the same port
+# (PatternNifty's own strass service runs on the same Mac).
+SERVICE_NAME = "rhinestone-studio-layout"
+
+
 @app.get("/health")
 def get_health():
     return {
         "ok": True,
+        "service": SERVICE_NAME,
         "modelsLoaded": status["modelsLoaded"],
         "version": strass_layout.__version__,
         "busy": layout_lock.locked(),

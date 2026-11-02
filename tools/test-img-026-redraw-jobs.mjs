@@ -263,8 +263,8 @@ await test('4. the exact multipart request to the layout service: POST <LAYOUT_S
 
 await test('5. layout failures: unavailable (no URL, connection refused), failed (any non-200, with the service code and message), timeout after 180 s; each keeps the OpenAI image in result and is not retried', async () => {
   const cases = [
-    [{ env: { LAYOUT_SERVICE_URL: '' } }, () => okLayout(), 'layout-unavailable', /LAYOUT_SERVICE_URL/, 0],
-    [{}, () => { throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8000'), { code: 'ECONNREFUSED' }) }); }, 'layout-unavailable', /not running/, 1],
+    [{ env: { LAYOUT_SERVICE_URL: '' } }, () => okLayout(), 'layout-unavailable', /^The layout service is not set up\. Start Rhinestone Studio with npm run studio \(or set LAYOUT_SERVICE_URL\)\.$/, 0],
+    [{}, () => { throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8000'), { code: 'ECONNREFUSED' }) }); }, 'layout-unavailable', /^The layout service at http:\/\/layout\.test:8000 is not answering\. Start the layout service, or start Rhinestone Studio with npm run studio\.$/, 1],
     [{}, () => status(422, { error: 'catalogue-mismatch', message: 'The layout service has colours the app does not know: x' }), 'layout-failed', /^catalogue-mismatch: The layout service has colours the app does not know: x$/, 1],
     [{}, () => status(422, { error: 'no-stones', message: 'Fewer than 50 stones.' }), 'layout-failed', /^no-stones: Fewer than 50 stones\.$/, 1],
     [{}, () => status(400, { error: 'no-alpha', message: 'No transparent background.' }), 'layout-failed', /^no-alpha: /, 1],
@@ -551,7 +551,7 @@ await test('14. fake-layout.json: about 200 stones in the build A response shape
   assert.deepEqual(r.colours, count(3));
 });
 
-await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_SECONDS (default 180) are read in env.mjs; a missing URL leaves the routes on; .env.example adds them as two plain lines', async () => {
+await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_SECONDS (default 180) are read in env.mjs; a missing URL leaves the routes on; .env.example adds them as two plain lines (the URL on port 8001 since RS-3043)', async () => {
   const defaults = loadRedrawEnv({ env: {} });
   assert.equal(defaults.layoutServiceUrl, '');
   assert.equal(defaults.layoutTimeoutMs, 180000);
@@ -564,9 +564,10 @@ await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_
   const noUrl = createRedrawHandler({ settings: loadRedrawEnv({ env: { OPENAI_API_KEY: 'k', REDRAW_ACCESS_CODE: 'c' } }) });
   assert.equal(noUrl.configured, true);
   const lines = envExample.split('\n');
-  assert.ok(lines.includes('LAYOUT_SERVICE_URL='));
+  // RS-3043: the example points at the layout service's own port, 8001 (8000 is PatternNifty's).
+  assert.ok(lines.includes('LAYOUT_SERVICE_URL=http://127.0.0.1:8001'));
   assert.ok(lines.includes('LAYOUT_TIMEOUT_SECONDS=180'));
-  const at = lines.indexOf('LAYOUT_SERVICE_URL=');
+  const at = lines.indexOf('LAYOUT_SERVICE_URL=http://127.0.0.1:8001');
   assert.equal(lines[at + 1], 'LAYOUT_TIMEOUT_SECONDS=180');
   assert.ok(!lines[at - 1].startsWith('#') && !(lines[at + 2] || '').startsWith('#'), 'no comment lines around them');
   assert.deepEqual(lines.filter((l) => l.startsWith('#') && l.includes('LAYOUT')), [], 'no comment mentions the layout settings');

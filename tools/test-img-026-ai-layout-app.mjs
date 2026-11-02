@@ -26,6 +26,8 @@ import { createImageBuffer } from '../src/image/index.js';
 import { validateRhsProject, generateProjectStoneLayout } from './lib/rhsProject.mjs';
 import { buildRegressionCases } from './lib/imageTraceFixtures.mjs';
 import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
+import { callLayoutService, DEFAULT_TIMERS } from '../server/redraw/jobs.mjs';
+import { createServer as createNetServer } from 'node:net';
 
 let failures = 0;
 async function test(name, fn) {
@@ -330,11 +332,27 @@ await test('6. startImageRedraw() with a layout: stage texts, the Flat Sheet gro
   assert.equal(mug.state.project.layers[0].w, FAKE_LAYOUT.widthMm, 'and the box is not shrunk');
 });
 
-await test('7. startImageRedraw() without a layout: the IMG-023 path runs and the status says why', async () => {
-  const layoutError = { code: 'layout-unavailable', message: 'The layout service is not running.' };
+await test('7. startImageRedraw() without a layout: the IMG-023 path runs and the status says why and names the fix (RS-3043)', async () => {
+  // RS-3043: the real layout-unavailable errors from the Node job, not set and not answering (a
+  // real refused connection on a port nothing listens on), each name the fix.
+  const call = (url) => callLayoutService({ fetch: globalThis.fetch, timers: DEFAULT_TIMERS, url, timeoutMs: 5000, pngBuffer: Buffer.from('x'), colorIds: [], signal: new AbortController().signal });
+  const closedPort = await new Promise((resolve) => { const s = createNetServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); }); });
+  const notSet = (await call('')).error;
+  const notAnswering = (await call(`http://127.0.0.1:${closedPort}`)).error;
+  assert.equal(notSet.code, 'layout-unavailable');
+  assert.equal(notAnswering.code, 'layout-unavailable');
+  const expected = [
+    [notSet, 'Placed with the old method: The layout service is not set up. Start Rhinestone Studio with npm run studio (or set LAYOUT_SERVICE_URL).'],
+    [notAnswering, `Placed with the old method: The layout service at http://127.0.0.1:${closedPort} is not answering. Start the layout service, or start Rhinestone Studio with npm run studio.`]
+  ];
+  for (const [layoutError, status] of expected) {
+    const unset = buildStartImageRedraw({ result: { ...RESULT, layout: null, layoutError } });
+    await unset.run();
+    assert.equal(unset.state.statuses.at(-1), status);
+  }
+  const layoutError = notAnswering;
   const { run, state } = buildStartImageRedraw({ result: { ...RESULT, layout: null, layoutError } });
   await run();
-  assert.equal(state.statuses.at(-1), 'Placed with the old method: The layout service is not running.');
   const next = state.project.layers[0];
   assert.equal(next.fillMode, 'ai-stones');
   assert.ok(!('aiLayout' in next));
