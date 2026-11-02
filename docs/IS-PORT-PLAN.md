@@ -63,6 +63,19 @@ Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no ser
   - Not foreseen: the service's large pupils and lost thin eye and lip lines show more in Black &
     white than in Colour (the same eye stage); Shaded comes out 11 to 21 % larger than Bold.
 
+- **IMG-026Q done** (2 Nov 2026, branch `feature/img-026q-tinted-view`). The results are in
+  `docs/results/IMG-026Q/`.
+  - "Background: Tinted" on the 2D canvas (`src/renderer/TintedView.js`): T2–T8 as IS section 8.
+    Image layers are tinted; Black & white layers (their `redrawMode`, not the colours present)
+    use the `crystal` gap rule. Text, shapes and monograms are drawn as on White. Design and
+    exports are unchanged. Export PNG and the Combined preview copy the canvas as on White.
+  - It renders in slices between frames and caches the bitmap. On the 4156-stone curls Shaded
+    layout: first render 0.73 s (1500 × 950 window) and 1.8 s (full-screen 5K), cached redraw
+    2–3 ms. Measured on Chrome 156; Chrome 103 was not available.
+  - Not foreseen: Export PNG and the Combined preview copy the on-screen canvas, so they needed
+    `withoutTintedView()`. The view makes the layout's white highlight patches and large pupils
+    much more visible.
+
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
 - the face defaults, with `soft_outlines` off as IS has it (IS measured why);
@@ -487,7 +500,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | 4 | **IMG-026N — Prompt v7 and model input** (**done**, 1 Nov 2026) | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
 | 5 | **IMG-026O — Service clean-up and hole fill** (**done**, 1 Nov 2026) | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** (**done**, 2 Nov 2026) | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
-| 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
+| 7 | **IMG-026Q — Tinted view** (**done**, 2 Nov 2026) | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
 
 Order (kept): 026L, 026M, RS-3042 (any time), 026N, 026O, 026P, 026Q.
 - The licence comes first.

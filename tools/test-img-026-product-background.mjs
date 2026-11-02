@@ -88,11 +88,12 @@ await test('3. wiring: drawLayout() sets the canvas CSS background (also in Desi
   assert.ok(!/project\.canvasBackground/.test(appJs));
 });
 
-await test('4. index.html: #canvasBackground follows #snapEnabled with White (selected) and Product', () => {
+// IMG-026Q added a third option, Tinted (tools/test-img-026-tinted-view.mjs).
+await test('4. index.html: #canvasBackground follows #snapEnabled with White (selected), Product and Tinted', () => {
   const m = indexHtml.match(/<select id="canvasBackground"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(m, 'expected the #canvasBackground select');
   assert.deepEqual([...m[1].matchAll(/<option value="(\w+)"( selected)?>([^<]+)<\/option>/g)].map((o) => [o[1], Boolean(o[2]), o[3]]),
-    [['white', true, 'Background: White'], ['product', false, 'Background: Product']]);
+    [['white', true, 'Background: White'], ['product', false, 'Background: Product'], ['tinted', false, 'Background: Tinted']]);
   assert.ok(indexHtml.indexOf('id="snapEnabled"') < indexHtml.indexOf('id="canvasBackground"'));
 });
 

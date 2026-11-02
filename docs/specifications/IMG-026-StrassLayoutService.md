@@ -1936,6 +1936,46 @@ Build P ports PatternNifty's Black & white (IS commit `e9e7014`; IS spec 6.4, 7.
   AI's, and the thin eyelid and lip lines are mostly lost; Shaded's natural size is 11 to 21 % larger
   than Bold's (finer AI pitch). The full service suite (162 tests) passed in 17 115 s (4 h 45 min) on the iMac.
 
+## Tinted view (build Q)
+
+Build Q ports PatternNifty's tinted view (IS commit `e9e7014`, `src/render/tinted.js`, IS spec
+section 8). Plan: `docs/IS-PORT-PLAN.md` section 3.7. No service change.
+
+- **Control.** `#canvasBackground` gains a third option, "Background: Tinted". It is a view setting
+  like build I's Product: not saved, not in history. Design (Paper.js) is unchanged. The canvas
+  around the design stays white (`canvasBackgroundColor()` returns `#fbfdff`).
+- **Renderer** (`src/renderer/TintedView.js`). It reads the stones only and follows IS section 8:
+  - gap colour of the nearest stone measured to its edge, up to `FILL_MARGIN_MM` (0.6);
+  - `GAP_RULE`: the fill 4 L\* darker, plus 0.05 L\* per L\* above 80, and at least 8 L\* above
+    L\* 85; hue kept, 8-bit rounding never makes the step smaller;
+  - enclosed specks up to 2π mm² filled;
+  - stones drawn by `drawCrystalStone()` (unchanged), with the SS6 rim for Jet above SS6;
+  - `STONE_LIGHTNESS`: the inner 60 % within 4 L\*, the whole stone within 2.
+
+  `renderProductionLayout()` gains `tinted: { cache, layerIds, crystalGapLayerIds }`. It draws
+  those layers' stones as one bitmap above the grid, and every other stone as before, on top.
+- **App.** `canvasTintedOptions()` tints every image layer. Layers whose `redrawLookOf()` is
+  Black & white use IS's `BW_GAP` "crystal" rule: where the second-nearest stone's edge is within
+  0.6 mm too and its colour differs, the lighter of the two gap colours. The renderer knows only
+  layer ids, not layer types.
+- **Speed.** `TintedViewCache` renders in slices of about 12 ms between frames, showing the stones
+  as on White meanwhile, then redraws (`onReady`). It keeps the bitmap until the tinted stones, the
+  rule or the transform change. `cancel()` on leaving Tinted keeps the finished bitmap.
+- **Exports never show it.** Export PNG and the Combined preview copy the on-screen canvas.
+  `withoutTintedView()` redraws it as on White for the copy, then restores the tinted view from the
+  cache. Exporters do not import `TintedView.js`.
+- **Tests:** `tools/test-img-026-tinted-view.mjs`. `tools/test-img-026-product-background.mjs` test
+  4 lists the third option. The #exportCombined harness in `tools/test-rs-3037-flat-sheet.mjs` passes
+  `withoutTintedView`.
+- **Measured** (`docs/results/IMG-026Q/`; Chrome 156 on the iMac, i5-7600; 4156 stones; DPR 2):
+  - first tinted render 729 ms with a 1500 × 950 window and 1772 ms full-screen at 5K, with no
+    task over 100 ms in 5 of 6 runs;
+  - cached redraw 2–3 ms (White: about 50 ms);
+  - real drawn stones within 2.06 L\* (whole) and 4.26 L\* (inner 60 %) of their fill.
+
+  Most visible defects are the layout's, which the view makes more noticeable: the portrait's white
+  highlight patches and the large SS20 pupils.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
