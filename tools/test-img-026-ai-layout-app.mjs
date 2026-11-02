@@ -5,6 +5,7 @@
 // docs/specifications/IMG-026-StrassLayoutService.md, "App, part 1: data and engine (build C1)".
 
 import assert from 'node:assert/strict';
+import { redrawLookOf, redrawStyleForLook } from '../src/ui/index.js';
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -278,6 +279,7 @@ function buildStartImageRedraw({ result, template = 'sheet', canvas = { width: 4
       return result;
     },
     REDRAW_STAGE_MESSAGES,
+    redrawLookOf, redrawStyleForLook,
     decodeDataUrlToBuffer: async (dataUrl) => { state.decoded.push(dataUrl); return { widthPx: 1024, heightPx: 1024, data: new Uint8ClampedArray(4) }; },
     project: state.project,
     aiStoneDetectionFor: () => detection,

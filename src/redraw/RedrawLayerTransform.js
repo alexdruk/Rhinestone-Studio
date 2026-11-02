@@ -8,6 +8,8 @@ export const REDRAW_LONG_SIDE_MM = 160;
 export const REDRAW_NAME_SUFFIX = ' (AI redraw)';
 export const REDRAW_VIVIDNESS = 1.0;
 const POSITION_EPSILON_MM = 1e-9;
+// IMG-026 (build P): the styles a redraw record can name; any other value is recorded as 'stones'.
+const RECORDED_STYLES = new Set(['stones', 'flat', 'bold', 'shaded']);
 
 function finite(n) {
   return typeof n === 'number' && Number.isFinite(n);
@@ -126,7 +128,7 @@ export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, sto
 /**
  * @param {object} layer an 'image' layer, with or without a previous `redraw` record
  * @param {{dataUrl:string, providerId:string, model:string, promptVersion:(number|null)}} result
- * @param {{canvas:{width:number,height:number}, naturalWidthPx:number, naturalHeightPx:number, now:()=>number, aiPitchPx?:(number|null), shrink?:number, style?:('stones'|'flat')}} options
+ * @param {{canvas:{width:number,height:number}, naturalWidthPx:number, naturalHeightPx:number, now:()=>number, aiPitchPx?:(number|null), shrink?:number, style?:('stones'|'flat'|'bold'|'shaded')}} options
  *   IMG-023: with a positive `aiPitchPx` the layer becomes an AI stones layer sized per D2; without
  *   one, the IMG-022 behaviour (160 mm long side, fillMode unchanged) is kept exactly.
  *   IMG-024: style 'flat' ignores aiPitchPx/shrink, takes the IMG-022 sizing and sets fillMode
@@ -135,6 +137,8 @@ export function aiStoneEffectiveShrink({ w, h, widthPx, heightPx, aiPitchPx, sto
  *   layer: it stores `aiLayout`, sets `colorSwaps: {}`, and the box is exactly the layout's
  *   widthMm x heightMm, centred where the layer was and never shrunk (S14, S15). Any other redraw
  *   removes `aiLayout` and `colorSwaps`, which belong to the previous AI image.
+ *   IMG-026 (build P): 'bold' and 'shaded' (Black & white) are stone styles like 'stones': with a
+ *   layout they make an ai-layout layer, and `redraw.style` records which one it was.
  */
 export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeightPx, now, aiPitchPx = null, shrink = 1, style = 'stones', layout = null }) {
   const isFlat = style === 'flat';
@@ -210,7 +214,7 @@ export function applyRedraw(layer, result, { canvas, naturalWidthPx, naturalHeig
       providerId: result.providerId,
       model: result.model,
       promptVersion: result.promptVersion,
-      style: isFlat ? 'flat' : 'stones',
+      style: RECORDED_STYLES.has(style) ? style : 'stones',
       createdAt: new Date(now()).toISOString()
     }
   };

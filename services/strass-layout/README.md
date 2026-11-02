@@ -76,8 +76,9 @@ The script prints this advice; it does not run `caffeinate` itself.
 ## Endpoints
 
 `POST /layout` takes multipart form data: `image` (a PNG, at most 20 MB) and `options` (JSON,
-`{"colorIds": [...], "targetPitchMm": 2.1}`). `colorIds` are the colour ids the app knows. It
-answers 200 with the layout:
+`{"colorIds": [...], "targetPitchMm": 2.1, "mode": "colour"}`). `colorIds` are the colour ids the app
+knows. `mode` (IMG-026P) is `"colour"` (the default, also for a request without it) or `"bw"`
+(Black & white). It answers 200 with the layout:
 
 ```
 { "version": 1, "widthMm": 103.0, "heightMm": 130.8,
@@ -106,15 +107,23 @@ after them over the area under the stones before them). `violations`, `minGapMm`
 `largestEmptyCircleMm` are measured on the returned stones, so after every step. Nothing re-runs a
 layout automatically.
 
+With `"mode": "bw"` (IMG-026P, PatternNifty's Black & white) every stone is then Jet or Crystal
+(`jet`, `crystal-clear`), read from the AI image itself: the mean CIE L\* of its pixels composited on
+white within the inner 60 % of the stone's radius (at least 2 px), at its delivered position. Below
+the threshold it is Jet, otherwise Crystal. The filled stones are not read; they take Jet or Crystal
+from their neighbours by the same vote. Positions and sizes are those of `"colour"` exactly. In this
+mode `colorIds` needs only `jet` and `crystal-clear`. The threshold is the setting `BW_THRESHOLD`
+(environment, a number between 0 and 100; default 55); a bad value stops the service at start.
+
 Errors are `{ "error": code, "message": text }`:
 
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `bad-image` | the upload is not a decodable PNG |
 | 400 | `no-alpha` | fewer than 1 % of the pixels have alpha at or below 0.5 |
-| 400 | `bad-request` | the `image` field is missing or `options` is not valid |
+| 400 | `bad-request` | the `image` field is missing or `options` is not valid (a `mode` other than `colour` or `bw` included) |
 | 413 | `too-large` | the image is larger than 20 MB |
-| 422 | `catalogue-mismatch` | the service's catalogue has a colour id that `colorIds` lacks |
+| 422 | `catalogue-mismatch` | the service's catalogue has a colour id that `colorIds` lacks (in `bw` mode: `jet` or `crystal-clear` is missing) |
 | 422 | `no-stones` | fewer than 50 stones were detected |
 | 500 | `layout-failed` | any other failure; the message is the exception text |
 
@@ -192,7 +201,9 @@ python -m unittest -v
   ported from PatternNifty, each by switching it off in `BUILD_M`, and the two edge crashes;
   `test_build_o` (IMG-026O) checks the size cap, the overlap cleanup, the hole fill and its colour
   vote on small fixtures (ported from PatternNifty's tests) and `DEFAULT` against `BUILD_M` on the
-  13 test images.
+  13 test images; `test_build_p` (IMG-026P) checks the Black & white reading (threshold, inner 60 %,
+  composited on white, 2 px minimum, filled stones by vote) on small fixtures, `mode` and
+  `BW_THRESHOLD` through the HTTP app, and the woman in `bw` against `colour`.
 
 The full run lays out each of the 12 images once for the package and once for the prototype, about
 one to two minutes each. Run long jobs under `caffeinate -i`.

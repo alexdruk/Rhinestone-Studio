@@ -1886,6 +1886,56 @@ off in `PROTOTYPE` and every `BUILD_*`; `BUILD_M` freezes the build M `DEFAULT`.
   portrait the fill closes some of the white gaps between curls.
   The full service suite (144 tests) passed in 16 528 s (4 h 35 min) on the iMac.
 
+## Black & white (build P)
+
+Build P ports PatternNifty's Black & white (IS commit `e9e7014`; IS spec 6.4, 7.2, 7.6 and 10;
+`docs/exp-holes.md` sections 6 and 10). Plan: `docs/IS-PORT-PLAN.md` section 3.6.
+
+- **The layer's look.** An image layer stores `redrawMode`: `'colour'` (the default) or `'bw'`, and
+  for Black & white `redrawBwStyle`: `'bold'` (the default) or `'shaded'`. A layer without them (every
+  layer made before build P) is Colour; `validateProject()` refuses any other value and adds nothing.
+  `src/ui/ImageStudioState.js` holds the rules: `redrawLookOf()`, `redrawStyleForLook()` (Colour asks
+  for style `'stones'`, Black & white for its style) and `redrawLookFields()`.
+- **Prompts.** `bold` and `shaded` are new redraw styles, each at version 1 (`BOLD_PROMPT_VERSION`,
+  `SHADED_PROMPT_VERSION`); `layer.redraw.style` and `promptVersion` record which. Each is prompt v7 of
+  the layer's shape (Appendix E, so the Flat Sheet size rules of build N apply) with section 4 and the
+  final check replaced: Bold by IS's stencil prompt v5 with its eye rule (Appendix F), Shaded by IS
+  Appendix A (Appendix G). No ramps, no palette line, no skin lines. On the Flat Sheet both equal IS's
+  text word for word.
+- **Request.** The job sends `mode` in the `/layout` options: `'bw'` with `colorIds` Jet and Crystal
+  only for `bold` and `shaded`, `'colour'` with all 47 colours otherwise (`layoutRequestFor()` in
+  `server/redraw/prompt.mjs`).
+- **Mapping, in the service** (`strass_layout/bw.py`). In mode `bw`, after the size cap, the cleanup
+  and the hole fill, every stone is read from the AI image at its delivered position: the mean CIE L\*
+  of the pixels composited on white within the inner 60 % of its radius, at least 2 px. Below
+  `BW_THRESHOLD` (a service setting, default 55) Jet, otherwise Crystal (`crystal-clear`). Filled
+  stones are not read: they take Jet or Crystal by build O's neighbour vote among the read stones.
+  Positions and sizes never change; the report's keys are unchanged and its `colours` lists only the
+  two. Its time counts under `stagesMs.cleanup`. In `bw` mode the S4 check needs only Jet and Crystal
+  in `colorIds`.
+- **Lightbox.** "Look" in the Source group, above the file button (an upload starts the redraw at
+  once): Colour / Black & white, and for Black & white Bold "Solid black and clear areas: strong and
+  graphic." and Shaded "Black and clear stones mixed to show light and shade." Shown whenever a redraw
+  provider is available. It shows the selected image layer's look, or with no image layer selected the
+  remembered one (`localStorage` `rhinestoneStudio.redrawLook`), which a new upload takes. A change is
+  written to the layer in one history step; when the layer's redraw was made in another look, the hint
+  "This layer was made in another look. Redraw with AI to change it." and **Redraw with AI** show
+  (which, like Try again, asks first when the layout has manual edits). Renderers and exporters are
+  unchanged.
+- **Fake mode** answers Bold and Shaded with `server/redraw/fixtures/fake-layout-bw.json`: the fake
+  layout's stones in Jet and Crystal (each colour mapped by its fill's L\*).
+- **Not changed:** when the layout fails, the IMG-023 fallback still places the stones from the AI
+  image with its own palette choice, so a Black & white layer placed that way is not limited to Jet
+  and Crystal.
+- **Tests:** `services/strass-layout/tests/test_build_p.py`; `tools/test-img-026-black-white.mjs`.
+- **Measured** (`docs/results/IMG-026P/`, 4 provider calls, Flat Sheet): portrait-freckles Bold 2998
+  stones (Jet 39 %), Shaded 3791 (37 %); portrait-curls Bold 3036 (75 %), Shaded 4156 (62 %); 0
+  violations. The faces read in all four; Bold is solid areas, Shaded mixes Jet and Crystal, mostly in
+  the hair. The AI images are almost two-tone (at most 0.4 % of the read stones between L\* 45 and
+  65), so the threshold decides little. The service's pupils (SS20, one SS16) are much larger than the
+  AI's, and the thin eyelid and lip lines are mostly lost; Shaded's natural size is 11 to 21 % larger
+  than Bold's (finer AI pitch). The full service suite (162 tests) passed in 17 115 s (4 h 45 min) on the iMac.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -2914,3 +2964,56 @@ Use only the colours below, with exactly these hex values, as flat fills:
 Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
 ```
 
+## Appendix F — Black & white Bold prompt v1 (`BOLD_PROMPT_VERSION = 1`)
+
+Style `bold` (build P) is Appendix E of the layer's shape with section 4 and the final check sentence
+replaced by the two blocks below; everything else, the shape lines included, is Appendix E's. It is
+PatternNifty's stencil prompt version 5, with its eye rule (IS commit `e9e7014`,
+`src/pipeline/prompt.js`); on the Flat Sheet (`shape: 'auto'`) the whole text equals IS's word for
+word. There are no ramps and no skin lines: the only colours are Jet and Crystal, with their
+catalogue preview colours.
+
+Section 4:
+
+```
+4. COLOURS
+Use only these two colours, with exactly these hex values, as flat fills:
+Jet #141414, Crystal #f5f5f5.
+- Every stone is either Jet or Crystal. No greys, no other colours, no tints.
+- Stencil style: every area is solid. Decide for each area whether it is dark or light, and fill all of it with that one colour.
+- Never alternate or mix the two colours to suggest grey: no checkerboards, no dotted, speckled or halftone areas.
+- Faces: light skin in Crystal. The shadows that shape the face (eye sockets, under the nose, under the lower lip, the jaw and neck shadow) and the hair in solid Jet, as clean shapes.
+- Eyes are never part of a dark area. In each eye the white is Crystal, the iris and the pupil are Jet, with one Crystal catch-light stone, and at least one row of Crystal stones separates the eye from any dark shadow or eyebrow around it.
+- Keep the subject clearly readable from a distance: strong Jet outlines around the main shapes.
+```
+
+Final check:
+
+```
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; every stone is Jet or Crystal; no area is mixed or speckled; the background is transparent or pure magenta.
+```
+
+## Appendix G — Black & white Shaded prompt v1 (`SHADED_PROMPT_VERSION = 1`)
+
+Style `shaded` (build P) is Appendix E of the layer's shape with section 4 and the final check
+sentence replaced by the two blocks below. It is PatternNifty's halftone prompt (IS spec
+`docs/IS-001-Spec.md` Appendix A, which shares IS's colour version 4); on the Flat Sheet the whole
+text equals IS's word for word.
+
+Section 4:
+
+```
+4. COLOURS
+Use only these two colours, with exactly these hex values, as flat fills:
+Jet #141414, Crystal #f5f5f5.
+- Every stone is either Jet or Crystal. No greys, no other colours, no tints.
+- Dark areas, outlines, pupils and shadows are Jet; light areas, highlights and the catch-light are Crystal.
+- Show mid-tones only by mixing the two colours in clear patterns (rows or patches), never by inventing a grey.
+- Keep the subject clearly readable from a distance: strong Jet outlines around the main shapes.
+```
+
+Final check:
+
+```
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; every stone is Jet or Crystal; the background is transparent or pure magenta.
+```

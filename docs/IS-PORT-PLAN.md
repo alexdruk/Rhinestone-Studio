@@ -47,6 +47,21 @@ Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no ser
   - Looks worse: the capped pupils (dog and woman SS30 → SS20; Jesus's and the parrot's single
     pupils SS20 → SS16) sit in a freed ring that the fill partly closes; on the portrait the fill
     closes some white gaps between curls.
+- **IMG-026P done** (2 Nov 2026, branch `feature/img-026p-black-white`, made on top of IMG-026O). The
+  results are in `docs/results/IMG-026P/`.
+  - An image layer stores its look: `redrawMode` `colour` (the default; old layers have none) or
+    `bw`, with `redrawBwStyle` `bold` (the default) or `shaded`. The lightbox's "Look" choice sits
+    above the file button; changing it on a made layer asks for a new redraw.
+  - Prompt styles `bold` and `shaded`, each at version 1 (section 4's numbering), are v7 with section 4
+    and the final check from IS (stencil v5 with the eye rule; Appendix A): spec Appendices F and G.
+  - The service's mode `bw` (`strass_layout/bw.py`) reads every stone's Jet or Crystal from the AI
+    image after the cap, cleanup and hole fill; filled stones by the vote; `BW_THRESHOLD` setting,
+    default 55. The request sends `mode` and, for Black & white, only Jet and Crystal.
+  - Real check, 4 provider calls (portrait-freckles and portrait-curls, Flat Sheet, each in Bold and
+    Shaded): the faces read in all four, Bold is solid areas, Shaded mixes Jet and Crystal (mostly in
+    the hair); 0 violations. The AI images are almost two-tone, so the threshold decides little.
+  - Not foreseen: the service's large pupils and lost thin eye and lip lines show more in Black &
+    white than in Colour (the same eye stage); Shaded comes out 11 to 21 % larger than Bold.
 
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
@@ -471,7 +486,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
 | 4 | **IMG-026N — Prompt v7 and model input** (**done**, 1 Nov 2026) | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
 | 5 | **IMG-026O — Service clean-up and hole fill** (**done**, 1 Nov 2026) | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
-| 6 | **IMG-026P — Black & white (Bold, Shaded)** | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
+| 6 | **IMG-026P — Black & white (Bold, Shaded)** (**done**, 2 Nov 2026) | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
 | 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
 
 Order (kept): 026L, 026M, RS-3042 (any time), 026N, 026O, 026P, 026Q.
@@ -536,7 +551,8 @@ the local IS checkout.
    takes the smaller square designs, not the largest (168 mm).
 
 Still the plan's proposal, not decided:
-- the prompt numbering for Bold and Shaded (section 4);
+- ~~the prompt numbering for Bold and Shaded (section 4)~~: decided in the IMG-026P brief (2 Nov 2026):
+  new styles `bold` and `shaded`, each from version 1;
 - the milestone names (IMG-026L… rather than a fresh number);
 - ~~on the Flat Sheet, whether to drop the 60-across sentence (P2) and crop to the cut-out (C2)~~:
   decided in the IMG-026N brief (1 Nov 2026): both, on the Flat Sheet only.

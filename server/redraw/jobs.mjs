@@ -108,8 +108,9 @@ export function jobView(job) {
 }
 
 // One POST /layout to the layout service. Never rejects: resolves { layout }, { error: { code,
-// message } }, or { cancelled: true } when `signal` aborts. No retry.
-export async function callLayoutService({ fetch, timers, url, timeoutMs, pngBuffer, colorIds, signal }) {
+// message } }, or { cancelled: true } when `signal` aborts. No retry. IMG-026 (build P): `mode` is
+// 'colour' or 'bw' (Black & white: the service makes every stone Jet or Crystal).
+export async function callLayoutService({ fetch, timers, url, timeoutMs, pngBuffer, colorIds, mode = 'colour', signal }) {
   if (!url) return { error: { code: 'layout-unavailable', message: 'The layout service is not set up (LAYOUT_SERVICE_URL is empty).' } };
   if (signal.aborted) return { cancelled: true };
   const controller = new AbortController();
@@ -121,7 +122,7 @@ export async function callLayoutService({ fetch, timers, url, timeoutMs, pngBuff
   try {
     const form = new FormData();
     form.append('image', new Blob([pngBuffer], { type: 'image/png' }), 'redraw.png');
-    form.append('options', JSON.stringify({ colorIds, targetPitchMm: LAYOUT_TARGET_PITCH_MM }));
+    form.append('options', JSON.stringify({ colorIds, targetPitchMm: LAYOUT_TARGET_PITCH_MM, mode }));
     const timeout = new Promise((resolve) => { timer = timers.setTimeout(() => { timedOut = true; controller.abort(); resolve(LAYOUT_TIMEOUT); }, timeoutMs); });
     const request = fetch(`${url.replace(/\/+$/, '')}/layout`, { method: 'POST', body: form, signal: controller.signal });
     request.catch(() => {});

@@ -149,6 +149,9 @@ export const GROUPS = {
     // IMG-026 build N: prompt v7 and the model input -- the shape the product picks, the request it
     // makes, the Flat Sheet crop, and fake mode for every product.
     'test-img-026-prompt-v7.mjs',
+    // IMG-026 build P: Black & white in two styles -- the Bold and Shaded prompts, the layout mode and
+    // palette each look sends, fake mode, the layer's look and the lightbox choice.
+    'test-img-026-black-white.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

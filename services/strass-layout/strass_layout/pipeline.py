@@ -15,9 +15,14 @@ cleanup and the hole fill that Rules.size_cap, overlap_cleanup and hole_fill tur
 (cleanup.clean_up). The report gains their acceptance figures: capped, removed, removedShare, filled
 and cleanupCoverage (IS's coverage after the cleanup); violations and minGapMm are measured on the
 returned stones, so after every step. stagesMs gains "cleanup".
+
+IMG-026P (from IS spec 7.6): with mode "bw" (Black & white), layout_frame() then reads every stone's
+Jet or Crystal from the AI image (bw.map_black_and_white), the filled stones by the vote; its time
+counts under "cleanup". The caller's colorIds then need only Jet and Crystal.
 """
 import numpy as np
 
+from .bw import BW_IDS, DEFAULT_BW_THRESHOLD, map_black_and_white
 from .cleanup import clean_up
 from .colour import CAT_IDS, palette, stone_colours
 from .detect import detect_stones
@@ -34,16 +39,20 @@ from .timing import Stopwatch
 
 MIN_STONES = 50
 RESULT_VERSION = 1
+MODES = ("colour", "bw")
 
 
-def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
+def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT, mode="colour", bw_threshold=DEFAULT_BW_THRESHOLD):
     """Run the pipeline on PNG bytes.
 
     Returns {"stones": [{x, y, size, d, color}], "frame": {...}, "stagesMs": {...}, "ms": int}.
     The stones are in OpenAI-frame mm, in the prototype's order. The frame holds
     mmPerPx, widthMm, heightMm, the strict subject mask (an array), face, pupilsMm, pupilsAtMm
     (the pupil stones' centres) and cleanup (clean_up()'s figures, or None when no build O rule is on).
+    IMG-026P: mode "bw" makes every stone Jet or Crystal by the AI image's lightness (bw_threshold).
     """
+    if mode not in MODES:
+        raise ValueError("mode must be colour or bw.")
     clock = Stopwatch()
     models = models or load_models()
     px = decode_png(png_bytes)
@@ -70,6 +79,9 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     cleanup = None
     if rules.size_cap or rules.overlap_cleanup or rules.hole_fill:  # IMG-026O
         stones, cleanup = clean_up(stones, px.rgba[..., 3], s, info["face"], info["pupilsAtMm"], info["mask"], rules)
+    if mode == "bw":  # IMG-026P: the filled stones come last in stones
+        filled = cleanup["filled"] if cleanup else 0
+        stones = map_black_and_white(stones, px.rgba, s, range(len(stones) - filled, len(stones)), bw_threshold)
     clock.lap("cleanup")
     frame = {
         "mmPerPx": s,
@@ -84,12 +96,13 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
     return {"stones": stones, "frame": frame, "stagesMs": clock.stages(), "ms": clock.total()}
 
 
-def check_colour_ids(color_ids):
-    """S4: the service's catalogue must not hold an id the caller does not know."""
+def check_colour_ids(color_ids, mode="colour"):
+    """S4: the service's catalogue must not hold an id the caller does not know. IMG-026P: in Black &
+    white the service answers only Jet and Crystal, so only those two must be known."""
     if color_ids is None:
         return
     known = set(color_ids)
-    extra = [c for c in CAT_IDS if c not in known]
+    extra = [c for c in (BW_IDS if mode == "bw" else CAT_IDS) if c not in known]
     if extra:
         raise CatalogueMismatch("The layout service has colours the app does not know: " + ", ".join(extra))
 
@@ -148,7 +161,10 @@ def finish_layout(result):
     return {"version": RESULT_VERSION, "widthMm": width, "heightMm": height, "stones": cropped, "report": report}
 
 
-def layout(png_bytes, color_ids=None, target_pitch_mm=2.1, models=None, rules=DEFAULT):
-    """PNG bytes in, the finished layout of IMG-026 out (see the spec's Entry point)."""
-    check_colour_ids(color_ids)
-    return finish_layout(layout_frame(png_bytes, target_pitch_mm, models, rules))
+def layout(png_bytes, color_ids=None, target_pitch_mm=2.1, models=None, rules=DEFAULT, mode="colour", bw_threshold=DEFAULT_BW_THRESHOLD):
+    """PNG bytes in, the finished layout of IMG-026 out (see the spec's Entry point). IMG-026P: mode
+    "colour" (the default) or "bw" (Black & white: only Jet and Crystal)."""
+    if mode not in MODES:
+        raise ValueError("mode must be colour or bw.")
+    check_colour_ids(color_ids, mode)
+    return finish_layout(layout_frame(png_bytes, target_pitch_mm, models, rules, mode, bw_threshold))

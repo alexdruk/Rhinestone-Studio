@@ -232,7 +232,7 @@ await test('3. OpenAI timeout: after REDRAW_TIMEOUT_SECONDS (300 s) the job fail
 
 // ---- Layout --------------------------------------------------------------------------------------
 
-await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 47 ids, targetPitchMm: 2.1 }', async () => {
+await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 47 ids, targetPitchMm: 2.1, mode: colour }', async () => {
   for (const base of [LAYOUT_BASE, `${LAYOUT_BASE}/`]) {
     const { fetch, calls } = router();
     const { handler } = makeHandler({ fetch, env: { LAYOUT_SERVICE_URL: base } });
@@ -254,7 +254,8 @@ await test('4. the exact multipart request to the layout service: POST <LAYOUT_S
     assert.ok(Buffer.from(await image.arrayBuffer()).equals(Buffer.from(FAKE_B64, 'base64')));
     assert.equal(typeof form.get('options'), 'string');
     const options = JSON.parse(form.get('options'));
-    assert.deepEqual(options, { colorIds: Object.keys(STONE_COLORS), targetPitchMm: 2.1 });
+    // IMG-026 (build P): the mode is sent too ('bw' is tested in test-img-026-black-white.mjs).
+    assert.deepEqual(options, { colorIds: Object.keys(STONE_COLORS), targetPitchMm: 2.1, mode: 'colour' });
     assert.equal(options.colorIds.length, 47);
     assert.deepEqual(options.colorIds.slice(-24, -20), ['colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
   }

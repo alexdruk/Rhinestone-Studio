@@ -1,0 +1,206 @@
+[
+ {
+  "run": "portrait-freckles-bold",
+  "subject": "portrait-freckles",
+  "style": "bold",
+  "promptVersion": 1,
+  "stones": 2998,
+  "colours": {
+   "crystal-clear": 1816,
+   "jet": 1182
+  },
+  "bySize": {
+   "ss4": 228,
+   "ss6": 2768,
+   "ss20": 2
+  },
+  "widthMm": 133.981,
+  "heightMm": 189.822,
+  "violations": 0,
+  "minGapMm": 0.1003,
+  "coverage": 0.646,
+  "filled": 11,
+  "capped": 0,
+  "removed": 0,
+  "face": "human",
+  "pupilsAtMm": [
+   [
+    90.392,
+    98.216
+   ],
+   [
+    58.948,
+    100.705
+   ]
+  ],
+  "faceBoxMm": [
+   24.4,
+   61.7,
+   125.0,
+   174.9
+  ],
+  "aiPx": [
+   1054,
+   1492
+  ],
+  "modelInputPx": [
+   723,
+   1024
+  ],
+  "seconds": 154,
+  "layoutMs": 117666
+ },
+ {
+  "run": "portrait-freckles-shaded",
+  "subject": "portrait-freckles",
+  "style": "shaded",
+  "promptVersion": 1,
+  "stones": 3791,
+  "colours": {
+   "crystal-clear": 2391,
+   "jet": 1400
+  },
+  "bySize": {
+   "ss4": 520,
+   "ss6": 3269,
+   "ss20": 2
+  },
+  "widthMm": 148.767,
+  "heightMm": 214.434,
+  "violations": 0,
+  "minGapMm": 0.1,
+  "coverage": 0.636,
+  "filled": 18,
+  "capped": 0,
+  "removed": 0,
+  "face": "human",
+  "pupilsAtMm": [
+   [
+    100.918,
+    111.492
+   ],
+   [
+    66.982,
+    114.006
+   ]
+  ],
+  "faceBoxMm": [
+   29.7,
+   72.0,
+   138.2,
+   194.2
+  ],
+  "aiPx": [
+   1054,
+   1492
+  ],
+  "modelInputPx": [
+   723,
+   1024
+  ],
+  "seconds": 163,
+  "layoutMs": 124204
+ },
+ {
+  "run": "portrait-curls-bold",
+  "subject": "portrait-curls",
+  "style": "bold",
+  "promptVersion": 1,
+  "stones": 3036,
+  "colours": {
+   "jet": 2290,
+   "crystal-clear": 746
+  },
+  "bySize": {
+   "ss4": 521,
+   "ss6": 2513,
+   "ss16": 2
+  },
+  "widthMm": 132.976,
+  "heightMm": 137.644,
+  "violations": 0,
+  "minGapMm": 0.102,
+  "coverage": 0.679,
+  "filled": 5,
+  "capped": 0,
+  "removed": 0,
+  "face": "human",
+  "pupilsAtMm": [
+   [
+    86.324,
+    54.981
+   ],
+   [
+    107.198,
+    55.3
+   ]
+  ],
+  "faceBoxMm": [
+   63.4,
+   30.1,
+   130.2,
+   105.2
+  ],
+  "aiPx": [
+   1247,
+   1261
+  ],
+  "modelInputPx": [
+   1012,
+   1024
+  ],
+  "seconds": 160,
+  "layoutMs": 109302
+ },
+ {
+  "run": "portrait-curls-shaded",
+  "subject": "portrait-curls",
+  "style": "shaded",
+  "promptVersion": 1,
+  "stones": 4156,
+  "colours": {
+   "jet": 2595,
+   "crystal-clear": 1561
+  },
+  "bySize": {
+   "ss4": 371,
+   "ss6": 3783,
+   "ss20": 2
+  },
+  "widthMm": 160.517,
+  "heightMm": 164.957,
+  "violations": 0,
+  "minGapMm": 0.1003,
+  "coverage": 0.646,
+  "filled": 24,
+  "capped": 0,
+  "removed": 0,
+  "face": "human",
+  "pupilsAtMm": [
+   [
+    127.148,
+    64.972
+   ],
+   [
+    102.767,
+    64.069
+   ]
+  ],
+  "faceBoxMm": [
+   75.9,
+   35.3,
+   154.0,
+   123.0
+  ],
+  "aiPx": [
+   1247,
+   1261
+  ],
+  "modelInputPx": [
+   1012,
+   1024
+  ],
+  "seconds": 178,
+  "layoutMs": 131594
+ }
+]

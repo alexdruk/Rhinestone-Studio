@@ -137,13 +137,14 @@ await test('T1. server: no style / stones -> 202 job whose result has promptVers
 await test('T2. prompt: versions; the flat prompt is exactly line 1, the palette header and buildPaletteLine(); the stones prompt is unchanged; REDRAW_STYLES agree', () => {
   assert.equal(FLAT_PROMPT_VERSION, 1);
   assert.equal(PROMPT_VERSION, 7);
-  assert.deepEqual(PROMPT_VERSIONS, { stones: 7, flat: 1 });
+  // IMG-026 (build P): plus the two Black & white styles, tested in test-img-026-black-white.mjs.
+  assert.deepEqual(PROMPT_VERSIONS, { stones: 7, flat: 1, bold: 1, shaded: 1 });
   assert.deepEqual(buildRedrawPrompt(undefined, 'flat').split('\n'), [FLAT_LINE_1, 'Palette (name and hex):', buildPaletteLine()]);
   assert.equal(buildRedrawPrompt(), buildRedrawPrompt(undefined, 'stones'));
   assert.equal(buildRedrawPrompt(STONE_COLORS), buildRedrawPrompt());
   assert.ok(!FLAT_LINE_1.includes('\n'));
   assert.deepEqual(SERVER_REDRAW_STYLES, REDRAW_STYLES);
-  assert.deepEqual(REDRAW_STYLES, ['stones', 'flat']);
+  assert.deepEqual(REDRAW_STYLES, ['stones', 'flat', 'bold', 'shaded']);
 });
 
 // ---- T3. Client wire and record -----------------------------------------------------------------
@@ -479,9 +480,10 @@ await test('T12. wiring: the Redraw style select, its storage, the run-bound sty
   const sync = extractFunction('function syncImageRedrawControls(l){');
   assert.ok(!sync.includes('imageRedrawStyleField'), 'IMG-026 C2: the Redraw style field is never shown');
   const start = extractFunction('async function startImageRedraw(){');
-  assert.ok(start.includes("const style='stones';"));
+  // IMG-026 (build P): the layer's look picks 'stones' (Colour), 'bold' or 'shaded'; never 'flat'.
+  assert.ok(start.includes("const style=redrawStyleForLook(redrawLookOf(layer));"));
   assert.ok(start.includes('redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:'));
-  assert.ok(start.includes("style==='stones'?aiStoneDetectionFor("));
+  assert.ok(start.includes("style!=='flat'?aiStoneDetectionFor("));
   assert.ok(start.includes('detection&&detection.ok?'));
   assert.ok(start.includes('now:Date.now,aiPitchPx,shrink,style})'));
   assert.ok(appJs.includes("el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');"));
