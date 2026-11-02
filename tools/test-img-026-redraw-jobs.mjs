@@ -532,8 +532,10 @@ await test('14. fake-layout.json: about 200 stones in the build A response shape
   assert.equal(violations, 0);
   assert.ok(minGap >= 0.1);
   const r = layout.report;
-  // IMG-026M: the service reports pupilsAtMm, each pupil stone's centre, after pupilsMm.
-  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'face', 'pupilsMm', 'pupilsAtMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  // IMG-026M: the service reports pupilsAtMm, each pupil stone's centre, after pupilsMm. IMG-026O: the
+  // clean-up's acceptance figures after largestEmptyCircleMm, and a cleanup stage time.
+  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage', 'face', 'pupilsMm', 'pupilsAtMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  assert.deepEqual(Object.keys(r.stagesMs), ['detect', 'layout', 'eyes', 'colour', 'cleanup', 'check']);
   assert.equal(r.pupilsAtMm.length, r.pupilsMm.length);
   for (const [i, [x, y]] of r.pupilsAtMm.entries()) {
     const stone = layout.stones.find((s) => s[0] === x && s[1] === y);

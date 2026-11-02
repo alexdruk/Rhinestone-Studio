@@ -1,7 +1,7 @@
 """Per-stage wall-clock timing in whole milliseconds."""
 import time
 
-STAGES = ("detect", "layout", "eyes", "colour", "check")
+STAGES = ("detect", "layout", "eyes", "colour", "cleanup", "check")
 
 
 class Stopwatch:

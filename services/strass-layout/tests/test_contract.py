@@ -12,9 +12,10 @@ from strass_layout.colour import CAT_IDS
 from tests import support
 
 SIZE_IDS = {"ss4", "ss6", "ss10", "ss16", "ss20", "ss30"}
-REPORT_KEYS = {"stones", "bySize", "colours", "minGapMm", "violations", "coverage", "largestEmptyCircleMm", "face",
-               "pupilsMm", "pupilsAtMm", "frameMm", "offsetMm", "mmPerPx", "stagesMs", "ms"}
-STAGES = {"detect", "layout", "eyes", "colour", "check"}
+REPORT_KEYS = {"stones", "bySize", "colours", "minGapMm", "violations", "coverage", "largestEmptyCircleMm", "capped",
+               "removed", "removedShare", "filled", "cleanupCoverage", "face", "pupilsMm", "pupilsAtMm", "frameMm",
+               "offsetMm", "mmPerPx", "stagesMs", "ms"}
+STAGES = {"detect", "layout", "eyes", "colour", "cleanup", "check"}
 EDGE_TOLERANCE_MM = 0.001
 
 

@@ -34,6 +34,20 @@ Status: read-only audit, 31 Oct 2026. No code changes, no provider calls, no ser
   - Not foreseen: on the two darker faces the service's colour step makes the face stones 2 to 4 L\*
     lighter than the AI image.
 
+- **IMG-026O done** (1 Nov 2026, branch `feature/img-026o-cleanup-hole-fill`). The results are in
+  `docs/results/IMG-026O/`.
+  - The size cap, the overlap cleanup and the hole fill with the neighbour vote run in the service
+    after its own layout (`strass_layout/cleanup.py`), as the `Rules` flags `size_cap`,
+    `overlap_cleanup` and `hole_fill`, all on in `DEFAULT`; `BUILD_M` freezes the old `DEFAULT`. The
+    report gains `capped`, `removed`, `removedShare`, `filled` and `cleanupCoverage`. No automatic
+    re-run. The app keeps none of the new keys and shows nothing new (decided for this build, instead
+    of the row's "the lightbox shows them").
+  - On the 13 test images and the 3 IMG-026N layouts: 0 violations, 0 stones removed, natural sizes
+    unchanged, 180 stones filled. With the flags off every layout equals `develop`'s exactly.
+  - Looks worse: the capped pupils (dog and woman SS30 → SS20; Jesus's and the parrot's single
+    pupils SS20 → SS16) sit in a freed ring that the fill partly closes; on the portrait the fill
+    closes some white gaps between curls.
+
 **Decisions recorded (31 Oct 2026).** Alex decided these on 31 Oct 2026:
 - the size cap;
 - the face defaults, with `soft_outlines` off as IS has it (IS measured why);
@@ -456,7 +470,7 @@ IMG-026K (round 3D stones) is already merged, so the next build letter is **L**.
 | 2 | **IMG-026M — Eyes, colour reading and skin rules** (**done**, 1 Nov 2026; S4 also moves stones near people's pupils, see Progress) | 3.2: IS's face defaults in `DEFAULT` (S1, S3–S6, S8, `pupilsAtMm`); the `colour.py` edge fix (S10); the `eyes.py` crash when a dark disc touches the image edge (S11), with a test that reproduces it; `BUILD_J` frozen; `soft_outlines` off in `DEFAULT` (IS-05b). | The S11 test fails on today's code and passes after the fix. The ported IS tests and all existing service tests pass. On the 12 images, stones and sizes match `BUILD_J` except where S1 removes an eye stage, and only colours change otherwise. With `soft_outlines` off, only outline stones on human faces change colour (black stays black). 0 violations. `validateProject()` accepts `face: null` and the new report key. |
 | 3 | **RS-3042 — Exporter fixes and EPS/AI** | 3.8: Gap in mm on inch sheets; EPS and AI exports; optional PDF Info in `PdfDocument`. Independent of the others; can go any time. | The inch sheet prints "Gap: 0.1 mm". EPS bounding box = design size with one circle per stone. AI opens as a one-page true-size PDF. Existing sheet hashes are unchanged, or re-pinned with a reason. |
 | 4 | **IMG-026N — Prompt v7 and model input** (**done**, 1 Nov 2026) | 3.3: P3+P4 as stones v7 (Appendix E); BACKLOG row 77 → v8. Option B: the product type, read before the provider call, picks the shape. The Flat Sheet gets `size: 'auto'` and the whole-image line; vessels and the plate keep `1024x1024` and "Square image". | T1 reads Appendix E (both variants). A test shows that a Flat Sheet request sends `size: 'auto'` and the whole-image line, and that a vessel request (and a plate request) sends `1024x1024` and "Square image", without the whole-image line. A measured run on the portrait set (a few provider calls, agreed beforehand) shows face ΔL\* no worse than v6. |
-| 5 | **IMG-026O — Service clean-up and hole fill** | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
+| 5 | **IMG-026O — Service clean-up and hole fill** (**done**, 1 Nov 2026) | 3.4 + 3.5: the size cap (a service option, on by default: SS16, the pupil pair SS20), overlap cleanup, hole fill with neighbour vote; the acceptance figures in the layer's report; no automatic re-run. | On the 12 images: no stone above SS16 except a plausible pupil pair at SS20 or below; 0 stones removed by the cleanup; 0 holes left where an SS4 fits; min gap ≥ 0.100 mm; no lone dark fill stones. `test_report` holds. `aiLayout.report` carries stones removed, coverage and the gap check, `validateProject()` accepts them and the lightbox shows them. A failed layout still falls back to IMG-023, with no second provider call. |
 | 6 | **IMG-026P — Black & white (Bold, Shaded)** | 3.6: two redraw styles, the service's `bw` mode reading the AI image, the lightbox choice. Separate spec review first (schema). | The prompts equal their appendices. The service returns only `jet` and `crystal-clear` for `mode: bw`. Old layers validate unchanged. The lightbox shows Colour / Bold / Shaded. |
 | 7 | **IMG-026Q — Tinted view** | 3.7: "Background: Tinted" on the 2D canvas with T1–T8; B&W gap rule chosen from the colours present. | The pixel-rule unit tests pass. `drawCrystalStone` is unchanged. A 4,000-stone layout redraws in an agreed time on Chrome 103. Not saved, not in history, never in exports. |
 

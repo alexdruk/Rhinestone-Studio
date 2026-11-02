@@ -83,8 +83,9 @@ answers 200 with the layout:
 { "version": 1, "widthMm": 103.0, "heightMm": 130.8,
   "stones": [[x, y, "ss6", "jet"], ...],
   "report": { "stones", "bySize", "colours", "minGapMm", "violations", "coverage",
-              "largestEmptyCircleMm", "face", "pupilsMm", "pupilsAtMm", "frameMm", "offsetMm", "mmPerPx",
-              "stagesMs": { "detect", "layout", "eyes", "colour", "check" }, "ms" } }
+              "largestEmptyCircleMm", "capped", "removed", "removedShare", "filled", "cleanupCoverage",
+              "face", "pupilsMm", "pupilsAtMm", "frameMm", "offsetMm", "mmPerPx",
+              "stagesMs": { "detect", "layout", "eyes", "colour", "cleanup", "check" }, "ms" } }
 ```
 
 Stone coordinates are centres in mm from the top-left corner of the stones' bounding box (S1).
@@ -94,6 +95,16 @@ Size ids are `ss4 ss6 ss10 ss16 ss20 ss30` (1.5, 2.0, 2.8, 4.0, 4.7, 6.4 mm).
 say this too) or, since IMG-026M, `null`: the design's pupils are not one plausible pair, so no eye
 stones were placed. `pupilsMm` holds the pupil diameters; `pupilsAtMm` (IMG-026M) holds each pupil
 stone's centre `[x, y]`, in stone coordinates and the same order.
+
+Since IMG-026O the service runs PatternNifty's clean-up after its own layout: every stone above
+SS16 becomes SS16 (the pupils of one plausible pair SS20), of every pair closer than 0.1 mm one
+stone is removed, and every spot of the subject where an SS6 or SS4 stone fits is filled, in its
+neighbours' colour. `capped`, `removed` (and `removedShare`, removed over the stones before the
+cleanup) and `filled` count what these steps did; `cleanupCoverage` is the coverage after them as
+PatternNifty measures it (`coverage` of the stones before the steps times the area under the stones
+after them over the area under the stones before them). `violations`, `minGapMm`, `coverage` and
+`largestEmptyCircleMm` are measured on the returned stones, so after every step. Nothing re-runs a
+layout automatically.
 
 Errors are `{ "error": code, "message": text }`:
 
@@ -151,7 +162,8 @@ S3 gap check and the S4 id check.
 Stage times in `stagesMs`: `detect` is decoding, StarDist, radial symmetry, Laplacian blobs,
 watershed and fusion; `layout` is the ordered layout; `eyes` is pupils, face landmarks and the eye
 stones; `colour` is hole filling, colour assignment, dark-dot and family clean-up and tone
-separation; `check` is the last overlap removal plus the crop, report and gap check.
+separation; `cleanup` (IMG-026O) is the size cap, the overlap cleanup and the hole fill; `check` is
+the last overlap removal plus the crop, report and gap check.
 
 ## Tests
 
@@ -177,7 +189,10 @@ python -m unittest -v
 - `test_report` recomputes the report from the returned stones.
 - `test_build_f` to `test_build_j` compare each build's frozen rules (`BUILD_F` … `BUILD_J` in
   `strass_layout/rules.py`) with the build before; `test_build_m` (IMG-026M) checks the rules
-  ported from PatternNifty, each by switching it off in `DEFAULT`, and the two edge crashes.
+  ported from PatternNifty, each by switching it off in `BUILD_M`, and the two edge crashes;
+  `test_build_o` (IMG-026O) checks the size cap, the overlap cleanup, the hole fill and its colour
+  vote on small fixtures (ported from PatternNifty's tests) and `DEFAULT` against `BUILD_M` on the
+  13 test images.
 
 The full run lays out each of the 12 images once for the package and once for the prototype, about
 one to two minutes each. Run long jobs under `caffeinate -i`.

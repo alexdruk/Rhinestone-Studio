@@ -9,9 +9,16 @@ catalogue id check.
 IMG-026M (from IS IS-05c): with Rules.skin_nearest_inner the colours skin_nearest reads are taken
 from the inner ordered.SAMPLE_SHARE of each stone's radius instead of its whole disc. The report
 gains pupilsAtMm (IS-05b), and face can be null (Rules.plausible_eyes).
+
+IMG-026O (from IS spec 7.5): after the colours, layout_frame() runs the size cap, the overlap
+cleanup and the hole fill that Rules.size_cap, overlap_cleanup and hole_fill turn on
+(cleanup.clean_up). The report gains their acceptance figures: capped, removed, removedShare, filled
+and cleanupCoverage (IS's coverage after the cleanup); violations and minGapMm are measured on the
+returned stones, so after every step. stagesMs gains "cleanup".
 """
 import numpy as np
 
+from .cleanup import clean_up
 from .colour import CAT_IDS, palette, stone_colours
 from .detect import detect_stones
 from .distinct import distinct_tones
@@ -34,8 +41,8 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
 
     Returns {"stones": [{x, y, size, d, color}], "frame": {...}, "stagesMs": {...}, "ms": int}.
     The stones are in OpenAI-frame mm, in the prototype's order. The frame holds
-    mmPerPx, widthMm, heightMm, the strict subject mask (an array), face, pupilsMm and pupilsAtMm
-    (the pupil stones' centres).
+    mmPerPx, widthMm, heightMm, the strict subject mask (an array), face, pupilsMm, pupilsAtMm
+    (the pupil stones' centres) and cleanup (clean_up()'s figures, or None when no build O rule is on).
     """
     clock = Stopwatch()
     models = models or load_models()
@@ -60,6 +67,10 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
         q["color"] = c
     clock.lap("colour")
     s = float(first["s"])
+    cleanup = None
+    if rules.size_cap or rules.overlap_cleanup or rules.hole_fill:  # IMG-026O
+        stones, cleanup = clean_up(stones, px.rgba[..., 3], s, info["face"], info["pupilsAtMm"], info["mask"], rules)
+    clock.lap("cleanup")
     frame = {
         "mmPerPx": s,
         "widthMm": px.width * s,
@@ -68,6 +79,7 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT):
         "face": info["face"],
         "pupilsMm": info["pupilsMm"],
         "pupilsAtMm": info["pupilsAtMm"],
+        "cleanup": cleanup,
     }
     return {"stones": stones, "frame": frame, "stagesMs": clock.stages(), "ms": clock.total()}
 
@@ -107,6 +119,7 @@ def finish_layout(result):
     for q in stones:
         counts[q["color"]] = counts.get(q["color"], 0) + 1
     colours = dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    cleanup = frame.get("cleanup") or {"capped": 0, "removed": 0, "removedShare": 0.0, "filled": 0, "coverage": cover}
     clock.lap("check")
     stages = dict(result["stagesMs"])
     stages["check"] += clock.stages()["check"]
@@ -118,6 +131,11 @@ def finish_layout(result):
         "violations": int(cnt.sum() // 2),
         "coverage": round(float(cover), 3),
         "largestEmptyCircleMm": round(float(hmax), 3),
+        "capped": cleanup["capped"],
+        "removed": cleanup["removed"],
+        "removedShare": round(float(cleanup["removedShare"]), 4),
+        "filled": cleanup["filled"],
+        "cleanupCoverage": round(float(cleanup["coverage"]), 3),
         "face": frame["face"],
         "pupilsMm": frame["pupilsMm"],
         "pupilsAtMm": [[round(x - off_x, 3), round(y - off_y, 3)] for x, y in frame["pupilsAtMm"]],

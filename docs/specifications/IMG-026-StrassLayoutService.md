@@ -1843,6 +1843,49 @@ Build N ports PatternNifty's colour prompt v4 and model input (IS commit `e9e701
   darker faces the colour step makes the face stones 2 to 4 L\* lighter than the AI image (Silk on lit
   cheeks).
 
+## Size cap, overlap cleanup and hole fill (build O)
+
+Build O ports PatternNifty's Node steps after the layout (IS commit `e9e7014`; IS spec 7.4 and 7.5,
+IS `docs/exp-holes.md`; IS `src/pipeline/tiers.js`, `cleanup.js`, `holes.js`) into the service, as
+`strass_layout/cleanup.py`. Plan: `docs/IS-PORT-PLAN.md` sections 3.4 and 3.5. They run in
+`layout_frame()` after the colours, so the service stays the one stone producer; nothing in the Node
+server or the browser adds, moves or resizes a stone. Each step is a `Rules` flag, on in `DEFAULT` and
+off in `PROTOTYPE` and every `BUILD_*`; `BUILD_M` freezes the build M `DEFAULT`.
+
+- **`size_cap`:** every stone above SS16 becomes SS16 at the same centre. When the layout has a face
+  (`human` or `animal`) and exactly two pupils in `pupilsAtMm`, the stones at those two centres
+  (within 0.002 mm) are capped at SS20 instead, so an SS30 pupil becomes SS20.
+- **`overlap_cleanup`,** after the cap: for every pair with a rim gap below 0.1 mm, worst gap first,
+  the smaller stone is removed; on equal size the one with fewer neighbours (rim gap below 0.5 mm,
+  counted once on the capped stones), then the later one. A pair with a stone already removed is
+  skipped.
+- **`hole_fill`,** after the cleanup: the subject is the AI image's alpha ≥ 128, closed with a 1 mm
+  disc, with every enclosed transparent area of at most 2π mm² (6.3 mm²) filled. On a 20 px/mm grid,
+  greedily, the free spot farthest from everything first: SS6 while one fits, then SS4. A filled
+  stone lies wholly inside the subject and is at least 0.1 mm from every stone (exact). It takes its
+  neighbours' colour: the stones within 1 mm of its edge each weigh 1 − gap / 1 mm, the largest total
+  wins, a tie goes to the nearest; filled stones next to filled stones are decided in rounds, and one
+  with no decided stone within 1 mm takes the nearest decided stone's colour. Filled stones come
+  after the others in `stones`. The service's own `fill_exact` and `fill_cover_mask` (IS
+  experiments) are not ported.
+- **Report** (no automatic re-run; the Node fallback to IMG-023 is unchanged): `capped`, `removed`,
+  `removedShare` (removed over the stones before the cleanup), `filled`, and `cleanupCoverage`, IS's
+  coverage after the cleanup: `coverage` of the stones before the steps times the area under the
+  stones after them over the area under the stones before them, both at 10 px/mm. `violations`,
+  `minGapMm`, `coverage` and `largestEmptyCircleMm` are measured on the returned stones, so after
+  every step. With the flags off the new keys are 0 and `cleanupCoverage` equals `coverage`.
+  `stagesMs` gains `cleanup`. The app keeps none of the new keys in `aiLayout.report`
+  (`AI_LAYOUT_REPORT_KEYS`) and shows nothing new; old and new projects load unchanged.
+- **Tests:** `services/strass-layout/tests/test_build_o.py`; `tools/test-img-026-ai-layout-app.mjs`
+  2c; `tools/test-img-026-redraw-jobs.mjs` 14 (the fake layout's report keys).
+- **Measured** (`docs/results/IMG-026O/`, the 13 test images and the 3 IMG-026N layouts): with the
+  three flags off every layout equals `develop`'s `DEFAULT` exactly. With `DEFAULT`: 0 violations,
+  0 stones removed, natural sizes unchanged, 180 stones filled (0 to 60 per image), 6 pupils capped
+  (dog and woman SS30 → SS20, the single pupils of Jesus and the parrot SS20 → SS16). The smaller
+  pupils sit in a freed ring that the fill partly closes with neighbour-coloured stones, and on the
+  portrait the fill closes some of the white gaps between curls.
+  The full service suite (144 tests) passed in 16 528 s (4 h 35 min) on the iMac.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
