@@ -1,0 +1,377 @@
+[
+ {
+  "image": "ai",
+  "mode": "colour",
+  "face": "human",
+  "stones": 2826,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": false,
+  "changed": 22,
+  "changes": {
+   "crystal-clear \u2192 silk": 11,
+   "metallic-sunshine \u2192 silk": 8,
+   "citrine \u2192 silk": 3
+  },
+  "changedAtMm": [
+   [
+    31.667,
+    118.698,
+    "ss6"
+   ],
+   [
+    28.433,
+    31.979,
+    "ss6"
+   ],
+   [
+    47.81,
+    106.256,
+    "ss6"
+   ],
+   [
+    25.661,
+    122.332,
+    "ss6"
+   ],
+   [
+    63.637,
+    112.952,
+    "ss6"
+   ],
+   [
+    43.768,
+    123.767,
+    "ss6"
+   ],
+   [
+    50.245,
+    124.216,
+    "ss6"
+   ],
+   [
+    30.465,
+    114.67,
+    "ss6"
+   ],
+   [
+    26.867,
+    125.356,
+    "ss6"
+   ],
+   [
+    74.523,
+    100.759,
+    "ss6"
+   ],
+   [
+    28.793,
+    54.744,
+    "ss6"
+   ],
+   [
+    45.884,
+    123.894,
+    "ss6"
+   ],
+   [
+    75.164,
+    103.026,
+    "ss6"
+   ],
+   [
+    30.754,
+    53.653,
+    "ss6"
+   ],
+   [
+    48.984,
+    108.343,
+    "ss6"
+   ],
+   [
+    28.336,
+    56.848,
+    "ss6"
+   ],
+   [
+    47.045,
+    122.016,
+    "ss4"
+   ],
+   [
+    45.986,
+    54.879,
+    "ss4"
+   ],
+   [
+    30.54,
+    55.511,
+    "ss4"
+   ],
+   [
+    30.749,
+    116.868,
+    "ss4"
+   ],
+   [
+    28.209,
+    38.252,
+    "ss4"
+   ],
+   [
+    46.423,
+    56.663,
+    "ss4"
+   ]
+  ]
+ },
+ {
+  "image": "cat",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2162,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "dog",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1683,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "einstein",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3594,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "jesus",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 3308,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "lake",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 4100,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "leopard",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2437,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "logo",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 833,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "parrot",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2552,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait",
+  "mode": "colour",
+  "face": "human",
+  "stones": 4051,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "rose",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1846,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "tulips",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2675,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "woman",
+  "mode": "colour",
+  "face": "human",
+  "stones": 2626,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": false,
+  "changed": 1,
+  "changes": {
+   "crystal-clear \u2192 silk": 1
+  },
+  "changedAtMm": [
+   [
+    109.255,
+    66.998,
+    "ss6"
+   ]
+  ]
+ },
+ {
+  "image": "sunburst_flower",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1011,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-curls",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3458,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-flower-crown",
+  "mode": "colour",
+  "face": null,
+  "stones": 3252,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-freckles",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3156,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-freckles-bold",
+  "mode": "bw",
+  "face": "human",
+  "stones": 2998,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-freckles-shaded",
+  "mode": "bw",
+  "face": "human",
+  "stones": 3791,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-curls-bold",
+  "mode": "bw",
+  "face": "human",
+  "stones": 3036,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ },
+ {
+  "image": "portrait-curls-shaded",
+  "mode": "bw",
+  "face": "human",
+  "stones": 4156,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "identical": true,
+  "changed": 0,
+  "changes": {},
+  "changedAtMm": []
+ }
+]

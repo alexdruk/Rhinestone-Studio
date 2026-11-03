@@ -1,11 +1,11 @@
-"""Which IMG-026E to O rules the pipeline applies on top of the prototype.
+"""Which IMG-026E to O and RS-3044 rules the pipeline applies on top of the prototype.
 
 PROTOTYPE reproduces the prototype exactly (the equivalence and golden tests run with it);
-BUILD_E to BUILD_M are what builds E to M shipped; DEFAULT is what the service ships.
+BUILD_E to BUILD_O are what builds E to O shipped; DEFAULT is what the service ships.
 See docs/specifications/IMG-026-StrassLayoutService.md, "Layout quality (build E)",
 "Colour and eyes (build F)", "Pupils and stone colours (build G)",
 "More catalogue colours (build H)", "Faces and eyes (build I)", "Skin and fur tones (build J)" and
-"Eyes, colour reading and skin rules (build M)" and "Size cap, overlap cleanup and hole fill (build O)".
+"Eyes, colour reading and skin rules (build M)" "Size cap, overlap cleanup and hole fill (build O)" and "Pale skin (RS-3044)".
 
 Build M ports PatternNifty's (IS, commit e9e7014) face rules; each is a flag that is off in
 PROTOTYPE and every BUILD_* set, so the equivalence and golden tests are unchanged:
@@ -41,6 +41,17 @@ after its own layout (cleanup.clean_up); each is a flag, off in PROTOTYPE and ev
   closed with a 1 mm disc) where one fits with 0.1 mm to every stone; they take their neighbours'
   colour by IS's weighted vote.
 BUILD_M freezes the build M DEFAULT.
+
+RS-3044 (pale skin) adds one flag, off in PROTOTYPE and every BUILD_* set:
+- pale_skin: the AI paints lit skin in one pale cream (about L* 93-96) that is not in the palette,
+  and the snap splits it into Silk, Crystal, Metallic Sunshine and Citrine; lone_white_skin leaves
+  such a stone when any neighbour is not skin (often another stone of the same cream). With a
+  person's face found, right after lone_white_skin: an SS4 or SS6 stone outside 1.5 eye-zone radii,
+  read (inner 60 %, the skin_nearest reading) as pale warm cream (L* above 85, chroma 8 to 40, hue
+  25 to 100 degrees) and not in a skin colour, with at least four neighbours of which at least half
+  are skin colours, takes the skin colour nearest its read colour; repeated until nothing changes,
+  at most 5 rounds (faces.pale_skin). No stone moves or changes size.
+BUILD_O freezes the build O DEFAULT (builds P and Q changed no rule).
 """
 from dataclasses import dataclass
 
@@ -73,6 +84,7 @@ class Rules:
     size_cap: bool = False
     overlap_cleanup: bool = False
     hole_fill: bool = False
+    pale_skin: bool = False
 
 
 PROTOTYPE = Rules(pupil_core_only=False, keep_chains=False)
@@ -92,8 +104,13 @@ BUILD_M = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean
                 pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
                 soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,
                 skin_nearest_inner=True, warm_shadow=True, warm_shadow_de=3.0, lone_white_skin=True)
-DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=False, eye_keep=True,
+BUILD_O = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=False, eye_keep=True,
                 pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
                 soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,
                 skin_nearest_inner=True, warm_shadow=True, warm_shadow_de=3.0, lone_white_skin=True,
                 size_cap=True, overlap_cleanup=True, hole_fill=True)
+DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=False, eye_keep=True,
+                pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
+                soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,
+                skin_nearest_inner=True, warm_shadow=True, warm_shadow_de=3.0, lone_white_skin=True,
+                size_cap=True, overlap_cleanup=True, hole_fill=True, pale_skin=True)

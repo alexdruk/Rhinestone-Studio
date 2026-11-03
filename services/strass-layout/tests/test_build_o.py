@@ -6,7 +6,8 @@ ported from (IS tools/test-cleanup.mjs, test-holes.mjs, test-tiers.mjs). The IS 
 IS's own fixture layouts, its JavaScript colour copy, black & white or its settings are not ported.
 
 The image tests take the BUILD_M frame (which every older test lays out anyway) and run
-cleanup.clean_up on it with DEFAULT; Pipeline checks once that this is what layout() returns.
+cleanup.clean_up on it with BUILD_O (build O's DEFAULT, frozen by RS-3044); Pipeline checks once that
+this is what layout() returns.
 """
 import copy
 import dataclasses
@@ -15,7 +16,7 @@ import unittest
 import numpy as np
 from scipy.spatial import cKDTree
 
-from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, DEFAULT, PROTOTYPE
+from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, BUILD_O, DEFAULT, PROTOTYPE
 from strass_layout.cleanup import (CLOSE_MM, MIN_GAP_MM, area_under, cap_sizes, clean_up, find_holes, neighbour_vote,
                                    pupil_centres, remove_close, squared_edt, subject_mask)
 from strass_layout.geometry import holes
@@ -88,9 +89,10 @@ class Defaults(unittest.TestCase):
                 self.assertFalse(getattr(rules, flag), flag)
         for flag in FLAGS:
             self.assertTrue(getattr(DEFAULT, flag), flag)
+            self.assertTrue(getattr(BUILD_O, flag), flag)
 
-    def test_build_m_is_default_without_them(self):
-        self.assertEqual(dataclasses.replace(DEFAULT, size_cap=False, overlap_cleanup=False, hole_fill=False), BUILD_M)
+    def test_build_m_is_build_o_without_them(self):
+        self.assertEqual(dataclasses.replace(BUILD_O, size_cap=False, overlap_cleanup=False, hole_fill=False), BUILD_M)
 
 
 class SizeCap(unittest.TestCase):
@@ -301,11 +303,11 @@ class NeighbourVote(unittest.TestCase):
 
 
 def build_m_and_default(name):
-    """(BUILD_M answer, DEFAULT answer from the same frame through clean_up, the DEFAULT frame)."""
+    """(BUILD_M answer, BUILD_O answer from the same frame through clean_up, the BUILD_O frame)."""
     m = support.frame_result(name, BUILD_M)
     f = m["frame"]
     px = decode_png(support.png_bytes(name))
-    stones, stats = clean_up(copy.deepcopy(m["stones"]), px.rgba[..., 3], f["mmPerPx"], f["face"], f["pupilsAtMm"], f["mask"], DEFAULT)
+    stones, stats = clean_up(copy.deepcopy(m["stones"]), px.rgba[..., 3], f["mmPerPx"], f["face"], f["pupilsAtMm"], f["mask"], BUILD_O)
     o = copy.deepcopy(m)
     o["stones"] = stones
     o["frame"]["cleanup"] = stats
@@ -313,12 +315,12 @@ def build_m_and_default(name):
 
 
 class Pipeline(unittest.TestCase):
-    """layout() with DEFAULT is the BUILD_M layout through clean_up; with the build O flags off the
+    """layout() with BUILD_O is the BUILD_M layout through clean_up; with the build O flags off the
     report's new figures are neutral."""
 
-    def test_default_equals_build_m_through_clean_up(self):
+    def test_build_o_equals_build_m_through_clean_up(self):
         _, o, _, _ = build_m_and_default("woman")
-        real = support.layout_result("woman", DEFAULT)
+        real = support.layout_result("woman", BUILD_O)
         self.assertEqual(real["stones"], o["stones"])
         self.assertEqual((real["widthMm"], real["heightMm"]), (o["widthMm"], o["heightMm"]))
         drop = lambda r: {k: v for k, v in r.items() if k not in ("stagesMs", "ms")}
@@ -334,7 +336,7 @@ class Pipeline(unittest.TestCase):
 
 
 class Images(unittest.TestCase):
-    """DEFAULT against BUILD_M on the 13 RS test images (the acceptance figures of IMG-026O)."""
+    """BUILD_O against BUILD_M on the 13 RS test images (the acceptance figures of IMG-026O)."""
 
     def test_images(self):
         for name in IMAGES:
@@ -356,7 +358,7 @@ class Images(unittest.TestCase):
                 big = sum(1 for s in m["stones"] if s[2] in ("ss20", "ss30"))
                 kept_ss20 = sum(1 for s in m["stones"] if s[2] == "ss20" and tuple(s[:2]) in pupils)
                 self.assertEqual(ro["capped"], big - kept_ss20)
-                # Every stone of DEFAULT is a BUILD_M stone (same frame position, size capped) or a fill.
+                # Every stone of BUILD_O is a BUILD_M stone (same frame position, size capped) or a fill.
                 old = {(q["x"], q["y"]) for q in support.frame_result(name, BUILD_M)["stones"]}
                 stones = frame["stones"]
                 n_kept = len(stones) - ro["filled"]
