@@ -117,6 +117,16 @@ after them over the area under the stones before them). `violations`, `minGapMm`
 `largestEmptyCircleMm` are measured on the returned stones, so after every step. Nothing re-runs a
 layout automatically.
 
+Since RS-3044, on a person's face (`face` is `"human"`), a stone the AI painted in its pale cream
+lit-skin colour becomes skin. The AI paints lit skin in one cream (about L\* 93–96) that is not in
+the palette, and the colour step split it into Silk, Crystal, Metallic Sunshine and Citrine. An SS4
+or SS6 stone outside 1.5 eye-zone radii is changed when two things hold. Its colour, read from the
+inner 60 % of its radius, is pale warm cream: L\* above 85, chroma 8 to 40, hue 25 to 100 degrees.
+And it has at least four neighbours, at least half of them in skin colours. It then takes the skin
+colour nearest its read colour (ΔE2000). This repeats until nothing changes, at most 5 rounds, so
+pairs and triples change too. Positions and sizes never change. Teeth the AI paints in its Crystal,
+eye whites and catch-lights stay. The rule is `Rules.pale_skin` (`faces.pale_skin`).
+
 With `"mode": "bw"` (IMG-026P, PatternNifty's Black & white) every stone is then Jet or Crystal
 (`jet`, `crystal-clear`), read from the AI image itself: the mean CIE L\* of its pixels composited on
 white within the inner 60 % of the stone's radius (at least 2 px), at its delivered position. Below
@@ -210,14 +220,19 @@ python -m unittest -v
   within 1 % of `prototype/expected/` and coverage within 3 % of it.
 - `test_contract` checks the response shape and every error code through the HTTP app.
 - `test_report` recomputes the report from the returned stones.
-- `test_build_f` to `test_build_j` compare each build's frozen rules (`BUILD_F` … `BUILD_J` in
+- `test_build_f` to `test_build_j` compare each build's frozen rules (`BUILD_F` … `BUILD_O` in
   `strass_layout/rules.py`) with the build before; `test_build_m` (IMG-026M) checks the rules
   ported from PatternNifty, each by switching it off in `BUILD_M`, and the two edge crashes;
   `test_build_o` (IMG-026O) checks the size cap, the overlap cleanup, the hole fill and its colour
-  vote on small fixtures (ported from PatternNifty's tests) and `DEFAULT` against `BUILD_M` on the
+  vote on small fixtures (ported from PatternNifty's tests) and `BUILD_O` against `BUILD_M` on the
   13 test images; `test_build_p` (IMG-026P) checks the Black & white reading (threshold, inner 60 %,
   composited on white, 2 px minimum, filled stones by vote) on small fixtures, `mode` and
   `BW_THRESHOLD` through the HTTP app, and the woman in `bw` against `colour`.
+- `test_rs_3044_pale_skin` (RS-3044) checks the pale skin rule on small fixtures (a pair, a triple,
+  a cluster over rounds, the 5-round limit, the stones it must leave, teeth), on
+  `fixtures/pale_skin_portrait.png` (the AI image of the white-stones diagnosis) and `DEFAULT`
+  against `BUILD_O` on the 13 test images. `test_build_o` compares `BUILD_O`, build O's frozen
+  `DEFAULT`, with `BUILD_M`.
 
 The full run lays out each of the 12 images once for the package and once for the prototype, about
 one to two minutes each. Run long jobs under `caffeinate -i`.

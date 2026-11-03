@@ -19,6 +19,8 @@ returned stones, so after every step. stagesMs gains "cleanup".
 IMG-026P (from IS spec 7.6): with mode "bw" (Black & white), layout_frame() then reads every stone's
 Jet or Crystal from the AI image (bw.map_black_and_white), the filled stones by the vote; its time
 counts under "cleanup". The caller's colorIds then need only Jet and Crystal.
+
+RS-3044: Rules.pale_skin (faces.pale_skin) reads the same colours as skin_nearest.
 """
 import numpy as np
 
@@ -70,7 +72,7 @@ def layout_frame(png_bytes, target_pitch_mm=2.1, models=None, rules=DEFAULT, mod
     colours = distinct_tones(px.rgb, px.a, first["s"], P, D, C, palette(rules), rules.mean_colour)
     # IMG-026M (IS-05c): with rules.skin_nearest_inner, skin_nearest reads the inner SAMPLE_SHARE of each stone.
     share = SAMPLE_SHARE if rules.skin_nearest_inner else 1.0
-    lab = stone_colours(px.rgb, px.a, np.stack([P[:, 1] / first["s"], P[:, 0] / first["s"], share * 0.5 * D / first["s"], np.zeros(len(P))], 1), True) if rules.skin_nearest else None
+    lab = stone_colours(px.rgb, px.a, np.stack([P[:, 1] / first["s"], P[:, 0] / first["s"], share * 0.5 * D / first["s"], np.zeros(len(P))], 1), True) if rules.skin_nearest or rules.pale_skin else None
     colours = finish_faces(P, D, colours, palette(rules), info["face"], info["eyeZones"], rules, lab)
     for q, c in zip(stones, colours):
         q["color"] = c

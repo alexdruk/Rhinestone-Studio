@@ -29,7 +29,8 @@ _pupils = {}
 
 
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
-FIXTURE_IMAGES = {"sunburst_flower": os.path.join(FIXTURES_DIR, "sunburst_flower.png")}
+FIXTURE_IMAGES = {"sunburst_flower": os.path.join(FIXTURES_DIR, "sunburst_flower.png"),
+                  "pale_skin_portrait": os.path.join(FIXTURES_DIR, "pale_skin_portrait.png")}
 
 
 def png_bytes(name):

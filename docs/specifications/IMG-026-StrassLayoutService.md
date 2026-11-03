@@ -1976,6 +1976,38 @@ section 8). Plan: `docs/IS-PORT-PLAN.md` section 3.7. No service change.
   Most visible defects are the layout's, which the view makes more noticeable: the portrait's white
   highlight patches and the large SS20 pupils.
 
+## Pale skin (RS-3044)
+
+The AI paints lit skin in one pale cream (about L\* 93–96) that is not in the palette. The snap
+splits it into Silk, Crystal, Metallic Sunshine and Citrine, so lit skin got single white and gold
+stones; `lone_white_skin` left them because each touches a non-skin neighbour, often another stone of
+the same cream (diagnosis in `tools/scratch/white-stones/`, not committed). Spec:
+`docs/specifications/RS-3044-PaleSkin.md`.
+
+- **`pale_skin`** (`faces.pale_skin`), a `Rules` flag on in `DEFAULT`, off in `PROTOTYPE` and every
+  `BUILD_*`; `BUILD_O` freezes the build O `DEFAULT` (builds P and Q changed no rule). It runs in
+  `finish_faces` right after `lone_white_skin`, only when a person's face was found
+  (`face == "human"`).
+  - **Candidate:** an SS4 or SS6 stone outside 1.5 eye-zone radii whose read colour (the inner 60 %
+    of its radius at its delivered position, the reading `skin_nearest` uses) is pale warm cream:
+    L\* above 85, chroma 8 to 40, hue 25 to 100 degrees (`faces.is_pale_cream`). Its colour is any
+    colour outside `distinct.SKIN`.
+  - **Condition:** at least four neighbours, at least half of them in skin colours.
+  - **Result:** the skin colour (`distinct.SKIN`, Topaz excepted, as `skin_nearest`) nearest its read
+    colour in ΔE2000.
+  - **Rounds:** each round reads the colours the round before left, so pairs and triples change
+    from their edge inward; until no stone changes, at most 5 rounds.
+  - Positions and sizes never change. Teeth in the AI's Crystal (chroma 0), eye whites (eye zone)
+    and catch-lights (eye zone, and read dark) stay. Black & white is unchanged (`bw.py` reads its
+    own colours).
+- **Tests:** `services/strass-layout/tests/test_rs_3044_pale_skin.py`; `test_build_o` now compares
+  `BUILD_O` with `BUILD_M`.
+- **Measured** (`docs/results/RS-3044/`): on the diagnosis's AI image, 22 stones become Silk: the 11
+  Crystal stones on skin, 8 Metallic Sunshine and 3 Citrine. The eye white and the catch-light keep
+  Crystal. On the 13 test images, the 3 IMG-026N and the 4 IMG-026P layouts, one stone changes: on
+  the woman's lit lower lip, Crystal → Silk. Everything else is identical.
+- **Full suite:** 180 tests, 5 h 13 min on the iMac.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are

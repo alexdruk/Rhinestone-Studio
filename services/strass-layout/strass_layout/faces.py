@@ -10,6 +10,10 @@ that shade is a close neighbour on the skin ramp.
 IMG-026M (from IS): Rules.warm_shadow (IS-05d) lets skin_nearest prefer Colorado Topaz to a near-tie
 Smoked Topaz; Rules.lone_white_skin (IS PN-04h, lone_white_skin, after calm_skin) gives a lone white
 stone in skin, which reads as a hole, its skin neighbours' colour.
+
+RS-3044: Rules.pale_skin (pale_skin, after lone_white_skin, on a person's face) gives a stone the AI
+painted in its pale cream lit-skin colour, which the snap split into whites and golds, the skin colour
+nearest its read colour when at least half its neighbours are skin.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -129,6 +133,52 @@ def lone_white_skin(P, D, C, pal, eyes, nb=None):
     return out, n
 
 
+# RS-3044: the read colour of the AI's pale cream lit skin: L* above PALE_L, chroma and hue (degrees)
+# within PALE_CHROMA and PALE_HUE, both ends included.
+PALE_L = 85.0
+PALE_CHROMA = (8.0, 40.0)
+PALE_HUE = (25.0, 100.0)
+PALE_ROUNDS = 5
+
+
+def is_pale_cream(lab):
+    """RS-3044: True for each Lab colour that is pale warm cream (PALE_L, PALE_CHROMA, PALE_HUE)."""
+    lab = np.atleast_2d(np.asarray(lab, float))
+    chroma = np.hypot(lab[:, 1], lab[:, 2])
+    hue = np.degrees(np.arctan2(lab[:, 2], lab[:, 1])) % 360
+    return ((lab[:, 0] > PALE_L) & (chroma >= PALE_CHROMA[0]) & (chroma <= PALE_CHROMA[1])
+            & (hue >= PALE_HUE[0]) & (hue <= PALE_HUE[1]))
+
+
+def pale_skin(P, D, C, lab, pal, eyes, nb=None, rounds=PALE_ROUNDS):
+    """RS-3044: an SS4 or SS6 stone outside 1.5 eye-zone radii whose read colour (lab, inner 60 %)
+    is pale warm cream (is_pale_cream) and whose colour is not a skin colour, with at least four
+    neighbours of which at least half are in skin colours, takes the skin colour (distinct.SKIN, Topaz
+    excepted, as skin_nearest) nearest its read colour in ΔE2000. Each round reads the colours the
+    round before left, so pairs and triples of such stones change from their edge inward; it repeats
+    until no stone changes, at most `rounds` rounds. Returns (colours, count)."""
+    nb = nb if nb is not None else _neighbours(P, D)
+    ids = [k for k in pal.ids if k in SKIN and k != "topaz"]
+    cat = pal.lab[[pal.ids.index(k) for k in ids]]
+    pale = is_pale_cream(lab)
+    cand = [i for i in range(len(C)) if pale[i] and D[i] in (1.5, 2.0) and len(nb[i]) >= 4 and not _near_eye(P[i], eyes, 1.5)]
+    out = list(C)
+    changed = set()
+    for _ in range(rounds):
+        now = {}
+        for i in cand:
+            if out[i] in SKIN:
+                continue
+            if sum(out[j] in SKIN for j in nb[i]) >= 0.5 * len(nb[i]):
+                now[i] = ids[int(np.argmin(deltaE_ciede2000(np.repeat(lab[i][None], len(ids), 0), cat)))]
+        if not now:
+            break
+        for i, c in now.items():
+            out[i] = c
+        changed.update(now)
+    return out, len(changed)
+
+
 def finish_faces(P, D, C, pal, face, eyes, rules, lab=None):
     nb = None
     if rules.skin_nearest:
@@ -142,4 +192,7 @@ def finish_faces(P, D, C, pal, face, eyes, rules, lab=None):
     if rules.lone_white_skin:  # IMG-026M (IS PN-04h)
         nb = nb if nb is not None else _neighbours(P, D)
         C, _ = lone_white_skin(P, D, C, pal, eyes, nb)
+    if rules.pale_skin and face == "human":  # RS-3044
+        nb = nb if nb is not None else _neighbours(P, D)
+        C, _ = pale_skin(P, D, C, lab, pal, eyes, nb)
     return C
