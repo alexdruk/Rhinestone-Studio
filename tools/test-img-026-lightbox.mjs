@@ -105,8 +105,15 @@ await test('1. imageStudioState() gives the "Who sees what" table for every list
       { legacy: false, aiColours: false, aiStats: false, redrawButton: null, useOriginal: false, views: legacyViews }]
   ];
   // IMG-026 (build P): the look choice shows whenever a provider is available; none of these layers
-  // has changed its look (test-img-026-black-white.mjs covers lookChanged).
-  for (const [name, layer, options, expected] of cases) assert.deepEqual(imageStudioState(layer, options), { ...expected, look: options.available, lookChanged: false }, name);
+  // has changed its look (test-img-026-black-white.mjs covers lookChanged). RS-3046: with no layout
+  // service state the button's text is its action, it never waits, and Tinted is offered exactly
+  // where the ai-layout groups are (test-rs-3046-lightbox.mjs covers the layout service states).
+  for (const [name, layer, options, expected] of cases) {
+    assert.deepEqual(imageStudioState(layer, options), {
+      ...expected, redrawLabel: expected.redrawButton, redrawWaits: false, oldMethod: false,
+      views: { ...expected.views, tinted: expected.aiColours }, look: options.available, lookChanged: false
+    }, name);
+  }
   const noCoverage = catLayer({ aiLayout: { ...catAiLayout(), report: {} } });
   assert.equal(imageStudioState(noCoverage, on).redrawButton, null, 'an ai-layout layer without coverage gets no Try again');
 });
@@ -381,14 +388,14 @@ function buildStartImageRedraw({ result, failWith = null, consent = true }) {
   return { run, running, state, failed };
 }
 
-await test('9. app.js: startImageRedraw() sends stones whatever the old select says, sets runningLayerId for the run, shows Source then Template, and keeps the failed set', async () => {
+await test('9. app.js: startImageRedraw() sends stones whatever the old select says, sets runningLayerId for the run, shows Source then Tinted (RS-3046), and keeps the failed set', async () => {
   const report = { minGapMm: 0.1, violations: 2, coverage: 0.65, offsetMm: CAT_OFFSET, mmPerPx: CAT_MM_PER_PX };
   const ok = buildStartImageRedraw({ result: { dataUrl: 'data:image/png;base64,EEEE', providerId: 'p', model: 'm', promptVersion: 3, layout: { version: 1, widthMm: CAT.widthMm, heightMm: CAT.heightMm, stones: CAT.stones, report } } });
   await ok.run();
   assert.equal(ok.state.requests[0].style, 'stones');
   assert.deepEqual(ok.state.runningSeen, ['image1']);
   assert.equal(ok.running(), null, 'cleared after the run');
-  assert.deepEqual(ok.state.views, ['source', 'template']);
+  assert.deepEqual(ok.state.views, ['source', 'tinted']);
   assert.equal(ok.state.statuses.at(-1), 'Placed 2146 stones. Gap check: 2 violations.');
   assert.ok(!ok.failed.has('image1'), 'a run with a layout removes the layer from the failed set');
 

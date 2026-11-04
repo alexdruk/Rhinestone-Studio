@@ -155,6 +155,10 @@ export const GROUPS = {
     // RS-3043: npm run studio (tools/studio.mjs) with a fake layout service and dev server, the
     // LAYOUT_PORT setting in start_layout.sh, and .env.example's URL.
     'test-rs-3043-studio.mjs',
+    // RS-3046: the dev server's layout service routes (status, start, loopback only, stopped with the
+    // dev server) and the lightbox's indicator, redraw button and Tinted result view.
+    'test-rs-3046-layout-service-control.mjs',
+    'test-rs-3046-lightbox.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).

@@ -2044,6 +2044,25 @@ replacement (alexdruk/imagetostrass commit `6e097d5`, PN-11 and its two follow-u
   lower-lip stone stays Crystal. Nothing else changes on the 13 test images, the 3 IMG-026N and the 4
   IMG-026P (Black & white) layouts. `BUILD_RS3044` gives RS-3044's layouts exactly on all 21.
 
+## Layout service control and the tinted result (RS-3046)
+
+Spec: `docs/specifications/RS-3046-LayoutServiceControl.md`. No service or layout rule change.
+
+- **Dev server.** `GET /api/layout-service/status` (Ready, Busy, Starting, Not running, Wrong service,
+  each with a reason, from `/health`'s `service` and `version`) and `POST /api/layout-service/start`
+  (`tools/layout-control.mjs`), both answered only to this Mac. Start runs `start_layout.sh` under
+  `caffeinate -i` with the URL's port, by `tools/studio.mjs`'s own code, only for a 127.0.0.1 or
+  localhost URL where nothing answers; RS's running service is reused, another service or a remote
+  URL is refused. The dev server stops the service it started when it stops, and never one started
+  elsewhere.
+- **Lightbox.** An indicator above the redraw buttons with Check and, when it is not running,
+  Start layout service. Opening the lightbox starts a service that is Not running and polls every
+  3 s until Ready (180 s limit). While Starting the redraw button waits; while Not running or Wrong
+  service it reads "Redraw with AI (old method)".
+- **Result.** A redraw with a layout ends on the new **Tinted** view (build Q's renderer, unchanged;
+  Black & white with the crystal gap rule), and the lightbox opens an ai-layout layer on it; Template
+  and Source are the switch. View only: nothing saved, no stone changed, exports as on White.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are

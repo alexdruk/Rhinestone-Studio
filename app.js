@@ -142,7 +142,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES, createLayoutServiceMonitor } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -5804,7 +5804,13 @@ let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven
 // was declined or cancelled, or fell back to the old method. See imageStudioState().
 let runningLayerId=null;
 const redrawFailedLayerIds=new Set();
-function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id)})}
+// RS-3046: the layout service indicator in the lightbox (src/redraw/LayoutServiceMonitor.js; the dev
+// server's routes are tools/layout-control.mjs). Opening the lightbox reads the state and starts a
+// service that is Not running; Check re-reads it, Start layout service asks again. Its state also
+// decides the redraw button: imageStudioState()'s redrawWaits and oldMethod.
+const layoutServiceMonitor=createLayoutServiceMonitor({onChange:()=>{renderLayoutServiceIndicator();syncImageRedrawControlsForSelection()}});
+function layoutServiceStateForRedraw(){const v=layoutServiceMonitor.view();return v.shown?v.state:null}
+function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id),layoutService:layoutServiceStateForRedraw()})}
 function setImageStudioView(value){const input=el('imageStudioView').querySelector(`input[value="${value}"]`);if(input)input.checked=true}
 const REDRAW_ERROR_MESSAGES={
   'not-configured':'AI redraw is not set up on this server.',
@@ -5831,8 +5837,8 @@ function redrawErrorMessage(error){
 function syncImageRedrawControls(l){
   if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
   const busy=redrawRun!==null,state=imageStudioStateFor(l);
-  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawButton;
-  el('imageRedraw').disabled=busy;
+  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawLabel;
+  el('imageRedraw').disabled=busy||state.redrawWaits;
   el('imageRedrawCancel').hidden=!busy;
   el('imageRedrawUseOriginal').hidden=!state.useOriginal;
   el('imageRedrawUseOriginal').disabled=busy;
@@ -5924,7 +5930,7 @@ async function startImageRedraw(){
     const next=applyRedraw(current,result,{canvas:project.canvas,layout,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
-    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('template')}else redrawFailedLayerIds.add(layerId);
+    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('tinted')}else redrawFailedLayerIds.add(layerId);
     syncSelectedControlsFromLayer();
     await updateAll(true);
     setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style!=='flat'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
@@ -5961,6 +5967,26 @@ el('imageRedrawUseOriginal').onclick=async()=>{
 // event) rather than duplicating it -- matches this codebase's stated preference for reuse over
 // duplication.
 el('imageStudioSwitchToSheet').onclick=()=>{el('objectType').value='sheet';el('objectType').dispatchEvent(new Event('change'))};
+// RS-3046: what a redraw does in each layout service state, said under the reason.
+const LAYOUT_SERVICE_REDRAW_HINTS={starting:'The redraw button waits until it is ready.','not-running':'Until it is ready, a redraw places its stones with the old method.','wrong-service':'Until it is ready, a redraw places its stones with the old method.'};
+function renderLayoutServiceIndicator(){
+  const v=layoutServiceMonitor.view(),box=el('layoutServiceIndicator');
+  box.hidden=!v.shown;
+  if(!v.shown)return;
+  box.dataset.state=v.state;
+  const reason=[v.reason,LAYOUT_SERVICE_REDRAW_HINTS[v.state]||''].filter(Boolean).join(' ');
+  el('layoutServiceState').textContent=v.text;el('layoutServiceState').title=reason;
+  el('layoutServiceReason').textContent=reason;
+  el('layoutServiceStart').hidden=!v.showStart;
+  el('layoutServiceCheck').disabled=v.checking;
+}
+// Only where a redraw provider is set up: without one there is no redraw to place.
+async function openLayoutServiceIndicator(){
+  const availability=await getRedrawAvailability();
+  if(availability&&availability.available&&lightboxes.imagetrace.isOpen)layoutServiceMonitor.open();
+}
+el('layoutServiceCheck').onclick=()=>layoutServiceMonitor.check();
+el('layoutServiceStart').onclick=()=>layoutServiceMonitor.start();
 // IMG-002: clears every row's colorMap override back to each cluster's own auto-detected nearestId.
 // Not part of the generic HISTORY_TRACKED_CONTROL_IDS 'input'/'change' wiring below (a button click
 // fires neither), so it commits its own history step and regenerates directly, the same pattern
@@ -6138,7 +6164,7 @@ const lightboxes={
   text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();renderImageStudio()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();showTintedForAiLayout();renderImageStudio();openLayoutServiceIndicator()},onClose(){activeFieldLightbox=null;layoutServiceMonitor.close();studioTintedCache.cancel();relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
   // can never go stale from an edit made while it was closed (matching shipping/settings' own
@@ -6933,9 +6959,9 @@ function applyImageStudioState(state){
   el('legacyImageControls').hidden=!state.legacy;
   el('imageStudioGroupAiColours').hidden=!state.aiColours;
   for(const id of AI_LAYOUT_STAT_IDS){el(id).hidden=!state.aiStats;el(`${id}Label`).hidden=!state.aiStats}
-  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;
+  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;el('imageStudioViewTinted').hidden=!state.views.tinted;
   const view=el('imageStudioView').querySelector('input:checked')?.value;
-  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours))setImageStudioView('template');
+  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours)||(view==='tinted'&&!state.views.tinted))setImageStudioView('template');
 }
 // IMG-026 (C2, S17): the "Colours used" rows of an ai-layout layer, rebuilt on every render. A change
 // writes layer.colorSwaps as its own history step; neither control is in HISTORY_TRACKED_CONTROL_IDS.
@@ -6962,6 +6988,23 @@ function drawGapViolationRings(ctx,stones,t,lineWidthPx){
   for(const s of flagged){ctx.beginPath();ctx.arc(t.ox+s.xMm*t.s,t.oy+s.yMm*t.s,Math.max(2,s.sizeMm*t.s/2),0,Math.PI*2);ctx.stroke()}
   ctx.restore();
 }
+// RS-3046: the Tinted view of an ai-layout layer's result: IMG-026Q's renderer (TintedView.js,
+// unchanged) through a cache of its own, so the 2D canvas's tinted bitmap is not thrown away. A
+// Black & white layer uses the crystal gap rule, as the 2D canvas does (canvasTintedOptions). It reads the stones
+// only; until the bitmap is ready (it renders in slices) the plain stones show, then the studio
+// redraws. Outside renderImageStudio() so that function keeps its two drawImage() calls.
+const studioTintedCache=new TintedViewCache({createCanvas:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c},onReady:()=>renderImageStudio()});
+function drawStudioTinted(ctx,l,stones,t){
+  const bw=redrawLookOf(l).mode==='bw';
+  const bitmap=studioTintedCache.get(stones,{s:t.s,ox:t.ox,oy:t.oy,canvasWidthPx:ctx.canvas.width,canvasHeightPx:ctx.canvas.height,crystalGap:Uint8Array.from(stones,()=>bw?1:0)});
+  if(!bitmap)return false;
+  // The open gaps show the white the 2D canvas's Tinted view has (canvasBackgroundColor()), not the studio's grey.
+  ctx.fillStyle='#fbfdff';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  ctx.drawImage(bitmap.canvas,bitmap.xPx,bitmap.yPx);
+  return true;
+}
+// RS-3046: an ai-layout layer opens on its Tinted view.
+function showTintedForAiLayout(){const l=selectedLayer();if(l&&l.type==='image'&&imageStudioStateFor(l).views.tinted)setImageStudioView('tinted')}
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -7100,6 +7143,7 @@ async function renderImageStudio(){
     drawInBox(scratch);
   };
   const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
+  if(view!=='tinted')studioTintedCache.cancel();
   // IMG-023 (D8): for a redrawn layer Source shows the original (aspect kept inside the box) and AI
   // image shows the redraw; without a redraw both show the layer's own image.
   if(view==='source'||(view==='ai'&&!l.redraw)){
@@ -7117,6 +7161,8 @@ async function renderImageStudio(){
     drawColors();
   }else if(view==='template'){
     drawTemplate();
+  }else if(view==='tinted'){
+    if(drawStudioTinted(ctx,l,stones,t))drawGapViolationRings(ctx,stones,t,1.5*dpr);else drawTemplate();
   }else{
     const img=await drawSource();
     if(token!==imageStudioRenderToken)return;

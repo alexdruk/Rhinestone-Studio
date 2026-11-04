@@ -301,6 +301,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .image-redraw-look .look-styles .hint{display:block;font-weight:400;margin-top:0}
 /* Last, so [hidden] wins over the display rules above. */
 .image-redraw-look[hidden],.image-redraw-look [hidden]{display:none}
+/* RS-3046: the layout service indicator above the redraw buttons; the dot's colour follows the
+   state (data-state, set by renderLayoutServiceIndicator() in app.js). */
+.layout-service{margin-top:var(--space-3);font-size:var(--font-size-sm)}
+.layout-service-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.layout-service-name{color:var(--color-text-muted)}
+#layoutServiceState{font-weight:700;cursor:help}
+.layout-service-dot{width:8px;height:8px;border-radius:50%;background:var(--color-text-faint);flex:none}
+.layout-service[data-state="ready"] .layout-service-dot,.layout-service[data-state="busy"] .layout-service-dot{background:var(--color-success)}
+.layout-service[data-state="starting"] .layout-service-dot{background:var(--color-primary)}
+.layout-service[data-state="not-running"] .layout-service-dot,.layout-service[data-state="wrong-service"] .layout-service-dot{background:var(--color-danger)}
+.layout-service .hint{margin:var(--space-1) 0 0}
+.layout-service #layoutServiceStart{margin-top:var(--space-2)}
+/* Last, so [hidden] wins over the display rules above. */
+.layout-service[hidden],.layout-service [hidden]{display:none}
 /* IMG-025 (D10b): the style label sits inline with its select, at the button's height. */
 .image-redraw-style{display:flex;align-items:center;gap:6px;margin:0}
 .image-redraw-style select{width:auto;height:var(--control-height-sm)}
@@ -1206,6 +1220,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <!-- IMG-022: Redraw with AI. #imageRedraw is shown only when a redraw provider is available
                (src/redraw/index.js); Use original only when the image layer has a redraw record.
                Visibility is set by syncImageRedrawControls() in app.js. -->
+          <!-- RS-3046: the layout service's state, its reason, Check, and Start layout service when it
+               is not running. Shown only where a redraw provider is set up and the server uses the
+               layout service; set by renderLayoutServiceIndicator() in app.js. -->
+          <div id="layoutServiceIndicator" class="layout-service" hidden>
+            <div class="layout-service-line"><span class="layout-service-dot" aria-hidden="true"></span><span class="layout-service-name">Layout service:</span><span id="layoutServiceState" aria-live="polite">—</span><button id="layoutServiceCheck" class="btn sm" type="button" title="Read the layout service's state again">Check</button></div>
+            <p class="hint" id="layoutServiceReason"></p>
+            <button id="layoutServiceStart" class="btn sm" type="button" hidden>Start layout service</button>
+          </div>
           <div class="image-redraw-row">
             <label id="imageRedrawStyleField" class="image-redraw-style" hidden>Redraw style <select id="imageRedrawStyle"><option value="stones" selected>Stone picture</option><option value="flat">Flat artwork</option></select></label>
             <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn by AI in the chosen style">Redraw with AI</button>
@@ -1306,6 +1328,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <label id="imageStudioViewAi" hidden><input type="radio" name="imageStudioView" value="ai">AI image</label>
           <label id="imageStudioViewMask"><input type="radio" name="imageStudioView" value="mask">Mask</label>
           <label id="imageStudioViewColors"><input type="radio" name="imageStudioView" value="colors">Colours</label>
+          <!-- RS-3046: the finished-piece view of an ai-layout layer (IMG-026Q's renderer); a redraw's
+               result opens on it. -->
+          <label id="imageStudioViewTinted" hidden><input type="radio" name="imageStudioView" value="tinted">Tinted</label>
           <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
           <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
         </div>
