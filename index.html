@@ -290,6 +290,31 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .image-redraw-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .image-redraw-row button.btn[hidden]{display:none}
 .image-redraw-row label[hidden]{display:none}
+/* IMG-026 (build P): the Colour / Black & white choice above the file button. The global label
+   style is small caps, so the choice labels set their own type. */
+.image-redraw-look{border:0;padding:0;margin:0 0 var(--space-3);min-width:0}
+.image-redraw-look legend{font-size:var(--font-size-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.02em;margin:0 0 4px;padding:0}
+.image-redraw-look label{display:flex;align-items:flex-start;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:var(--font-size-sm);font-weight:600;color:var(--color-text);cursor:pointer}
+.image-redraw-look input{accent-color:var(--color-primary);margin:2px 0 0}
+.image-redraw-look .look-modes{display:flex;flex-wrap:wrap;gap:var(--space-4)}
+.image-redraw-look .look-styles{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2);padding-left:var(--space-3);border-left:2px solid var(--color-primary-tint)}
+.image-redraw-look .look-styles .hint{display:block;font-weight:400;margin-top:0}
+/* Last, so [hidden] wins over the display rules above. */
+.image-redraw-look[hidden],.image-redraw-look [hidden]{display:none}
+/* RS-3046: the layout service indicator above the redraw buttons; the dot's colour follows the
+   state (data-state, set by renderLayoutServiceIndicator() in app.js). */
+.layout-service{margin-top:var(--space-3);font-size:var(--font-size-sm)}
+.layout-service-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.layout-service-name{color:var(--color-text-muted)}
+#layoutServiceState{font-weight:700;cursor:help}
+.layout-service-dot{width:8px;height:8px;border-radius:50%;background:var(--color-text-faint);flex:none}
+.layout-service[data-state="ready"] .layout-service-dot,.layout-service[data-state="busy"] .layout-service-dot{background:var(--color-success)}
+.layout-service[data-state="starting"] .layout-service-dot{background:var(--color-primary)}
+.layout-service[data-state="not-running"] .layout-service-dot,.layout-service[data-state="wrong-service"] .layout-service-dot{background:var(--color-danger)}
+.layout-service .hint{margin:var(--space-1) 0 0}
+.layout-service #layoutServiceStart{margin-top:var(--space-2)}
+/* Last, so [hidden] wins over the display rules above. */
+.layout-service[hidden],.layout-service [hidden]{display:none}
 /* IMG-025 (D10b): the style label sits inline with its select, at the button's height. */
 .image-redraw-style{display:flex;align-items:center;gap:6px;margin:0}
 .image-redraw-style select{width:auto;height:var(--control-height-sm)}
@@ -494,7 +519,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <button id="distributeV" class="icon-btn" title="Distribute Vertically — spaces selected layers evenly top-to-bottom, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="1" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="6.5" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="12" width="8" height="3" rx="1" fill="currentColor"/></svg></button>
           </div>
           <select id="snapEnabled" title="Snap while dragging: canvas center/edges, the printable safe area, and other layers (does not affect Align/Distribute, keyboard nudge, or the configurable snap distance below)"><option value="on" selected>Snap: On</option><option value="off">Snap: Off</option></select>
-          <select id="canvasBackground" title="Design canvas background: white, or the product colour so the gaps between stones look as they will on the piece (view only, not saved)"><option value="white" selected>Background: White</option><option value="product">Background: Product</option></select>
+          <select id="canvasBackground" title="Design canvas background: white, the product colour so the gaps between stones look as they will on the piece, or tinted so image layers look like the finished piece (view only, not saved)"><option value="white" selected>Background: White</option><option value="product">Background: Product</option><option value="tinted">Background: Tinted</option></select>
         </div>
       </div>
 
@@ -1173,6 +1198,21 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div id="imageStudioControls">
         <details class="advanced-section" id="imageStudioGroupSource" open>
           <summary>Source</summary>
+          <!-- IMG-026 (build P): the look of the AI redraw, stored on the image layer. Above the file
+               button because an upload starts the redraw at once. Shown only when a redraw provider
+               is available; set by syncImageRedrawControls() in app.js. -->
+          <fieldset id="imageRedrawLook" class="image-redraw-look" hidden>
+            <legend>Look</legend>
+            <div class="look-modes">
+              <label><input type="radio" name="imageRedrawMode" value="colour" checked>Colour</label>
+              <label><input type="radio" name="imageRedrawMode" value="bw">Black &amp; white</label>
+            </div>
+            <div id="imageRedrawBwStyles" class="look-styles" hidden>
+              <label><input type="radio" name="imageRedrawBwStyle" value="bold" checked><span>Bold<span class="hint">Solid black and clear areas: strong and graphic.</span></span></label>
+              <label><input type="radio" name="imageRedrawBwStyle" value="shaded"><span>Shaded<span class="hint">Black and clear stones mixed to show light and shade.</span></span></label>
+            </div>
+            <p class="hint" id="imageRedrawLookHint" hidden>This layer was made in another look. Redraw with AI to change it.</p>
+          </fieldset>
           <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
           <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
           <p class="hint" id="imageStudioFileName"></p>
@@ -1180,6 +1220,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <!-- IMG-022: Redraw with AI. #imageRedraw is shown only when a redraw provider is available
                (src/redraw/index.js); Use original only when the image layer has a redraw record.
                Visibility is set by syncImageRedrawControls() in app.js. -->
+          <!-- RS-3046: the layout service's state, its reason, Check, and Start layout service when it
+               is not running. Shown only where a redraw provider is set up and the server uses the
+               layout service; set by renderLayoutServiceIndicator() in app.js. -->
+          <div id="layoutServiceIndicator" class="layout-service" hidden>
+            <div class="layout-service-line"><span class="layout-service-dot" aria-hidden="true"></span><span class="layout-service-name">Layout service:</span><span id="layoutServiceState" aria-live="polite">—</span><button id="layoutServiceCheck" class="btn sm" type="button" title="Read the layout service's state again">Check</button></div>
+            <p class="hint" id="layoutServiceReason"></p>
+            <button id="layoutServiceStart" class="btn sm" type="button" hidden>Start layout service</button>
+          </div>
           <div class="image-redraw-row">
             <label id="imageRedrawStyleField" class="image-redraw-style" hidden>Redraw style <select id="imageRedrawStyle"><option value="stones" selected>Stone picture</option><option value="flat">Flat artwork</option></select></label>
             <button id="imageRedraw" class="btn sm" hidden title="Send this image to be redrawn by AI in the chosen style">Redraw with AI</button>
@@ -1280,6 +1328,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <label id="imageStudioViewAi" hidden><input type="radio" name="imageStudioView" value="ai">AI image</label>
           <label id="imageStudioViewMask"><input type="radio" name="imageStudioView" value="mask">Mask</label>
           <label id="imageStudioViewColors"><input type="radio" name="imageStudioView" value="colors">Colours</label>
+          <!-- RS-3046: the finished-piece view of an ai-layout layer (IMG-026Q's renderer); a redraw's
+               result opens on it. -->
+          <label id="imageStudioViewTinted" hidden><input type="radio" name="imageStudioView" value="tinted">Tinted</label>
           <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
           <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
         </div>
@@ -1319,9 +1370,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       </div>
       <div class="export-group">
         <h3>Production geometry</h3>
-        <p>The generated StoneLayout (stone positions, sizes, colors) as machine-readable JSON. DXF is a millimetre-scale cutting template — one circle per stone, one layer per crystal color.</p>
+        <p>The generated StoneLayout (stone positions, sizes, colors) as machine-readable JSON. DXF is a millimetre-scale cutting template — one circle per stone, one layer per crystal color. EPS and AI are true-size vector files of the stones for design software (AI adds 5 mm around the design).</p>
         <button class="btn primary block" id="exportLayout">Export Generated Layout JSON</button>
         <button class="btn primary block" id="exportDXF" style="margin-top:8px">Export Rhinestone Template DXF</button>
+        <div class="btnrow" style="margin-top:8px"><button class="btn primary" id="exportEPS">EPS</button><button class="btn primary" id="exportAI">AI</button></div>
       </div>
       <div class="export-group">
         <h3>Visual previews</h3>
@@ -1467,7 +1519,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="help-section"><h3>Import</h3><p>SVG Import adds one new layer from an SVG file. Project Import replaces the entire open project with a previously exported Project JSON file — it does not merge.</p></div>
       <div class="help-section"><h3>Export</h3><p>Project JSON is the full editable project. Generated Layout JSON is the production StoneLayout. SVG/PNG are visual snapshots.</p></div>
       <div class="help-section"><h3>Production Sheet</h3><p>A millimeter-accurate, print-ready manufacturing document generated directly from the same StoneLayout as the 2D canvas — never a re-generated or approximated layout.</p></div>
-      <div class="help-section"><h3>About Rhinestone Studio</h3><p>Version 0.1.0. Professional software for designing and producing rhinestone artwork on physical products.</p></div>
+      <div class="help-section"><h3>About Rhinestone Studio</h3><p>Version 2.1.0. Professional software for designing and producing rhinestone artwork on physical products.</p></div>
     </div>
     <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
   </div>

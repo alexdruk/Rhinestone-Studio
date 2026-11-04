@@ -54,15 +54,42 @@ cd Rhinestone-Studio
 npm install
 ```
 
-Run the app locally (a static file server, `tools/dev-server.mjs`; the app itself is a
-browser-only ES module app with no build step). Every response carries
-`Cache-Control: no-cache, no-store`, so the browser always loads the current modules after a pull
-or checkout:
+Start Rhinestone Studio with one command. It starts the Image → Strass layout service
+(`services/strass-layout`, set up once with `services/strass-layout/scripts/setup_mac.sh`) and the app together:
 
 ```bash
-npm run dev
-# open http://localhost:5173
+npm run studio
+# wait for "Rhinestone Studio: http://localhost:5173/", then open it
 ```
+
+The layout service takes about a minute to load its models; the command waits (at most three
+minutes) and tells you if the service did not start. It runs the service on port 8001
+(`LAYOUT_PORT` changes it; 8000 is left to PatternNifty's own strass service) under
+`caffeinate -i`, so the Mac does not sleep during a layout, and points the app at it, whatever
+`.env` says. If Rhinestone Studio's layout service is already running on that port, it is reused;
+if another service answers there, the command stops and names the port. Ctrl+C stops both; if
+either stops on its own, the other is stopped too and the command says why.
+
+The manual way, in two terminals: start the layout service, then the app with
+`LAYOUT_SERVICE_URL` set (in the environment or `.env`):
+
+```bash
+caffeinate -i services/strass-layout/scripts/start_layout.sh
+LAYOUT_SERVICE_URL=http://127.0.0.1:8001 npm run dev
+```
+
+With `npm run dev` alone and `LAYOUT_SERVICE_URL` pointing at this Mac (127.0.0.1 or localhost,
+as in `.env.example`), the Image → Strass lightbox starts the layout service itself when it opens and
+nothing answers there (RS-3046): its indicator shows Starting… and then Ready, the same way
+`npm run studio` starts it, and the dev server stops that service when it stops. A service started
+by hand or by `npm run studio` is used as it is and never stopped by the dev server; another
+service on the port, or a URL on another machine, is never started over, and the lightbox says why.
+
+Without the layout service, the app still runs; Image → Strass redraws are then placed with the
+old method, and the app says so (the redraw button says "(old method)"). `npm run dev` alone is a static file server
+(`tools/dev-server.mjs`; the app itself is a browser-only ES module app with no build step). Every
+response carries `Cache-Control: no-cache, no-store`, so the browser always loads the current
+modules after a pull or checkout.
 
 ### Supported browsers
 

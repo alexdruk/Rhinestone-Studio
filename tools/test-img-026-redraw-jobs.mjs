@@ -150,7 +150,7 @@ async function start(handler, opts) {
   return res.json().jobId;
 }
 
-const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 6 };
+const DONE_RESULT = { dataUrl: FAKE_REDRAW_DATA_URL, model: 'gpt-image-2.5-sunburst', promptVersion: 7 };
 
 // ---- Job stages ---------------------------------------------------------------------------------
 
@@ -232,7 +232,7 @@ await test('3. OpenAI timeout: after REDRAW_TIMEOUT_SECONDS (300 s) the job fail
 
 // ---- Layout --------------------------------------------------------------------------------------
 
-await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 47 ids, targetPitchMm: 2.1 }', async () => {
+await test('4. the exact multipart request to the layout service: POST <LAYOUT_SERVICE_URL>/layout, image (image/png, the OpenAI bytes) and options { colorIds: all 47 ids, targetPitchMm: 2.1, mode: colour }', async () => {
   for (const base of [LAYOUT_BASE, `${LAYOUT_BASE}/`]) {
     const { fetch, calls } = router();
     const { handler } = makeHandler({ fetch, env: { LAYOUT_SERVICE_URL: base } });
@@ -254,7 +254,8 @@ await test('4. the exact multipart request to the layout service: POST <LAYOUT_S
     assert.ok(Buffer.from(await image.arrayBuffer()).equals(Buffer.from(FAKE_B64, 'base64')));
     assert.equal(typeof form.get('options'), 'string');
     const options = JSON.parse(form.get('options'));
-    assert.deepEqual(options, { colorIds: Object.keys(STONE_COLORS), targetPitchMm: 2.1 });
+    // IMG-026 (build P): the mode is sent too ('bw' is tested in test-img-026-black-white.mjs).
+    assert.deepEqual(options, { colorIds: Object.keys(STONE_COLORS), targetPitchMm: 2.1, mode: 'colour' });
     assert.equal(options.colorIds.length, 47);
     assert.deepEqual(options.colorIds.slice(-24, -20), ['colorado-topaz', 'light-smoked-topaz', 'scarlet', 'hyacinth']);
   }
@@ -262,8 +263,8 @@ await test('4. the exact multipart request to the layout service: POST <LAYOUT_S
 
 await test('5. layout failures: unavailable (no URL, connection refused), failed (any non-200, with the service code and message), timeout after 180 s; each keeps the OpenAI image in result and is not retried', async () => {
   const cases = [
-    [{ env: { LAYOUT_SERVICE_URL: '' } }, () => okLayout(), 'layout-unavailable', /LAYOUT_SERVICE_URL/, 0],
-    [{}, () => { throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8000'), { code: 'ECONNREFUSED' }) }); }, 'layout-unavailable', /not running/, 1],
+    [{ env: { LAYOUT_SERVICE_URL: '' } }, () => okLayout(), 'layout-unavailable', /^The layout service is not set up\. Start Rhinestone Studio with npm run studio \(or set LAYOUT_SERVICE_URL\)\.$/, 0],
+    [{}, () => { throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8000'), { code: 'ECONNREFUSED' }) }); }, 'layout-unavailable', /^The layout service at http:\/\/layout\.test:8000 is not answering\. Start the layout service, or start Rhinestone Studio with npm run studio\.$/, 1],
     [{}, () => status(422, { error: 'catalogue-mismatch', message: 'The layout service has colours the app does not know: x' }), 'layout-failed', /^catalogue-mismatch: The layout service has colours the app does not know: x$/, 1],
     [{}, () => status(422, { error: 'no-stones', message: 'Fewer than 50 stones.' }), 'layout-failed', /^no-stones: Fewer than 50 stones\.$/, 1],
     [{}, () => status(400, { error: 'no-alpha', message: 'No transparent background.' }), 'layout-failed', /^no-alpha: /, 1],
@@ -489,7 +490,7 @@ await test('12. the rate limit counts job creation only: polls and deletes never
 await test('13. fake mode: 202 with a job, no OpenAI and no layout call; the first three polls see drawing, placing, done with the fake image and fake-layout.json; flat keeps promptVersion 1', async () => {
   const spy = router();
   const { handler } = makeHandler({ fetch: spy.fetch, env: { REDRAW_FAKE: '1', OPENAI_API_KEY: '' } });
-  for (const [body, promptVersion] of [[UPLOAD_BODY, 6], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
+  for (const [body, promptVersion] of [[UPLOAD_BODY, 7], [JSON.stringify({ image: FAKE_REDRAW_DATA_URL, style: 'flat' }), 1]]) {
     const jobId = await start(handler, { body });
     assert.match(jobId, UUID_PATTERN);
     assert.deepEqual((await poll(handler, jobId)).json(), { stage: 'drawing' });
@@ -532,7 +533,16 @@ await test('14. fake-layout.json: about 200 stones in the build A response shape
   assert.equal(violations, 0);
   assert.ok(minGap >= 0.1);
   const r = layout.report;
-  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'face', 'pupilsMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  // IMG-026M: the service reports pupilsAtMm, each pupil stone's centre, after pupilsMm. IMG-026O: the
+  // clean-up's acceptance figures after largestEmptyCircleMm, and a cleanup stage time.
+  assert.deepEqual(Object.keys(r), ['stones', 'bySize', 'colours', 'minGapMm', 'violations', 'coverage', 'largestEmptyCircleMm', 'capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage', 'face', 'pupilsMm', 'pupilsAtMm', 'frameMm', 'offsetMm', 'mmPerPx', 'stagesMs', 'ms']);
+  assert.deepEqual(Object.keys(r.stagesMs), ['detect', 'layout', 'eyes', 'colour', 'cleanup', 'check']);
+  assert.equal(r.pupilsAtMm.length, r.pupilsMm.length);
+  for (const [i, [x, y]] of r.pupilsAtMm.entries()) {
+    const stone = layout.stones.find((s) => s[0] === x && s[1] === y);
+    assert.ok(stone, `pupil ${i} is a stone centre`);
+    assert.equal(DIAMETERS[stone[2]], r.pupilsMm[i]);
+  }
   assert.equal(r.stones, layout.stones.length);
   assert.equal(r.violations, 0);
   assert.equal(r.minGapMm, Math.round(minGap * 10000) / 10000);
@@ -541,7 +551,7 @@ await test('14. fake-layout.json: about 200 stones in the build A response shape
   assert.deepEqual(r.colours, count(3));
 });
 
-await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_SECONDS (default 180) are read in env.mjs; a missing URL leaves the routes on; .env.example adds them as two plain lines', async () => {
+await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_SECONDS (default 180) are read in env.mjs; a missing URL leaves the routes on; .env.example adds them as two plain lines (the URL on port 8001 since RS-3043)', async () => {
   const defaults = loadRedrawEnv({ env: {} });
   assert.equal(defaults.layoutServiceUrl, '');
   assert.equal(defaults.layoutTimeoutMs, 180000);
@@ -554,9 +564,10 @@ await test('15. settings: LAYOUT_SERVICE_URL (default empty) and LAYOUT_TIMEOUT_
   const noUrl = createRedrawHandler({ settings: loadRedrawEnv({ env: { OPENAI_API_KEY: 'k', REDRAW_ACCESS_CODE: 'c' } }) });
   assert.equal(noUrl.configured, true);
   const lines = envExample.split('\n');
-  assert.ok(lines.includes('LAYOUT_SERVICE_URL='));
+  // RS-3043: the example points at the layout service's own port, 8001 (8000 is PatternNifty's).
+  assert.ok(lines.includes('LAYOUT_SERVICE_URL=http://127.0.0.1:8001'));
   assert.ok(lines.includes('LAYOUT_TIMEOUT_SECONDS=180'));
-  const at = lines.indexOf('LAYOUT_SERVICE_URL=');
+  const at = lines.indexOf('LAYOUT_SERVICE_URL=http://127.0.0.1:8001');
   assert.equal(lines[at + 1], 'LAYOUT_TIMEOUT_SECONDS=180');
   assert.ok(!lines[at - 1].startsWith('#') && !(lines[at + 2] || '').startsWith('#'), 'no comment lines around them');
   assert.deepEqual(lines.filter((l) => l.startsWith('#') && l.includes('LAYOUT')), [], 'no comment mentions the layout settings');
@@ -711,7 +722,7 @@ await test('22. end to end through the real handler: the provider drives a fake-
   const stages = [];
   const waits = [];
   const result = await createOpenAiProxyProvider({ fetch, wait: recordWait(waits) }).redraw({ pngDataUrl: FAKE_REDRAW_DATA_URL, accessCode: 'letmein', onStage: (s) => stages.push(s) });
-  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 6, layout: FAKE_LAYOUT, layoutError: null });
+  assert.deepEqual(result, { dataUrl: FAKE_REDRAW_DATA_URL, model: 'fake', promptVersion: 7, layout: FAKE_LAYOUT, layoutError: null });
   assert.deepEqual(stages, ['drawing', 'placing', 'done']);
   assert.equal(waits.length, 3);
 });

@@ -155,7 +155,7 @@ await test('3. selectors: listCrystalColorGroups() leaves the aiOnly colours out
 });
 
 await test('4. prompt v5: the stones palette line lists all 39 colours, the flat one the 27 standard ones; the ramps name the new colours', () => {
-  assert.equal(PROMPT_VERSION, 6);
+  assert.equal(PROMPT_VERSION, 7);
   assert.deepEqual(buildPaletteLine().split(', '), CRYSTAL_COLORS.filter((c) => !c.aiOnly).map((c) => `${c.name} ${c.fill}`));
   assert.deepEqual(buildPaletteLine(undefined, true).split(', '), CRYSTAL_COLORS.map((c) => `${c.name} ${c.fill}`));
   const stones = buildRedrawPrompt().split('\n');

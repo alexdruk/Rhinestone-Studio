@@ -41,6 +41,25 @@ stone at its exact diameter (no cut offset) and position. Coordinates are Y-flip
 (`heightMm - stone.yMm`) because DXF is Y-up while `StoneLayout` is Y-down. Units are millimeters
 (`$INSUNITS = 4`).
 
+## EPS and AI Exporters (RS-3042)
+
+`EpsExporter.js` and `AiExporter.js` write true-size vector files of the stones for design
+software, from the StoneLayout only (ported from PatternNifty). Coordinates are relative to the
+stones' footprint box, y flipped.
+
+```js
+import { stoneLayoutToEps } from './src/export/EpsExporter.js';
+import { stoneLayoutToAi } from './src/export/AiExporter.js';
+
+const eps = stoneLayoutToEps(layout, { title: project.name }); // EPSF-3.0 string
+const ai = stoneLayoutToAi(layout); // one-page PDF bytes, the design + 5 mm on every side
+```
+
+EPS: `%%BoundingBox`/`%%HiResBoundingBox` equal the design size in points, one filled circle per
+stone in its catalogue fill, grouped by colour. AI: built with `PdfDocument`, catalogue fill and
+0.12 mm stroke, saved as `.ai`. Both throw a `TypeError` for a layout with no stones. See
+`docs/specifications/RS-3042-EpsAiExport.md`.
+
 ## Production Sheet Exporter (RS-1005)
 
 `ProductionSheetExporter.js` turns a `StoneLayout` plus plain display metadata into a one-page,

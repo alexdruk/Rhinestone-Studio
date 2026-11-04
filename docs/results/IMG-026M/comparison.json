@@ -1,0 +1,4653 @@
+[
+ {
+  "image": "cat",
+  "picture": true,
+  "stones": [
+   2150,
+   2150
+  ],
+  "bySize": [
+   {
+    "ss4": 347,
+    "ss6": 1801,
+    "ss20": 2
+   },
+   {
+    "ss4": 347,
+    "ss6": 1801,
+    "ss20": 2
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [
+    5.91,
+    5.91
+   ],
+   [
+    5.91,
+    5.91
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    33.378,
+    54.226
+   ],
+   [
+    66.117,
+    54.278
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1039,
+   0.1039
+  ],
+  "coverage": [
+   0.647,
+   0.647
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 118,
+  "colourChanges": [
+   [
+    "light-siam>siam",
+    18
+   ],
+   [
+    "golden-shadow>light-colorado",
+    12
+   ],
+   [
+    "hematite>jet",
+    10
+   ],
+   [
+    "light-siam>padparadscha",
+    10
+   ],
+   [
+    "crystal-clear>silk",
+    9
+   ],
+   [
+    "light-smoked-topaz>smoked-topaz",
+    6
+   ],
+   [
+    "silver>crystal-clear",
+    6
+   ],
+   [
+    "crystal-clear>smoked-topaz",
+    6
+   ],
+   [
+    "golden-shadow>copper",
+    4
+   ],
+   [
+    "indian-siam>siam",
+    4
+   ],
+   [
+    "smoked-topaz>colorado-topaz",
+    3
+   ],
+   [
+    "light-colorado>copper",
+    3
+   ],
+   [
+    "colorado-topaz>copper",
+    3
+   ],
+   [
+    "smoked-topaz>hematite",
+    2
+   ],
+   [
+    "light-colorado>golden-shadow",
+    2
+   ],
+   [
+    "copper>light-colorado",
+    2
+   ],
+   [
+    "light-smoked-topaz>colorado-topaz",
+    2
+   ],
+   [
+    "light-smoked-topaz>greige",
+    1
+   ],
+   [
+    "smoked-topaz>greige",
+    1
+   ],
+   [
+    "copper>colorado-topaz",
+    1
+   ],
+   [
+    "graphite>jet-hematite",
+    1
+   ],
+   [
+    "copper>golden-shadow",
+    1
+   ],
+   [
+    "greige>light-smoked-topaz",
+    1
+   ],
+   [
+    "rose-peach>silk",
+    1
+   ],
+   [
+    "silk>golden-shadow",
+    1
+   ],
+   [
+    "silver>golden-shadow",
+    1
+   ],
+   [
+    "silver>silk",
+    1
+   ],
+   [
+    "smoked-topaz>jet",
+    1
+   ],
+   [
+    "light-siam>scarlet",
+    1
+   ],
+   [
+    "silver>smoked-topaz",
+    1
+   ],
+   [
+    "greige>grey",
+    1
+   ],
+   [
+    "hematite>silk",
+    1
+   ],
+   [
+    "jet>citrus-green",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "light-siam>siam",
+      18
+     ],
+     [
+      "hematite>jet",
+      10
+     ],
+     [
+      "light-siam>padparadscha",
+      10
+     ],
+     [
+      "silver>crystal-clear",
+      7
+     ],
+     [
+      "crystal-clear>silk",
+      7
+     ],
+     [
+      "indian-siam>siam",
+      4
+     ],
+     [
+      "smoked-topaz>hematite",
+      2
+     ],
+     [
+      "light-smoked-topaz>greige",
+      1
+     ],
+     [
+      "smoked-topaz>greige",
+      1
+     ],
+     [
+      "graphite>jet-hematite",
+      1
+     ],
+     [
+      "greige>light-smoked-topaz",
+      1
+     ],
+     [
+      "silver>silk",
+      1
+     ],
+     [
+      "smoked-topaz>jet",
+      1
+     ],
+     [
+      "light-siam>scarlet",
+      1
+     ],
+     [
+      "greige>grey",
+      1
+     ],
+     [
+      "hematite>silk",
+      1
+     ],
+     [
+      "jet>citrus-green",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "golden-shadow>light-colorado",
+      12
+     ],
+     [
+      "light-smoked-topaz>smoked-topaz",
+      9
+     ],
+     [
+      "golden-shadow>copper",
+      4
+     ],
+     [
+      "light-colorado>copper",
+      3
+     ],
+     [
+      "colorado-topaz>copper",
+      3
+     ],
+     [
+      "light-colorado>golden-shadow",
+      2
+     ],
+     [
+      "copper>light-colorado",
+      2
+     ],
+     [
+      "colorado-topaz>smoked-topaz",
+      1
+     ],
+     [
+      "copper>colorado-topaz",
+      1
+     ],
+     [
+      "copper>golden-shadow",
+      1
+     ],
+     [
+      "rose-peach>silk",
+      1
+     ],
+     [
+      "silk>golden-shadow",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      6
+     ],
+     [
+      "smoked-topaz>light-smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "crystal-clear>smoked-topaz",
+      7
+     ],
+     [
+      "crystal-clear>silk",
+      2
+     ],
+     [
+      "silver>golden-shadow",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     8.090278769629988,
+     2046
+    ],
+    "stones": [
+     6.770457746620619,
+     2018
+    ]
+   },
+   "new": {
+    "all": [
+     8.103923409327086,
+     2046
+    ],
+    "stones": [
+     6.783849535342219,
+     2018
+    ]
+   }
+  }
+ },
+ {
+  "image": "dog",
+  "picture": true,
+  "stones": [
+   1671,
+   1671
+  ],
+  "bySize": [
+   {
+    "ss4": 141,
+    "ss6": 1528,
+    "ss30": 2
+   },
+   {
+    "ss4": 141,
+    "ss6": 1528,
+    "ss30": 2
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [
+    6.66,
+    6.66
+   ],
+   [
+    6.66,
+    6.66
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    21.478,
+    41.124
+   ],
+   [
+    42.834,
+    43.767
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1004,
+   0.1004
+  ],
+  "coverage": [
+   0.632,
+   0.632
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 91,
+  "colourChanges": [
+   [
+    "copper>light-colorado",
+    21
+   ],
+   [
+    "light-peach>silk",
+    11
+   ],
+   [
+    "silver>crystal-clear",
+    10
+   ],
+   [
+    "crystal-clear>silver",
+    6
+   ],
+   [
+    "metallic-sunshine>gold",
+    5
+   ],
+   [
+    "light-colorado>light-topaz",
+    5
+   ],
+   [
+    "silk>light-peach",
+    5
+   ],
+   [
+    "colorado-topaz>light-smoked-topaz",
+    4
+   ],
+   [
+    "light-colorado>copper",
+    2
+   ],
+   [
+    "golden-shadow>silk",
+    2
+   ],
+   [
+    "crystal-clear>golden-shadow",
+    2
+   ],
+   [
+    "colorado-topaz>copper",
+    2
+   ],
+   [
+    "metallic-sunshine>citrine",
+    1
+   ],
+   [
+    "light-smoked-topaz>greige",
+    1
+   ],
+   [
+    "colorado-topaz>light-colorado",
+    1
+   ],
+   [
+    "light-colorado>golden-shadow",
+    1
+   ],
+   [
+    "grey>silver",
+    1
+   ],
+   [
+    "crystal-clear>grey",
+    1
+   ],
+   [
+    "jet>hematite",
+    1
+   ],
+   [
+    "golden-shadow>copper",
+    1
+   ],
+   [
+    "light-smoked-topaz>golden-shadow",
+    1
+   ],
+   [
+    "rose-gold>golden-shadow",
+    1
+   ],
+   [
+    "vintage-rose>light-peach",
+    1
+   ],
+   [
+    "light-smoked-topaz>colorado-topaz",
+    1
+   ],
+   [
+    "light-smoked-topaz>smoked-topaz",
+    1
+   ],
+   [
+    "crystal-clear>light-colorado",
+    1
+   ],
+   [
+    "crystal-clear>smoked-topaz",
+    1
+   ],
+   [
+    "metallic-sunshine>smoked-topaz",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "silver>crystal-clear",
+      10
+     ],
+     [
+      "crystal-clear>silver",
+      6
+     ],
+     [
+      "metallic-sunshine>gold",
+      5
+     ],
+     [
+      "light-colorado>light-topaz",
+      5
+     ],
+     [
+      "crystal-clear>golden-shadow",
+      2
+     ],
+     [
+      "metallic-sunshine>citrine",
+      1
+     ],
+     [
+      "light-colorado>copper",
+      1
+     ],
+     [
+      "light-smoked-topaz>greige",
+      1
+     ],
+     [
+      "grey>silver",
+      1
+     ],
+     [
+      "crystal-clear>grey",
+      1
+     ],
+     [
+      "jet>hematite",
+      1
+     ],
+     [
+      "crystal-clear>light-colorado",
+      1
+     ],
+     [
+      "crystal-clear>smoked-topaz",
+      1
+     ],
+     [
+      "metallic-sunshine>smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "copper>light-colorado",
+      22
+     ],
+     [
+      "light-peach>silk",
+      11
+     ],
+     [
+      "silk>light-peach",
+      5
+     ],
+     [
+      "colorado-topaz>light-smoked-topaz",
+      4
+     ],
+     [
+      "light-colorado>copper",
+      2
+     ],
+     [
+      "golden-shadow>silk",
+      2
+     ],
+     [
+      "colorado-topaz>copper",
+      2
+     ],
+     [
+      "colorado-topaz>light-colorado",
+      1
+     ],
+     [
+      "light-colorado>golden-shadow",
+      1
+     ],
+     [
+      "colorado-topaz>smoked-topaz",
+      1
+     ],
+     [
+      "golden-shadow>copper",
+      1
+     ],
+     [
+      "light-smoked-topaz>golden-shadow",
+      1
+     ],
+     [
+      "rose-gold>golden-shadow",
+      1
+     ],
+     [
+      "vintage-rose>light-peach",
+      1
+     ],
+     [
+      "light-smoked-topaz>colorado-topaz",
+      1
+     ],
+     [
+      "light-smoked-topaz>smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     8.97824116406914,
+     1612
+    ],
+    "stones": [
+     5.359378729344891,
+     1603
+    ]
+   },
+   "new": {
+    "all": [
+     9.015646618287757,
+     1612
+    ],
+    "stones": [
+     5.306521688370867,
+     1603
+    ]
+   }
+  }
+ },
+ {
+  "image": "einstein",
+  "picture": true,
+  "stones": [
+   3591,
+   3591
+  ],
+  "bySize": [
+   {
+    "ss4": 358,
+    "ss6": 3231,
+    "ss20": 2
+   },
+   {
+    "ss4": 338,
+    "ss6": 3251,
+    "ss20": 2
+   }
+  ],
+  "face": [
+   "human",
+   "human"
+  ],
+  "pupilsMm": [
+   [
+    5.62,
+    5.62
+   ],
+   [
+    5.62,
+    5.62
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    85.449,
+    70.119
+   ],
+   [
+    110.963,
+    74.421
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1004,
+   0.1004
+  ],
+  "coverage": [
+   0.67,
+   0.672
+  ],
+  "onlyBuildJ": 48,
+  "onlyNew": 48,
+  "colourChanged": 213,
+  "colourChanges": [
+   [
+    "jet>hematite",
+    47
+   ],
+   [
+    "smoked-topaz>jet",
+    27
+   ],
+   [
+    "smoked-topaz>colorado-topaz",
+    23
+   ],
+   [
+    "silver>crystal-clear",
+    16
+   ],
+   [
+    "grey>silver",
+    12
+   ],
+   [
+    "indian-siam>siam",
+    11
+   ],
+   [
+    "siam>smoked-topaz",
+    10
+   ],
+   [
+    "colorado-topaz>copper",
+    10
+   ],
+   [
+    "silk>rose-gold",
+    10
+   ],
+   [
+    "copper>rose-gold",
+    7
+   ],
+   [
+    "graphite>grey",
+    7
+   ],
+   [
+    "siam>light-siam",
+    4
+   ],
+   [
+    "rose-gold>silk",
+    4
+   ],
+   [
+    "copper>colorado-topaz",
+    3
+   ],
+   [
+    "rose-gold>copper",
+    2
+   ],
+   [
+    "smoked-topaz>hematite",
+    2
+   ],
+   [
+    "grey>light-sapphire",
+    2
+   ],
+   [
+    "siam>scarlet",
+    1
+   ],
+   [
+    "light-siam>scarlet",
+    1
+   ],
+   [
+    "scarlet>padparadscha",
+    1
+   ],
+   [
+    "smoked-topaz>siam",
+    1
+   ],
+   [
+    "padparadscha>scarlet",
+    1
+   ],
+   [
+    "jet>smoked-topaz",
+    1
+   ],
+   [
+    "colorado-topaz>rose-gold",
+    1
+   ],
+   [
+    "graphite>hematite",
+    1
+   ],
+   [
+    "crystal-clear>silver",
+    1
+   ],
+   [
+    "light-smoked-topaz>greige",
+    1
+   ],
+   [
+    "hematite>graphite",
+    1
+   ],
+   [
+    "grey>greige",
+    1
+   ],
+   [
+    "graphite>jet-hematite",
+    1
+   ],
+   [
+    "greige>graphite",
+    1
+   ],
+   [
+    "smoked-topaz>indian-siam",
+    1
+   ],
+   [
+    "graphite>silver",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "jet>hematite",
+      47
+     ],
+     [
+      "silver>crystal-clear",
+      16
+     ],
+     [
+      "grey>silver",
+      12
+     ],
+     [
+      "siam>smoked-topaz",
+      10
+     ],
+     [
+      "graphite>grey",
+      7
+     ],
+     [
+      "siam>light-siam",
+      4
+     ],
+     [
+      "indian-siam>siam",
+      3
+     ],
+     [
+      "jet>smoked-topaz",
+      3
+     ],
+     [
+      "smoked-topaz>hematite",
+      2
+     ],
+     [
+      "grey>light-sapphire",
+      2
+     ],
+     [
+      "light-siam>scarlet",
+      1
+     ],
+     [
+      "scarlet>padparadscha",
+      1
+     ],
+     [
+      "smoked-topaz>siam",
+      1
+     ],
+     [
+      "padparadscha>scarlet",
+      1
+     ],
+     [
+      "smoked-topaz>jet",
+      1
+     ],
+     [
+      "graphite>hematite",
+      1
+     ],
+     [
+      "crystal-clear>silver",
+      1
+     ],
+     [
+      "light-smoked-topaz>greige",
+      1
+     ],
+     [
+      "hematite>graphite",
+      1
+     ],
+     [
+      "grey>greige",
+      1
+     ],
+     [
+      "graphite>jet-hematite",
+      1
+     ],
+     [
+      "greige>graphite",
+      1
+     ],
+     [
+      "smoked-topaz>indian-siam",
+      1
+     ],
+     [
+      "graphite>silver",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 48,
+    "added": 48,
+    "colour": [
+     [
+      "indian-siam>siam",
+      8
+     ],
+     [
+      "siam>scarlet",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "colorado-topaz>copper",
+      12
+     ],
+     [
+      "silk>rose-gold",
+      10
+     ],
+     [
+      "copper>rose-gold",
+      8
+     ],
+     [
+      "smoked-topaz>colorado-topaz",
+      6
+     ],
+     [
+      "rose-gold>silk",
+      4
+     ],
+     [
+      "copper>colorado-topaz",
+      3
+     ],
+     [
+      "rose-gold>copper",
+      2
+     ],
+     [
+      "colorado-topaz>rose-gold",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      17
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>jet",
+      28
+     ]
+    ]
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": [
+    [
+     "smoked-topaz>jet",
+     28
+    ]
+   ]
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     8.50810929986739,
+     3416
+    ],
+    "stones": [
+     7.853652921479504,
+     3392
+    ]
+   },
+   "new": {
+    "all": [
+     8.502149966917015,
+     3421
+    ],
+    "stones": [
+     7.795681796223985,
+     3412
+    ]
+   }
+  }
+ },
+ {
+  "image": "jesus",
+  "picture": true,
+  "stones": [
+   3298,
+   3298
+  ],
+  "bySize": [
+   {
+    "ss4": 417,
+    "ss6": 2880,
+    "ss20": 1
+   },
+   {
+    "ss4": 417,
+    "ss6": 2880,
+    "ss20": 1
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [
+    4.9
+   ],
+   [
+    4.9
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    84.049,
+    72.418
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1002,
+   0.1002
+  ],
+  "coverage": [
+   0.629,
+   0.629
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 390,
+  "colourChanges": [
+   [
+    "copper>golden-shadow",
+    133
+   ],
+   [
+    "golden-shadow>silk",
+    98
+   ],
+   [
+    "greige>grey",
+    34
+   ],
+   [
+    "crystal-clear>silk",
+    16
+   ],
+   [
+    "light-smoked-topaz>copper",
+    13
+   ],
+   [
+    "colorado-topaz>copper",
+    12
+   ],
+   [
+    "jet>hematite",
+    10
+   ],
+   [
+    "jet>smoked-topaz",
+    9
+   ],
+   [
+    "smoked-topaz>colorado-topaz",
+    8
+   ],
+   [
+    "light-smoked-topaz>colorado-topaz",
+    7
+   ],
+   [
+    "greige>golden-shadow",
+    7
+   ],
+   [
+    "light-siam>scarlet",
+    6
+   ],
+   [
+    "smoked-topaz>jet",
+    5
+   ],
+   [
+    "silk>crystal-clear",
+    5
+   ],
+   [
+    "grey>silver",
+    4
+   ],
+   [
+    "silver>crystal-clear",
+    3
+   ],
+   [
+    "light-smoked-topaz>golden-shadow",
+    2
+   ],
+   [
+    "colorado-topaz>golden-shadow",
+    2
+   ],
+   [
+    "graphite>grey",
+    2
+   ],
+   [
+    "golden-shadow>copper",
+    1
+   ],
+   [
+    "smoked-topaz>light-smoked-topaz",
+    1
+   ],
+   [
+    "light-peach>silk",
+    1
+   ],
+   [
+    "light-smoked-topaz>smoked-topaz",
+    1
+   ],
+   [
+    "graphite>black-diamond",
+    1
+   ],
+   [
+    "greige>silk",
+    1
+   ],
+   [
+    "smoked-topaz>siam",
+    1
+   ],
+   [
+    "grey>smoked-topaz",
+    1
+   ],
+   [
+    "jet>light-smoked-topaz",
+    1
+   ],
+   [
+    "copper>light-smoked-topaz",
+    1
+   ],
+   [
+    "vintage-rose>grey",
+    1
+   ],
+   [
+    "jet>copper",
+    1
+   ],
+   [
+    "scarlet>grey",
+    1
+   ],
+   [
+    "jet>greige",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "greige>grey",
+      34
+     ],
+     [
+      "crystal-clear>silk",
+      15
+     ],
+     [
+      "jet>hematite",
+      10
+     ],
+     [
+      "jet>smoked-topaz",
+      8
+     ],
+     [
+      "light-siam>scarlet",
+      6
+     ],
+     [
+      "smoked-topaz>jet",
+      5
+     ],
+     [
+      "silk>crystal-clear",
+      5
+     ],
+     [
+      "grey>silver",
+      4
+     ],
+     [
+      "greige>light-smoked-topaz",
+      4
+     ],
+     [
+      "silver>crystal-clear",
+      3
+     ],
+     [
+      "graphite>grey",
+      2
+     ],
+     [
+      "greige>golden-shadow",
+      2
+     ],
+     [
+      "greige>smoked-topaz",
+      1
+     ],
+     [
+      "graphite>black-diamond",
+      1
+     ],
+     [
+      "greige>copper",
+      1
+     ],
+     [
+      "smoked-topaz>siam",
+      1
+     ],
+     [
+      "jet>light-smoked-topaz",
+      1
+     ],
+     [
+      "grey>smoked-topaz",
+      1
+     ],
+     [
+      "jet>colorado-topaz",
+      1
+     ],
+     [
+      "vintage-rose>grey",
+      1
+     ],
+     [
+      "jet>copper",
+      1
+     ],
+     [
+      "scarlet>grey",
+      1
+     ],
+     [
+      "jet>greige",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "copper>golden-shadow",
+      134
+     ],
+     [
+      "golden-shadow>silk",
+      98
+     ],
+     [
+      "light-smoked-topaz>copper",
+      13
+     ],
+     [
+      "colorado-topaz>copper",
+      12
+     ],
+     [
+      "light-smoked-topaz>colorado-topaz",
+      7
+     ],
+     [
+      "smoked-topaz>colorado-topaz",
+      6
+     ],
+     [
+      "light-smoked-topaz>golden-shadow",
+      5
+     ],
+     [
+      "colorado-topaz>golden-shadow",
+      2
+     ],
+     [
+      "light-smoked-topaz>smoked-topaz",
+      2
+     ],
+     [
+      "golden-shadow>copper",
+      1
+     ],
+     [
+      "smoked-topaz>light-smoked-topaz",
+      1
+     ],
+     [
+      "light-peach>silk",
+      1
+     ],
+     [
+      "smoked-topaz>golden-shadow",
+      1
+     ],
+     [
+      "light-smoked-topaz>silk",
+      1
+     ],
+     [
+      "colorado-topaz>light-smoked-topaz",
+      1
+     ],
+     [
+      "copper>light-smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      2
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "crystal-clear>silk",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     7.942998087155097,
+     3154
+    ],
+    "stones": [
+     6.816530613905047,
+     3136
+    ]
+   },
+   "new": {
+    "all": [
+     8.638912252119743,
+     3154
+    ],
+    "stones": [
+     6.973880859017308,
+     3136
+    ]
+   }
+  }
+ },
+ {
+  "image": "lake",
+  "picture": true,
+  "stones": [
+   4089,
+   4089
+  ],
+  "bySize": [
+   {
+    "ss4": 162,
+    "ss6": 3927
+   },
+   {
+    "ss4": 162,
+    "ss6": 3927
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [],
+   []
+  ],
+  "pupilsAtMm": [],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1002,
+   0.1002
+  ],
+  "coverage": [
+   0.66,
+   0.66
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 587,
+  "colourChanges": [
+   [
+    "sapphire>capri-blue",
+    282
+   ],
+   [
+    "light-sapphire>sapphire",
+    105
+   ],
+   [
+    "silver>crystal-clear",
+    33
+   ],
+   [
+    "light-sapphire>crystal",
+    16
+   ],
+   [
+    "jet>hematite",
+    14
+   ],
+   [
+    "khaki>jet",
+    13
+   ],
+   [
+    "light-smoked-topaz>colorado-topaz",
+    11
+   ],
+   [
+    "emerald>fern-green",
+    9
+   ],
+   [
+    "khaki>emerald",
+    8
+   ],
+   [
+    "golden-shadow>silk",
+    8
+   ],
+   [
+    "crystal-clear>crystal",
+    8
+   ],
+   [
+    "colorado-topaz>copper",
+    7
+   ],
+   [
+    "crystal>crystal-clear",
+    7
+   ],
+   [
+    "jet-hematite>graphite",
+    6
+   ],
+   [
+    "capri-blue>sapphire",
+    6
+   ],
+   [
+    "smoked-topaz>colorado-topaz",
+    5
+   ],
+   [
+    "copper>light-colorado",
+    5
+   ],
+   [
+    "greige>grey",
+    5
+   ],
+   [
+    "fern-green>citrus-green",
+    4
+   ],
+   [
+    "silver>crystal",
+    4
+   ],
+   [
+    "jet>khaki",
+    3
+   ],
+   [
+    "light-colorado>golden-shadow",
+    3
+   ],
+   [
+    "jet>jet-hematite",
+    3
+   ],
+   [
+    "light-sapphire>crystal-clear",
+    3
+   ],
+   [
+    "graphite>greige",
+    3
+   ],
+   [
+    "metallic-sunshine>silk",
+    2
+   ],
+   [
+    "light-sapphire>silver",
+    2
+   ],
+   [
+    "crystal-clear>silver",
+    2
+   ],
+   [
+    "light-sapphire>capri-blue",
+    2
+   ],
+   [
+    "smoked-topaz>light-smoked-topaz",
+    1
+   ],
+   [
+    "hematite>jet",
+    1
+   ],
+   [
+    "emerald>khaki",
+    1
+   ],
+   [
+    "grey>crystal-clear",
+    1
+   ],
+   [
+    "crystal-clear>silk",
+    1
+   ],
+   [
+    "jet-hematite>greige",
+    1
+   ],
+   [
+    "grey>silver",
+    1
+   ],
+   [
+    "fern-green>emerald",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "sapphire>capri-blue",
+      282
+     ],
+     [
+      "light-sapphire>sapphire",
+      105
+     ],
+     [
+      "silver>crystal-clear",
+      33
+     ],
+     [
+      "light-sapphire>crystal",
+      16
+     ],
+     [
+      "jet>hematite",
+      14
+     ],
+     [
+      "khaki>jet",
+      13
+     ],
+     [
+      "emerald>fern-green",
+      9
+     ],
+     [
+      "khaki>emerald",
+      8
+     ],
+     [
+      "crystal-clear>crystal",
+      8
+     ],
+     [
+      "crystal>crystal-clear",
+      7
+     ],
+     [
+      "jet-hematite>graphite",
+      6
+     ],
+     [
+      "capri-blue>sapphire",
+      6
+     ],
+     [
+      "greige>grey",
+      5
+     ],
+     [
+      "fern-green>citrus-green",
+      4
+     ],
+     [
+      "silver>crystal",
+      4
+     ],
+     [
+      "jet>khaki",
+      3
+     ],
+     [
+      "jet>jet-hematite",
+      3
+     ],
+     [
+      "light-sapphire>crystal-clear",
+      3
+     ],
+     [
+      "graphite>greige",
+      3
+     ],
+     [
+      "light-sapphire>silver",
+      2
+     ],
+     [
+      "crystal-clear>silver",
+      2
+     ],
+     [
+      "light-sapphire>capri-blue",
+      2
+     ],
+     [
+      "hematite>jet",
+      1
+     ],
+     [
+      "metallic-sunshine>silk",
+      1
+     ],
+     [
+      "emerald>khaki",
+      1
+     ],
+     [
+      "metallic-sunshine>golden-shadow",
+      1
+     ],
+     [
+      "grey>crystal-clear",
+      1
+     ],
+     [
+      "crystal-clear>silk",
+      1
+     ],
+     [
+      "jet-hematite>greige",
+      1
+     ],
+     [
+      "grey>silver",
+      1
+     ],
+     [
+      "fern-green>emerald",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "light-smoked-topaz>colorado-topaz",
+      11
+     ],
+     [
+      "golden-shadow>silk",
+      9
+     ],
+     [
+      "colorado-topaz>copper",
+      7
+     ],
+     [
+      "copper>light-colorado",
+      5
+     ],
+     [
+      "light-colorado>golden-shadow",
+      3
+     ],
+     [
+      "smoked-topaz>light-smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      5
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     10.606474946358952,
+     3941
+    ],
+    "stones": [
+     9.670831030355517,
+     3930
+    ]
+   },
+   "new": {
+    "all": [
+     10.490026933867343,
+     3941
+    ],
+    "stones": [
+     9.64172405788982,
+     3930
+    ]
+   }
+  }
+ },
+ {
+  "image": "leopard",
+  "picture": true,
+  "stones": [
+   2431,
+   2431
+  ],
+  "bySize": [
+   {
+    "ss4": 224,
+    "ss6": 2205,
+    "ss20": 2
+   },
+   {
+    "ss4": 224,
+    "ss6": 2205,
+    "ss20": 2
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [
+    4.71,
+    4.71
+   ],
+   [
+    4.71,
+    4.71
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    56.24,
+    35.316
+   ],
+   [
+    82.311,
+    35.317
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1019,
+   0.1019
+  ],
+  "coverage": [
+   0.645,
+   0.645
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 240,
+  "colourChanges": [
+   [
+    "gold>light-topaz",
+    78
+   ],
+   [
+    "smoked-topaz>colorado-topaz",
+    49
+   ],
+   [
+    "silver>crystal-clear",
+    21
+   ],
+   [
+    "metallic-sunshine>gold",
+    20
+   ],
+   [
+    "metallic-sunshine>light-topaz",
+    8
+   ],
+   [
+    "golden-shadow>silk",
+    8
+   ],
+   [
+    "metallic-sunshine>silk",
+    7
+   ],
+   [
+    "crystal-clear>silk",
+    6
+   ],
+   [
+    "crystal-clear>silver",
+    4
+   ],
+   [
+    "light-smoked-topaz>colorado-topaz",
+    3
+   ],
+   [
+    "light-smoked-topaz>smoked-topaz",
+    3
+   ],
+   [
+    "jet>silk",
+    3
+   ],
+   [
+    "smoked-topaz>jet",
+    2
+   ],
+   [
+    "hematite>jet",
+    2
+   ],
+   [
+    "light-topaz>gold",
+    2
+   ],
+   [
+    "light-smoked-topaz>copper",
+    2
+   ],
+   [
+    "jet>silver",
+    2
+   ],
+   [
+    "colorado-topaz>smoked-topaz",
+    1
+   ],
+   [
+    "citrine>metallic-sunshine",
+    1
+   ],
+   [
+    "grey>silver",
+    1
+   ],
+   [
+    "greige>metallic-sunshine",
+    1
+   ],
+   [
+    "copper>colorado-topaz",
+    1
+   ],
+   [
+    "silver>grey",
+    1
+   ],
+   [
+    "jet>hematite",
+    1
+   ],
+   [
+    "colorado-topaz>copper",
+    1
+   ],
+   [
+    "light-peach>silk",
+    1
+   ],
+   [
+    "light-topaz>metallic-sunshine",
+    1
+   ],
+   [
+    "jet>golden-shadow",
+    1
+   ],
+   [
+    "jet>gold",
+    1
+   ],
+   [
+    "crystal-clear>copper",
+    1
+   ],
+   [
+    "jet>smoked-topaz",
+    1
+   ],
+   [
+    "jet>metallic-sunshine",
+    1
+   ],
+   [
+    "light-smoked-topaz>golden-shadow",
+    1
+   ],
+   [
+    "light-topaz>jet",
+    1
+   ],
+   [
+    "metallic-sunshine>crystal-clear",
+    1
+   ],
+   [
+    "metallic-sunshine>jet",
+    1
+   ],
+   [
+    "jet>crystal-clear",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "gold>light-topaz",
+      78
+     ],
+     [
+      "silver>crystal-clear",
+      21
+     ],
+     [
+      "metallic-sunshine>gold",
+      20
+     ],
+     [
+      "metallic-sunshine>light-topaz",
+      8
+     ],
+     [
+      "metallic-sunshine>silk",
+      6
+     ],
+     [
+      "crystal-clear>silk",
+      5
+     ],
+     [
+      "crystal-clear>silver",
+      4
+     ],
+     [
+      "jet>silk",
+      3
+     ],
+     [
+      "smoked-topaz>jet",
+      2
+     ],
+     [
+      "hematite>jet",
+      2
+     ],
+     [
+      "light-topaz>gold",
+      2
+     ],
+     [
+      "jet>silver",
+      2
+     ],
+     [
+      "citrine>metallic-sunshine",
+      1
+     ],
+     [
+      "grey>silver",
+      1
+     ],
+     [
+      "metallic-sunshine>golden-shadow",
+      1
+     ],
+     [
+      "greige>metallic-sunshine",
+      1
+     ],
+     [
+      "silver>grey",
+      1
+     ],
+     [
+      "jet>hematite",
+      1
+     ],
+     [
+      "light-topaz>metallic-sunshine",
+      1
+     ],
+     [
+      "jet>golden-shadow",
+      1
+     ],
+     [
+      "jet>gold",
+      1
+     ],
+     [
+      "crystal-clear>golden-shadow",
+      1
+     ],
+     [
+      "jet>smoked-topaz",
+      1
+     ],
+     [
+      "jet>metallic-sunshine",
+      1
+     ],
+     [
+      "light-topaz>jet",
+      1
+     ],
+     [
+      "metallic-sunshine>crystal-clear",
+      1
+     ],
+     [
+      "metallic-sunshine>jet",
+      1
+     ],
+     [
+      "jet>crystal-clear",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      17
+     ],
+     [
+      "golden-shadow>silk",
+      9
+     ],
+     [
+      "light-smoked-topaz>colorado-topaz",
+      3
+     ],
+     [
+      "light-smoked-topaz>smoked-topaz",
+      3
+     ],
+     [
+      "colorado-topaz>smoked-topaz",
+      2
+     ],
+     [
+      "light-smoked-topaz>copper",
+      2
+     ],
+     [
+      "copper>colorado-topaz",
+      1
+     ],
+     [
+      "colorado-topaz>copper",
+      1
+     ],
+     [
+      "light-peach>silk",
+      1
+     ],
+     [
+      "golden-shadow>copper",
+      1
+     ],
+     [
+      "light-smoked-topaz>golden-shadow",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      33
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "crystal-clear>silk",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     11.09726363541705,
+     2322
+    ],
+    "stones": [
+     8.650372271984763,
+     2314
+    ]
+   },
+   "new": {
+    "all": [
+     10.936078234569408,
+     2322
+    ],
+    "stones": [
+     8.419645306747794,
+     2314
+    ]
+   }
+  }
+ },
+ {
+  "image": "logo",
+  "picture": true,
+  "stones": [
+   833,
+   833
+  ],
+  "bySize": [
+   {
+    "ss4": 9,
+    "ss6": 824
+   },
+   {
+    "ss4": 9,
+    "ss6": 824
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [],
+   []
+  ],
+  "pupilsAtMm": [],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1024,
+   0.1024
+  ],
+  "coverage": [
+   0.796,
+   0.796
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 30,
+  "colourChanges": [
+   [
+    "light-topaz>gold",
+    29
+   ],
+   [
+    "gold>light-topaz",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "light-topaz>gold",
+      29
+     ],
+     [
+      "gold>light-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     3.7821029119932414,
+     825
+    ],
+    "stones": [
+     3.5572760895244633,
+     817
+    ]
+   },
+   "new": {
+    "all": [
+     3.864335103611408,
+     825
+    ],
+    "stones": [
+     3.407708994075175,
+     817
+    ]
+   }
+  }
+ },
+ {
+  "image": "parrot",
+  "picture": true,
+  "stones": [
+   2542,
+   2542
+  ],
+  "bySize": [
+   {
+    "ss4": 234,
+    "ss6": 2307,
+    "ss20": 1
+   },
+   {
+    "ss4": 234,
+    "ss6": 2307,
+    "ss20": 1
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [
+    4.51
+   ],
+   [
+    4.51
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    129.934,
+    87.506
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1008,
+   0.1008
+  ],
+  "coverage": [
+   0.644,
+   0.644
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 242,
+  "colourChanges": [
+   [
+    "light-sapphire>sapphire",
+    102
+   ],
+   [
+    "hematite>jet",
+    29
+   ],
+   [
+    "jet>hematite",
+    24
+   ],
+   [
+    "fern-green>peridot",
+    22
+   ],
+   [
+    "emerald>fern-green",
+    8
+   ],
+   [
+    "peridot>fern-green",
+    4
+   ],
+   [
+    "fern-green>citrus-green",
+    3
+   ],
+   [
+    "citrine>citrus-green",
+    2
+   ],
+   [
+    "aquamarine>chrysolite",
+    2
+   ],
+   [
+    "peridot>chrysolite",
+    2
+   ],
+   [
+    "capri-blue>sapphire",
+    2
+   ],
+   [
+    "light-siam>padparadscha",
+    2
+   ],
+   [
+    "colorado-topaz>rose-gold",
+    2
+   ],
+   [
+    "sapphire>jet",
+    2
+   ],
+   [
+    "citrus-green>fern-green",
+    2
+   ],
+   [
+    "capri-blue>hematite",
+    2
+   ],
+   [
+    "citrine>gold",
+    1
+   ],
+   [
+    "peridot>citrus-green",
+    1
+   ],
+   [
+    "citrus-green>citrine",
+    1
+   ],
+   [
+    "gold>citrine",
+    1
+   ],
+   [
+    "chrysolite>peridot",
+    1
+   ],
+   [
+    "fern-green>olivine",
+    1
+   ],
+   [
+    "emerald>chrysolite",
+    1
+   ],
+   [
+    "grey>light-sapphire",
+    1
+   ],
+   [
+    "olivine>fern-green",
+    1
+   ],
+   [
+    "jet-hematite>hematite",
+    1
+   ],
+   [
+    "emerald>aquamarine",
+    1
+   ],
+   [
+    "emerald>jet-hematite",
+    1
+   ],
+   [
+    "khaki>hematite",
+    1
+   ],
+   [
+    "hematite>khaki",
+    1
+   ],
+   [
+    "jet-hematite>emerald",
+    1
+   ],
+   [
+    "jet>smoked-topaz",
+    1
+   ],
+   [
+    "hematite>jet-hematite",
+    1
+   ],
+   [
+    "capri-blue>jet",
+    1
+   ],
+   [
+    "sapphire>hematite",
+    1
+   ],
+   [
+    "citrus-green>peridot",
+    1
+   ],
+   [
+    "gold>fern-green",
+    1
+   ],
+   [
+    "chrysolite>hematite",
+    1
+   ],
+   [
+    "sapphire>graphite",
+    1
+   ],
+   [
+    "aquamarine>hematite",
+    1
+   ],
+   [
+    "aquamarine>emerald",
+    1
+   ],
+   [
+    "gold>citrus-green",
+    1
+   ],
+   [
+    "fern-green>emerald",
+    1
+   ],
+   [
+    "golden-shadow>smoked-topaz",
+    1
+   ],
+   [
+    "citrus-green>silk",
+    1
+   ],
+   [
+    "citrus-green>olivine",
+    1
+   ],
+   [
+    "citrus-green>metallic-sunshine",
+    1
+   ],
+   [
+    "chrysolite>emerald",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "light-sapphire>sapphire",
+      102
+     ],
+     [
+      "hematite>jet",
+      29
+     ],
+     [
+      "jet>hematite",
+      24
+     ],
+     [
+      "fern-green>peridot",
+      22
+     ],
+     [
+      "emerald>fern-green",
+      8
+     ],
+     [
+      "peridot>fern-green",
+      4
+     ],
+     [
+      "fern-green>citrus-green",
+      3
+     ],
+     [
+      "citrine>citrus-green",
+      2
+     ],
+     [
+      "aquamarine>chrysolite",
+      2
+     ],
+     [
+      "peridot>chrysolite",
+      2
+     ],
+     [
+      "capri-blue>sapphire",
+      2
+     ],
+     [
+      "light-siam>padparadscha",
+      2
+     ],
+     [
+      "sapphire>jet",
+      2
+     ],
+     [
+      "citrus-green>fern-green",
+      2
+     ],
+     [
+      "capri-blue>hematite",
+      2
+     ],
+     [
+      "citrine>gold",
+      1
+     ],
+     [
+      "peridot>citrus-green",
+      1
+     ],
+     [
+      "citrus-green>citrine",
+      1
+     ],
+     [
+      "gold>citrine",
+      1
+     ],
+     [
+      "chrysolite>peridot",
+      1
+     ],
+     [
+      "fern-green>olivine",
+      1
+     ],
+     [
+      "emerald>chrysolite",
+      1
+     ],
+     [
+      "grey>light-sapphire",
+      1
+     ],
+     [
+      "olivine>fern-green",
+      1
+     ],
+     [
+      "jet-hematite>hematite",
+      1
+     ],
+     [
+      "emerald>aquamarine",
+      1
+     ],
+     [
+      "emerald>jet-hematite",
+      1
+     ],
+     [
+      "khaki>hematite",
+      1
+     ],
+     [
+      "hematite>khaki",
+      1
+     ],
+     [
+      "jet-hematite>emerald",
+      1
+     ],
+     [
+      "jet>smoked-topaz",
+      1
+     ],
+     [
+      "hematite>jet-hematite",
+      1
+     ],
+     [
+      "capri-blue>jet",
+      1
+     ],
+     [
+      "sapphire>hematite",
+      1
+     ],
+     [
+      "citrus-green>peridot",
+      1
+     ],
+     [
+      "gold>fern-green",
+      1
+     ],
+     [
+      "chrysolite>hematite",
+      1
+     ],
+     [
+      "sapphire>graphite",
+      1
+     ],
+     [
+      "aquamarine>hematite",
+      1
+     ],
+     [
+      "aquamarine>emerald",
+      1
+     ],
+     [
+      "gold>citrus-green",
+      1
+     ],
+     [
+      "fern-green>emerald",
+      1
+     ],
+     [
+      "citrus-green>silk",
+      1
+     ],
+     [
+      "citrus-green>olivine",
+      1
+     ],
+     [
+      "citrus-green>metallic-sunshine",
+      1
+     ],
+     [
+      "chrysolite>emerald",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "colorado-topaz>rose-gold",
+      2
+     ],
+     [
+      "golden-shadow>smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     12.538387620168514,
+     2430
+    ],
+    "stones": [
+     10.539708078386415,
+     2422
+    ]
+   },
+   "new": {
+    "all": [
+     11.882701294044569,
+     2430
+    ],
+    "stones": [
+     10.050550899863769,
+     2422
+    ]
+   }
+  }
+ },
+ {
+  "image": "portrait",
+  "picture": true,
+  "stones": [
+   3995,
+   3991
+  ],
+  "bySize": [
+   {
+    "ss4": 421,
+    "ss6": 3572,
+    "ss10": 2
+   },
+   {
+    "ss4": 403,
+    "ss6": 3586,
+    "ss10": 2
+   }
+  ],
+  "face": [
+   "human",
+   "human"
+  ],
+  "pupilsMm": [
+   [
+    3.46,
+    3.46
+   ],
+   [
+    3.46,
+    3.46
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    74.326,
+    76.48
+   ],
+   [
+    38.563,
+    80.177
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1,
+   0.1
+  ],
+  "coverage": [
+   0.651,
+   0.651
+  ],
+  "onlyBuildJ": 30,
+  "onlyNew": 26,
+  "colourChanged": 965,
+  "colourChanges": [
+   [
+    "graphite>jet-hematite",
+    124
+   ],
+   [
+    "silver>grey",
+    106
+   ],
+   [
+    "hematite>jet-hematite",
+    93
+   ],
+   [
+    "graphite>jet",
+    74
+   ],
+   [
+    "smoked-topaz>jet",
+    58
+   ],
+   [
+    "hematite>jet",
+    46
+   ],
+   [
+    "grey>graphite",
+    44
+   ],
+   [
+    "light-peach>silk",
+    43
+   ],
+   [
+    "grey>jet",
+    36
+   ],
+   [
+    "crystal-clear>silk",
+    32
+   ],
+   [
+    "golden-shadow>silk",
+    30
+   ],
+   [
+    "greige>jet",
+    24
+   ],
+   [
+    "golden-shadow>light-peach",
+    23
+   ],
+   [
+    "light-smoked-topaz>golden-shadow",
+    20
+   ],
+   [
+    "rose-gold>light-peach",
+    19
+   ],
+   [
+    "golden-shadow>rose-gold",
+    19
+   ],
+   [
+    "graphite>greige",
+    15
+   ],
+   [
+    "jet-hematite>jet",
+    13
+   ],
+   [
+    "greige>grey",
+    12
+   ],
+   [
+    "rose-gold>silk",
+    11
+   ],
+   [
+    "jet>hematite",
+    11
+   ],
+   [
+    "light-smoked-topaz>rose-gold",
+    10
+   ],
+   [
+    "greige>graphite",
+    9
+   ],
+   [
+    "grey>greige",
+    8
+   ],
+   [
+    "greige>golden-shadow",
+    8
+   ],
+   [
+    "graphite>hematite",
+    7
+   ],
+   [
+    "hematite>graphite",
+    7
+   ],
+   [
+    "greige>rose-gold",
+    5
+   ],
+   [
+    "grey>jet-hematite",
+    5
+   ],
+   [
+    "jet-hematite>graphite",
+    5
+   ],
+   [
+    "silk>light-peach",
+    3
+   ],
+   [
+    "smoked-topaz>light-smoked-topaz",
+    3
+   ],
+   [
+    "jet-hematite>greige",
+    3
+   ],
+   [
+    "smoked-topaz>jet-hematite",
+    3
+   ],
+   [
+    "rose-gold>golden-shadow",
+    2
+   ],
+   [
+    "light-peach>rose-gold",
+    2
+   ],
+   [
+    "greige>silk",
+    2
+   ],
+   [
+    "golden-shadow>greige",
+    2
+   ],
+   [
+    "light-smoked-topaz>greige",
+    2
+   ],
+   [
+    "siam>light-siam",
+    2
+   ],
+   [
+    "greige>jet-hematite",
+    2
+   ],
+   [
+    "indian-siam>jet",
+    2
+   ],
+   [
+    "grey>silk",
+    1
+   ],
+   [
+    "crystal-clear>grey",
+    1
+   ],
+   [
+    "silver>crystal-clear",
+    1
+   ],
+   [
+    "greige>light-peach",
+    1
+   ],
+   [
+    "grey>light-peach",
+    1
+   ],
+   [
+    "light-smoked-topaz>silk",
+    1
+   ],
+   [
+    "greige>vintage-rose",
+    1
+   ],
+   [
+    "graphite>grey",
+    1
+   ],
+   [
+    "silk>golden-shadow",
+    1
+   ],
+   [
+    "light-smoked-topaz>light-peach",
+    1
+   ],
+   [
+    "siam>scarlet",
+    1
+   ],
+   [
+    "light-siam>siam",
+    1
+   ],
+   [
+    "indian-siam>siam",
+    1
+   ],
+   [
+    "jet-hematite>hematite",
+    1
+   ],
+   [
+    "grey>smoked-topaz",
+    1
+   ],
+   [
+    "smoked-topaz>hematite",
+    1
+   ],
+   [
+    "vintage-rose>light-peach",
+    1
+   ],
+   [
+    "scarlet>padparadscha",
+    1
+   ],
+   [
+    "greige>black-diamond",
+    1
+   ],
+   [
+    "jet-hematite>smoked-topaz",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "graphite>jet",
+      75
+     ],
+     [
+      "hematite>jet",
+      53
+     ],
+     [
+      "grey>jet",
+      39
+     ],
+     [
+      "crystal-clear>silk",
+      28
+     ],
+     [
+      "greige>jet",
+      25
+     ],
+     [
+      "smoked-topaz>jet",
+      23
+     ],
+     [
+      "jet-hematite>graphite",
+      23
+     ],
+     [
+      "graphite>hematite",
+      17
+     ],
+     [
+      "greige>grey",
+      15
+     ],
+     [
+      "graphite>greige",
+      15
+     ],
+     [
+      "jet-hematite>jet",
+      12
+     ],
+     [
+      "greige>light-smoked-topaz",
+      10
+     ],
+     [
+      "hematite>graphite",
+      10
+     ],
+     [
+      "hematite>jet-hematite",
+      8
+     ],
+     [
+      "grey>greige",
+      7
+     ],
+     [
+      "greige>graphite",
+      6
+     ],
+     [
+      "jet>smoked-topaz",
+      5
+     ],
+     [
+      "grey>graphite",
+      4
+     ],
+     [
+      "greige>rose-gold",
+      4
+     ],
+     [
+      "hematite>smoked-topaz",
+      4
+     ],
+     [
+      "greige>silver",
+      3
+     ],
+     [
+      "jet-hematite>greige",
+      3
+     ],
+     [
+      "grey>silver",
+      2
+     ],
+     [
+      "golden-shadow>greige",
+      2
+     ],
+     [
+      "light-smoked-topaz>greige",
+      2
+     ],
+     [
+      "grey>jet-hematite",
+      2
+     ],
+     [
+      "greige>golden-shadow",
+      2
+     ],
+     [
+      "siam>light-siam",
+      2
+     ],
+     [
+      "jet-hematite>hematite",
+      2
+     ],
+     [
+      "greige>jet-hematite",
+      2
+     ],
+     [
+      "smoked-topaz>graphite",
+      2
+     ],
+     [
+      "jet>hematite",
+      2
+     ],
+     [
+      "silver>grey",
+      2
+     ],
+     [
+      "grey>hematite",
+      2
+     ],
+     [
+      "indian-siam>jet",
+      2
+     ],
+     [
+      "silver>jet",
+      2
+     ],
+     [
+      "grey>silk",
+      1
+     ],
+     [
+      "crystal-clear>grey",
+      1
+     ],
+     [
+      "silver>crystal-clear",
+      1
+     ],
+     [
+      "graphite>grey",
+      1
+     ],
+     [
+      "siam>scarlet",
+      1
+     ],
+     [
+      "light-siam>siam",
+      1
+     ],
+     [
+      "graphite>jet-hematite",
+      1
+     ],
+     [
+      "indian-siam>siam",
+      1
+     ],
+     [
+      "grey>smoked-topaz",
+      1
+     ],
+     [
+      "smoked-topaz>hematite",
+      1
+     ],
+     [
+      "scarlet>padparadscha",
+      1
+     ],
+     [
+      "greige>black-diamond",
+      1
+     ],
+     [
+      "smoked-topaz>jet-hematite",
+      1
+     ],
+     [
+      "jet-hematite>smoked-topaz",
+      1
+     ],
+     [
+      "silver>greige",
+      1
+     ],
+     [
+      "crystal-clear>jet",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 30,
+    "added": 26,
+    "colour": [
+     [
+      "graphite>jet-hematite",
+      136
+     ],
+     [
+      "silver>grey",
+      106
+     ],
+     [
+      "hematite>jet-hematite",
+      96
+     ],
+     [
+      "grey>graphite",
+      44
+     ],
+     [
+      "jet>hematite",
+      19
+     ],
+     [
+      "smoked-topaz>jet",
+      3
+     ],
+     [
+      "silver>vintage-rose",
+      2
+     ],
+     [
+      "smoked-topaz>hematite",
+      2
+     ],
+     [
+      "jet>smoked-topaz",
+      1
+     ],
+     [
+      "grey>greige",
+      1
+     ],
+     [
+      "jet-hematite>smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "light-peach>silk",
+      43
+     ],
+     [
+      "golden-shadow>silk",
+      30
+     ],
+     [
+      "light-smoked-topaz>golden-shadow",
+      27
+     ],
+     [
+      "golden-shadow>light-peach",
+      23
+     ],
+     [
+      "rose-gold>light-peach",
+      20
+     ],
+     [
+      "golden-shadow>rose-gold",
+      20
+     ],
+     [
+      "light-smoked-topaz>rose-gold",
+      13
+     ],
+     [
+      "rose-gold>silk",
+      13
+     ],
+     [
+      "silk>light-peach",
+      3
+     ],
+     [
+      "smoked-topaz>light-smoked-topaz",
+      3
+     ],
+     [
+      "rose-gold>golden-shadow",
+      2
+     ],
+     [
+      "light-peach>rose-gold",
+      2
+     ],
+     [
+      "vintage-rose>light-peach",
+      2
+     ],
+     [
+      "light-smoked-topaz>silk",
+      1
+     ],
+     [
+      "silk>golden-shadow",
+      1
+     ],
+     [
+      "light-smoked-topaz>light-peach",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "crystal-clear>silk",
+      4
+     ]
+    ]
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>jet",
+      41
+     ]
+    ]
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": [
+    [
+     "smoked-topaz>jet",
+     41
+    ]
+   ]
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     13.904282325619862,
+     3870
+    ],
+    "stones": [
+     8.675415326332153,
+     3846
+    ]
+   },
+   "new": {
+    "all": [
+     12.202409553043317,
+     3869
+    ],
+    "stones": [
+     7.134804289741809,
+     3845
+    ]
+   }
+  }
+ },
+ {
+  "image": "rose",
+  "picture": true,
+  "stones": [
+   1846,
+   1846
+  ],
+  "bySize": [
+   {
+    "ss4": 157,
+    "ss6": 1689
+   },
+   {
+    "ss4": 157,
+    "ss6": 1689
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [],
+   []
+  ],
+  "pupilsAtMm": [],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1012,
+   0.1012
+  ],
+  "coverage": [
+   0.683,
+   0.683
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 37,
+  "colourChanges": [
+   [
+    "hyacinth>padparadscha",
+    26
+   ],
+   [
+    "padparadscha>hyacinth",
+    9
+   ],
+   [
+    "hyacinth>scarlet",
+    2
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "hyacinth>padparadscha",
+      26
+     ],
+     [
+      "padparadscha>hyacinth",
+      9
+     ],
+     [
+      "hyacinth>scarlet",
+      2
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     8.625179587088608,
+     1760
+    ],
+    "stones": [
+     8.446657939954772,
+     1754
+    ]
+   },
+   "new": {
+    "all": [
+     8.571176337452732,
+     1760
+    ],
+    "stones": [
+     8.389270933235574,
+     1754
+    ]
+   }
+  }
+ },
+ {
+  "image": "tulips",
+  "picture": true,
+  "stones": [
+   2673,
+   2673
+  ],
+  "bySize": [
+   {
+    "ss4": 126,
+    "ss6": 2547
+   },
+   {
+    "ss4": 126,
+    "ss6": 2547
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [],
+   []
+  ],
+  "pupilsAtMm": [],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1009,
+   0.1009
+  ],
+  "coverage": [
+   0.665,
+   0.665
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 135,
+  "colourChanges": [
+   [
+    "fuchsia>scarlet",
+    41
+   ],
+   [
+    "metallic-sunshine>citrine",
+    38
+   ],
+   [
+    "silk>metallic-sunshine",
+    10
+   ],
+   [
+    "silver>crystal-clear",
+    7
+   ],
+   [
+    "silk>crystal-clear",
+    5
+   ],
+   [
+    "light-colorado>light-topaz",
+    5
+   ],
+   [
+    "emerald>erinite",
+    4
+   ],
+   [
+    "rose>scarlet",
+    4
+   ],
+   [
+    "metallic-sunshine>silk",
+    4
+   ],
+   [
+    "light-topaz>gold",
+    3
+   ],
+   [
+    "scarlet>rose",
+    3
+   ],
+   [
+    "silk>citrine",
+    2
+   ],
+   [
+    "silk>light-topaz",
+    2
+   ],
+   [
+    "golden-shadow>light-topaz",
+    2
+   ],
+   [
+    "citrine>gold",
+    1
+   ],
+   [
+    "rose>rose-peach",
+    1
+   ],
+   [
+    "light-topaz>metallic-sunshine",
+    1
+   ],
+   [
+    "fuchsia>rose",
+    1
+   ],
+   [
+    "citrine>rose",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "fuchsia>scarlet",
+      41
+     ],
+     [
+      "metallic-sunshine>citrine",
+      38
+     ],
+     [
+      "silk>metallic-sunshine",
+      10
+     ],
+     [
+      "silver>crystal-clear",
+      7
+     ],
+     [
+      "silk>crystal-clear",
+      5
+     ],
+     [
+      "light-colorado>light-topaz",
+      5
+     ],
+     [
+      "emerald>erinite",
+      4
+     ],
+     [
+      "rose>scarlet",
+      4
+     ],
+     [
+      "metallic-sunshine>silk",
+      4
+     ],
+     [
+      "light-topaz>gold",
+      3
+     ],
+     [
+      "scarlet>rose",
+      3
+     ],
+     [
+      "silk>citrine",
+      2
+     ],
+     [
+      "silk>light-topaz",
+      2
+     ],
+     [
+      "golden-shadow>light-topaz",
+      2
+     ],
+     [
+      "citrine>gold",
+      1
+     ],
+     [
+      "rose>rose-peach",
+      1
+     ],
+     [
+      "light-topaz>metallic-sunshine",
+      1
+     ],
+     [
+      "fuchsia>rose",
+      1
+     ],
+     [
+      "citrine>rose",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     10.57732211703208,
+     2577
+    ],
+    "stones": [
+     9.885040476226951,
+     2572
+    ]
+   },
+   "new": {
+    "all": [
+     10.706443847346346,
+     2577
+    ],
+    "stones": [
+     9.88886030999493,
+     2572
+    ]
+   }
+  }
+ },
+ {
+  "image": "woman",
+  "picture": true,
+  "stones": [
+   2611,
+   2612
+  ],
+  "bySize": [
+   {
+    "ss4": 217,
+    "ss6": 2392,
+    "ss30": 2
+   },
+   {
+    "ss4": 202,
+    "ss6": 2408,
+    "ss30": 2
+   }
+  ],
+  "face": [
+   "human",
+   "human"
+  ],
+  "pupilsMm": [
+   [
+    6.32,
+    6.32
+   ],
+   [
+    6.32,
+    6.32
+   ]
+  ],
+  "pupilsAtMm": [
+   [
+    112.293,
+    37.06
+   ],
+   [
+    92.412,
+    37.388
+   ]
+  ],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1004,
+   0.1004
+  ],
+  "coverage": [
+   0.672,
+   0.674
+  ],
+  "onlyBuildJ": 35,
+  "onlyNew": 36,
+  "colourChanged": 525,
+  "colourChanges": [
+   [
+    "smoked-topaz>colorado-topaz",
+    149
+   ],
+   [
+    "rose-gold>silk",
+    147
+   ],
+   [
+    "smoked-topaz>jet",
+    96
+   ],
+   [
+    "copper>rose-gold",
+    64
+   ],
+   [
+    "colorado-topaz>copper",
+    38
+   ],
+   [
+    "colorado-topaz>rose-gold",
+    12
+   ],
+   [
+    "golden-shadow>silk",
+    7
+   ],
+   [
+    "jet>hematite",
+    3
+   ],
+   [
+    "copper>silk",
+    2
+   ],
+   [
+    "rose-gold>copper",
+    2
+   ],
+   [
+    "light-smoked-topaz>copper",
+    1
+   ],
+   [
+    "light-peach>silk",
+    1
+   ],
+   [
+    "silk>crystal-clear",
+    1
+   ],
+   [
+    "smoked-topaz>light-siam",
+    1
+   ],
+   [
+    "jet>smoked-topaz",
+    1
+   ]
+  ],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>jet",
+      6
+     ],
+     [
+      "jet>hematite",
+      3
+     ],
+     [
+      "silk>crystal-clear",
+      1
+     ],
+     [
+      "smoked-topaz>light-siam",
+      1
+     ],
+     [
+      "jet>smoked-topaz",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 35,
+    "added": 36,
+    "colour": [
+     [
+      "jet>smoked-topaz",
+      3
+     ],
+     [
+      "rose-gold>copper",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "rose-gold>silk",
+      150
+     ],
+     [
+      "smoked-topaz>colorado-topaz",
+      77
+     ],
+     [
+      "copper>rose-gold",
+      66
+     ],
+     [
+      "colorado-topaz>copper",
+      38
+     ],
+     [
+      "colorado-topaz>rose-gold",
+      13
+     ],
+     [
+      "golden-shadow>silk",
+      11
+     ],
+     [
+      "copper>silk",
+      2
+     ],
+     [
+      "rose-gold>copper",
+      2
+     ],
+     [
+      "light-smoked-topaz>copper",
+      1
+     ],
+     [
+      "light-peach>silk",
+      1
+     ],
+     [
+      "light-smoked-topaz>smoked-topaz",
+      1
+     ],
+     [
+      "light-smoked-topaz>light-peach",
+      1
+     ]
+    ]
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>colorado-topaz",
+      75
+     ]
+    ]
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": [
+     [
+      "smoked-topaz>jet",
+      95
+     ]
+    ]
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": [
+    [
+     "smoked-topaz>jet",
+     95
+    ]
+   ]
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     8.085527138151324,
+     2523
+    ],
+    "stones": [
+     7.535121503602875,
+     2511
+    ]
+   },
+   "new": {
+    "all": [
+     8.313460000141951,
+     2524
+    ],
+    "stones": [
+     6.787415128350371,
+     2514
+    ]
+   }
+  }
+ },
+ {
+  "image": "sunburst_flower",
+  "picture": false,
+  "stones": [
+   1011,
+   1011
+  ],
+  "bySize": [
+   {
+    "ss4": 48,
+    "ss6": 963
+   },
+   {
+    "ss4": 48,
+    "ss6": 963
+   }
+  ],
+  "face": [
+   "animal",
+   "animal"
+  ],
+  "pupilsMm": [
+   [],
+   []
+  ],
+  "pupilsAtMm": [],
+  "violations": [
+   0,
+   0
+  ],
+  "minGapMm": [
+   0.1017,
+   0.1017
+  ],
+  "coverage": [
+   0.69,
+   0.69
+  ],
+  "onlyBuildJ": 0,
+  "onlyNew": 0,
+  "colourChanged": 0,
+  "colourChanges": [],
+  "steps": [
+   {
+    "rule": "plausible_eyes",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "sample_delivered",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "human_iris_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "skin_nearest_inner",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "warm_shadow",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "lone_white_skin",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   },
+   {
+    "rule": "soft_outlines_off",
+    "removed": 0,
+    "added": 0,
+    "colour": []
+   }
+  ],
+  "softOutlinesAlone": {
+   "removed": 0,
+   "added": 0,
+   "colour": []
+  },
+  "cellDeltaE": {
+   "buildJ": {
+    "all": [
+     7.0273292039879784,
+     967
+    ],
+    "stones": [
+     6.303332358680922,
+     965
+    ]
+   },
+   "new": {
+    "all": [
+     7.0273292039879784,
+     967
+    ],
+    "stones": [
+     6.303332358680922,
+     965
+    ]
+   }
+  }
+ }
+]

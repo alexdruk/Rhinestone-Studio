@@ -146,6 +146,19 @@ export const GROUPS = {
     // IMG-026 build C1: validateProject() for ai-layout layers, the redraw paths, the Fill style
     // option, the exporters with a 1.5 mm stone and byte identity for gallery and legacy image stones.
     'test-img-026-ai-layout-app.mjs',
+    // IMG-026 build N: prompt v7 and the model input -- the shape the product picks, the request it
+    // makes, the Flat Sheet crop, and fake mode for every product.
+    'test-img-026-prompt-v7.mjs',
+    // IMG-026 build P: Black & white in two styles -- the Bold and Shaded prompts, the layout mode and
+    // palette each look sends, fake mode, the layer's look and the lightbox choice.
+    'test-img-026-black-white.mjs',
+    // RS-3043: npm run studio (tools/studio.mjs) with a fake layout service and dev server, the
+    // LAYOUT_PORT setting in start_layout.sh, and .env.example's URL.
+    'test-rs-3043-studio.mjs',
+    // RS-3046: the dev server's layout service routes (status, start, loopback only, stopped with the
+    // dev server) and the lightbox's indicator, redraw button and Tinted result view.
+    'test-rs-3046-layout-service-control.mjs',
+    'test-rs-3046-lightbox.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
@@ -362,6 +375,8 @@ export const GROUPS = {
     'test-rs-3038-prod-sheet-messages.mjs',
     // RS-3041: multi-page Production Sheets (cover + true-size tile pages, PDF only).
     'test-rs-3041-multi-page.mjs',
+    // RS-3042: EPS and AI exports, and the inch sheet's Gap line in mm.
+    'test-rs-3042-eps-ai-export.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
     // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)
@@ -387,6 +402,8 @@ export const GROUPS = {
     'test-preview3d-stone-orientation.mjs',
     // IMG-026K: the 3D preview's round flat-back rhinestone geometry.
     'test-img-026-rhinestone-geometry.mjs',
+    // IMG-026Q: the 2D canvas's tinted view (src/renderer/TintedView.js).
+    'test-img-026-tinted-view.mjs',
     // src/drawing/StoneSpriteCache.js: offscreen sprite baking for the Design view's stone-dot
     // preview (cache-hit/miss behaviour against a stubbed canvas).
     'test-stone-sprite-cache.mjs',

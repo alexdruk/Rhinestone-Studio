@@ -1,0 +1,420 @@
+[
+ {
+  "id": "portrait-freckles",
+  "attempt": "tools/scratch/img-026n/attempts/portrait-freckles",
+  "patches": [
+   50,
+   280,
+   205,
+   425,
+   199
+  ],
+  "patchRadiusPx": 23.5,
+  "aiLandmarkShiftRadii": 0.38,
+  "aiArea": "ai landmarks",
+  "photo": {
+   "n": 7798,
+   "L": 72.8,
+   "a": 19.2,
+   "b": 19.3,
+   "Lmean": 72.6
+  },
+  "ai": {
+   "n": 10900,
+   "L": 75.1,
+   "a": 26.3,
+   "b": 27.8,
+   "Lmean": 74.2
+  },
+  "restPhoto": {
+   "n": 383867,
+   "L": 50.0,
+   "a": 18.9,
+   "b": 22.7,
+   "Lmean": 46.2
+  },
+  "restAi": {
+   "n": 549422,
+   "L": 54.7,
+   "a": 24.3,
+   "b": 33.1,
+   "Lmean": 48.1
+  },
+  "hullPhoto": {
+   "n": 145458,
+   "L": 67.9,
+   "a": 19.0,
+   "b": 20.4,
+   "Lmean": 64.9
+  },
+  "hullAi": {
+   "n": 210619,
+   "L": 70.8,
+   "a": 24.3,
+   "b": 29.7,
+   "Lmean": 65.5
+  },
+  "stones": {
+   "n": 48,
+   "colours": {
+    "light-peach": 23,
+    "rose-gold": 14,
+    "silk": 10,
+    "copper": 1
+   },
+   "fill": {
+    "n": 48,
+    "L": 73.5,
+    "a": 18.9,
+    "b": 24.3,
+    "Lmean": 71.5
+   }
+  },
+  "aiUnderStones": {
+   "n": 48,
+   "L": 75.5,
+   "a": 27.8,
+   "b": 25.9,
+   "Lmean": 74.1
+  },
+  "aiSnap": {
+   "light-peach": 22,
+   "rose-gold": 16,
+   "silk": 9,
+   "copper": 1
+  },
+  "aiNearestSkin": {
+   "light-peach": 22,
+   "rose-gold": 16,
+   "silk": 9,
+   "copper": 1
+  },
+  "photoUnderStones": {
+   "n": 48,
+   "L": 72.3,
+   "a": 19.1,
+   "b": 19.3,
+   "Lmean": 71.7
+  },
+  "photoSnap": {
+   "light-peach": 19,
+   "rose-gold": 18,
+   "silk": 9,
+   "colorado-topaz": 2
+  },
+  "photoNearestSkin": {
+   "light-peach": 19,
+   "rose-gold": 18,
+   "silk": 9,
+   "colorado-topaz": 2
+  },
+  "photoNearestCatalogue": [
+   {
+    "id": "light-peach",
+    "dE": 0.7,
+    "skin": true
+   },
+   {
+    "id": "rose-gold",
+    "dE": 6.2,
+    "skin": true
+   },
+   {
+    "id": "silk",
+    "dE": 6.7,
+    "skin": true
+   },
+   {
+    "id": "vintage-rose",
+    "dE": 6.8,
+    "skin": true
+   },
+   {
+    "id": "rose-peach",
+    "dE": 11.0,
+    "skin": true
+   }
+  ]
+ },
+ {
+  "id": "portrait-flower-crown",
+  "attempt": "tools/scratch/img-026n/attempts/portrait-flower-crown",
+  "patches": [
+   50,
+   280,
+   205,
+   425,
+   199
+  ],
+  "patchRadiusPx": 14.9,
+  "aiLandmarkShiftRadii": 1.48,
+  "aiArea": "ai landmarks",
+  "photo": {
+   "n": 3299,
+   "L": 61.4,
+   "a": 24.1,
+   "b": 36.1,
+   "Lmean": 61.2
+  },
+  "ai": {
+   "n": 10709,
+   "L": 61.6,
+   "a": 22.1,
+   "b": 36.6,
+   "Lmean": 54.6
+  },
+  "restPhoto": {
+   "n": 212961,
+   "L": 53.4,
+   "a": 23.5,
+   "b": 34.3,
+   "Lmean": 50.7
+  },
+  "restAi": {
+   "n": 657927,
+   "L": 46.6,
+   "a": 19.8,
+   "b": 27.8,
+   "Lmean": 42.2
+  },
+  "hullPhoto": {
+   "n": 62578,
+   "L": 52.7,
+   "a": 23.7,
+   "b": 33.3,
+   "Lmean": 51.1
+  },
+  "hullAi": {
+   "n": 194417,
+   "L": 50.2,
+   "a": 22.3,
+   "b": 33.7,
+   "Lmean": 45.2
+  },
+  "stones": {
+   "n": 41,
+   "colours": {
+    "silk": 16,
+    "copper": 15,
+    "rose-gold": 6,
+    "golden-shadow": 3,
+    "smoked-topaz": 1
+   },
+   "fill": {
+    "n": 41,
+    "L": 65.6,
+    "a": 21.7,
+    "b": 27.0,
+    "Lmean": 65.3
+   }
+  },
+  "aiUnderStones": {
+   "n": 41,
+   "L": 64.6,
+   "a": 24.5,
+   "b": 40.1,
+   "Lmean": 65.8
+  },
+  "aiSnap": {
+   "silk": 16,
+   "copper": 14,
+   "rose-gold": 7,
+   "golden-shadow": 3,
+   "smoked-topaz": 1
+  },
+  "aiNearestSkin": {
+   "silk": 16,
+   "copper": 14,
+   "rose-gold": 7,
+   "golden-shadow": 3,
+   "smoked-topaz": 1
+  },
+  "photoUnderStones": {
+   "n": 41,
+   "L": 62.5,
+   "a": 25.1,
+   "b": 36.5,
+   "Lmean": 61.3
+  },
+  "photoSnap": {
+   "rose-gold": 20,
+   "copper": 16,
+   "silk": 3,
+   "colorado-topaz": 2
+  },
+  "photoNearestSkin": {
+   "rose-gold": 20,
+   "copper": 16,
+   "silk": 3,
+   "colorado-topaz": 2
+  },
+  "photoNearestCatalogue": [
+   {
+    "id": "rose-gold",
+    "dE": 6.9,
+    "skin": true
+   },
+   {
+    "id": "copper",
+    "dE": 7.9,
+    "skin": true
+   },
+   {
+    "id": "golden-shadow",
+    "dE": 8.8,
+    "skin": true
+   },
+   {
+    "id": "light-colorado",
+    "dE": 10.8,
+    "skin": true
+   },
+   {
+    "id": "topaz",
+    "dE": 11.2,
+    "skin": true
+   }
+  ]
+ },
+ {
+  "id": "portrait-curls",
+  "attempt": "tools/scratch/img-026n/attempts/portrait-curls",
+  "patches": [
+   50,
+   280,
+   205,
+   425,
+   199
+  ],
+  "patchRadiusPx": 16.4,
+  "aiLandmarkShiftRadii": 0.51,
+  "aiArea": "ai landmarks",
+  "photo": {
+   "n": 3361,
+   "L": 52.6,
+   "a": 20.8,
+   "b": 18.8,
+   "Lmean": 49.7
+  },
+  "ai": {
+   "n": 6564,
+   "L": 65.3,
+   "a": 19.7,
+   "b": 33.4,
+   "Lmean": 53.0
+  },
+  "restPhoto": {
+   "n": 363060,
+   "L": 12.3,
+   "a": 6.6,
+   "b": 4.9,
+   "Lmean": 15.1
+  },
+  "restAi": {
+   "n": 653435,
+   "L": 11.9,
+   "a": 12.3,
+   "b": 11.8,
+   "Lmean": 17.2
+  },
+  "hullPhoto": {
+   "n": 90558,
+   "L": 37.7,
+   "a": 15.9,
+   "b": 15.6,
+   "Lmean": 35.4
+  },
+  "hullAi": {
+   "n": 157506,
+   "L": 46.6,
+   "a": 20.0,
+   "b": 30.7,
+   "Lmean": 42.3
+  },
+  "stones": {
+   "n": 27,
+   "colours": {
+    "silk": 10,
+    "rose-gold": 8,
+    "golden-shadow": 4,
+    "jet": 3,
+    "copper": 2
+   },
+   "fill": {
+    "n": 27,
+    "L": 67.0,
+    "a": 16.0,
+    "b": 27.0,
+    "Lmean": 62.6
+   }
+  },
+  "aiUnderStones": {
+   "n": 27,
+   "L": 68.4,
+   "a": 23.1,
+   "b": 36.8,
+   "Lmean": 62.4
+  },
+  "aiSnap": {
+   "silk": 9,
+   "rose-gold": 7,
+   "golden-shadow": 6,
+   "jet": 3,
+   "copper": 2
+  },
+  "aiNearestSkin": {
+   "silk": 9,
+   "rose-gold": 7,
+   "golden-shadow": 6,
+   "smoked-topaz": 3,
+   "copper": 2
+  },
+  "photoUnderStones": {
+   "n": 27,
+   "L": 52.9,
+   "a": 20.4,
+   "b": 19.3,
+   "Lmean": 50.2
+  },
+  "photoSnap": {
+   "rose-gold": 10,
+   "colorado-topaz": 10,
+   "vintage-rose": 4,
+   "jet": 2,
+   "smoked-topaz": 1
+  },
+  "photoNearestSkin": {
+   "rose-gold": 10,
+   "colorado-topaz": 10,
+   "vintage-rose": 4,
+   "smoked-topaz": 3
+  },
+  "photoNearestCatalogue": [
+   {
+    "id": "rose-gold",
+    "dE": 11.9,
+    "skin": true
+   },
+   {
+    "id": "colorado-topaz",
+    "dE": 12.4,
+    "skin": true
+   },
+   {
+    "id": "greige",
+    "dE": 12.5,
+    "skin": false
+   },
+   {
+    "id": "light-smoked-topaz",
+    "dE": 13.3,
+    "skin": true
+   },
+   {
+    "id": "copper",
+    "dE": 13.5,
+    "skin": true
+   }
+  ]
+ }
+]

@@ -211,6 +211,16 @@ CLAUDE.md says "JavaScript only". D5 makes an exception for this one
 service: Python lives only in `services/strass-layout/`. Nothing in `src/`,
 `app.js` or `server/` imports it, and the app reaches it only over HTTP.
 
+**Never ship or use the dlib 68-point model
+(`shape_predictor_68_face_landmarks.dat`) in production.** It was trained on
+iBUG 300-W, whose licence excludes commercial use. Since IMG-026L the service
+finds faces with MediaPipe Face Landmarker (Apache 2.0). dlib and its model
+are test-only: only `services/strass-layout/tests/` (and the research
+`prototype/`, which only the equivalence test runs) may import dlib, only
+`scripts/setup_mac.sh --with-dlib-tests` downloads the model, and the Docker
+image never contains it. `tests/test_build_l.py` enforces this; licences are
+recorded in `services/strass-layout/THIRD_PARTY_LICENCES.md`.
+
 ------------------------------------------------------------------------
 
 # UI Principles

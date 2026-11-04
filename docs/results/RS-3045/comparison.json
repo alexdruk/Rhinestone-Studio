@@ -1,0 +1,552 @@
+[
+ {
+  "image": "ai",
+  "mode": "colour",
+  "face": "human",
+  "stones": 2826,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 2,
+  "changes": {
+   "silk \u2192 crystal-clear": 1,
+   "metallic-sunshine \u2192 silk": 1
+  },
+  "changedFilled": 0,
+  "changedAtMm": [
+   [
+    28.433,
+    31.979,
+    "ss6",
+    "silk",
+    "crystal-clear"
+   ],
+   [
+    49.146,
+    126.438,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ]
+  ],
+  "rs3044FromOff": 22,
+  "rs3045FromOff": 22,
+  "rs3044FromOffChanges": {
+   "crystal-clear \u2192 silk": 11,
+   "metallic-sunshine \u2192 silk": 8,
+   "citrine \u2192 silk": 3
+  },
+  "rs3045FromOffChanges": {
+   "crystal-clear \u2192 silk": 10,
+   "metallic-sunshine \u2192 silk": 9,
+   "citrine \u2192 silk": 3
+  },
+  "rs3045FromOffAtMm": [
+   [
+    31.667,
+    118.698,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    47.81,
+    106.256,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    25.661,
+    122.332,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    63.637,
+    112.952,
+    "ss6",
+    "citrine",
+    "silk"
+   ],
+   [
+    43.768,
+    123.767,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    50.245,
+    124.216,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    30.465,
+    114.67,
+    "ss6",
+    "citrine",
+    "silk"
+   ],
+   [
+    26.867,
+    125.356,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    74.523,
+    100.759,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    28.793,
+    54.744,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    45.884,
+    123.894,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    75.164,
+    103.026,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    30.754,
+    53.653,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    49.146,
+    126.438,
+    "ss6",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    48.984,
+    108.343,
+    "ss6",
+    "citrine",
+    "silk"
+   ],
+   [
+    28.336,
+    56.848,
+    "ss6",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    47.045,
+    122.016,
+    "ss4",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    45.986,
+    54.879,
+    "ss4",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    30.54,
+    55.511,
+    "ss4",
+    "crystal-clear",
+    "silk"
+   ],
+   [
+    30.749,
+    116.868,
+    "ss4",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    28.209,
+    38.252,
+    "ss4",
+    "metallic-sunshine",
+    "silk"
+   ],
+   [
+    46.423,
+    56.663,
+    "ss4",
+    "metallic-sunshine",
+    "silk"
+   ]
+  ]
+ },
+ {
+  "image": "cat",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2162,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "dog",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1683,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "einstein",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3594,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "jesus",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 3308,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "lake",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 4100,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "leopard",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2437,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "logo",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 833,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "parrot",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2552,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait",
+  "mode": "colour",
+  "face": "human",
+  "stones": 4051,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "rose",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1846,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "tulips",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 2675,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "woman",
+  "mode": "colour",
+  "face": "human",
+  "stones": 2626,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 1,
+  "changes": {
+   "silk \u2192 crystal-clear": 1
+  },
+  "changedFilled": 0,
+  "changedAtMm": [
+   [
+    109.255,
+    66.998,
+    "ss6",
+    "silk",
+    "crystal-clear"
+   ]
+  ],
+  "rs3044FromOff": 1,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {
+   "crystal-clear \u2192 silk": 1
+  },
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "sunburst_flower",
+  "mode": "colour",
+  "face": "animal",
+  "stones": 1011,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-curls",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3458,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-flower-crown",
+  "mode": "colour",
+  "face": null,
+  "stones": 3252,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-freckles",
+  "mode": "colour",
+  "face": "human",
+  "stones": 3156,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-freckles-bold",
+  "mode": "bw",
+  "face": "human",
+  "stones": 2998,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-freckles-shaded",
+  "mode": "bw",
+  "face": "human",
+  "stones": 3791,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-curls-bold",
+  "mode": "bw",
+  "face": "human",
+  "stones": 3036,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ },
+ {
+  "image": "portrait-curls-shaded",
+  "mode": "bw",
+  "face": "human",
+  "stones": 4156,
+  "positionsAndSizesSame": true,
+  "reportSameButColours": true,
+  "changed": 0,
+  "changes": {},
+  "changedFilled": 0,
+  "changedAtMm": [],
+  "rs3044FromOff": 0,
+  "rs3045FromOff": 0,
+  "rs3044FromOffChanges": {},
+  "rs3045FromOffChanges": {},
+  "rs3045FromOffAtMm": []
+ }
+]

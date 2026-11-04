@@ -1,0 +1,42 @@
+{
+ "portrait-freckles-bold": {
+  "read": 2987,
+  "filled": 11,
+  "filledJet": 7,
+  "near45to65": 5,
+  "nearShare": 0.002,
+  "L<30": 1172,
+  "L>=80": 1801,
+  "median": 97.8
+ },
+ "portrait-freckles-shaded": {
+  "read": 3773,
+  "filled": 18,
+  "filledJet": 6,
+  "near45to65": 12,
+  "nearShare": 0.003,
+  "L<30": 1367,
+  "L>=80": 2360,
+  "median": 97.8
+ },
+ "portrait-curls-bold": {
+  "read": 3031,
+  "filled": 5,
+  "filledJet": 4,
+  "near45to65": 2,
+  "nearShare": 0.001,
+  "L<30": 2280,
+  "L>=80": 741,
+  "median": 1.6
+ },
+ "portrait-curls-shaded": {
+  "read": 4132,
+  "filled": 24,
+  "filledJet": 14,
+  "near45to65": 15,
+  "nearShare": 0.004,
+  "L<30": 2559,
+  "L>=80": 1537,
+  "median": 9.2
+ }
+}

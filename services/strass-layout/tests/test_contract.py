@@ -12,9 +12,10 @@ from strass_layout.colour import CAT_IDS
 from tests import support
 
 SIZE_IDS = {"ss4", "ss6", "ss10", "ss16", "ss20", "ss30"}
-REPORT_KEYS = {"stones", "bySize", "colours", "minGapMm", "violations", "coverage", "largestEmptyCircleMm", "face",
-               "pupilsMm", "frameMm", "offsetMm", "mmPerPx", "stagesMs", "ms"}
-STAGES = {"detect", "layout", "eyes", "colour", "check"}
+REPORT_KEYS = {"stones", "bySize", "colours", "minGapMm", "violations", "coverage", "largestEmptyCircleMm", "capped",
+               "removed", "removedShare", "filled", "cleanupCoverage", "face", "pupilsMm", "pupilsAtMm", "frameMm",
+               "offsetMm", "mmPerPx", "stagesMs", "ms"}
+STAGES = {"detect", "layout", "eyes", "colour", "cleanup", "check"}
 EDGE_TOLERANCE_MM = 0.001
 
 
@@ -43,8 +44,9 @@ class Contract(unittest.TestCase):
         r = self.client.get("/health")
         self.assertEqual(r.status_code, 200)
         body = r.json()
-        self.assertEqual(set(body), {"ok", "modelsLoaded", "version", "busy"})
+        self.assertEqual(set(body), {"ok", "service", "modelsLoaded", "version", "busy"})
         self.assertIs(body["ok"], True)
+        self.assertEqual(body["service"], "rhinestone-studio-layout")
         self.assertIs(body["modelsLoaded"], True)
         self.assertIsInstance(body["version"], str)
         self.assertIs(body["busy"], False)

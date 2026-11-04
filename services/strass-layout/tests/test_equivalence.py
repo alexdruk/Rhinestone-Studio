@@ -1,4 +1,7 @@
-"""S5.1: the package and the prototype scripts give identical stone lists on this machine."""
+"""S5.1: the package and the prototype scripts give identical stone lists on this machine.
+
+IMG-026L: the prototype finds faces with dlib, so the package runs with the test-only dlib
+landmarks (tests/dlib_faces.py); skipped without dlib or its model. The service uses MediaPipe."""
 import json
 import os
 import shutil
@@ -7,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-from tests import support
+from tests import dlib_faces, support
 
 SWITCHES = ("TARGET_PITCH", "CATALOGUE", "KL", "VIVID", "CHROMA_W", "SKIN_NATURAL", "CLOSE_PX", "SD_VIEWS", "SD_IN",
             "SD_OUT", "FUSED_OUT", "EYE_MODE", "LASHES", "CL_INSIDE", "STRASS_W", "STRASS_MODELS")
@@ -46,8 +49,10 @@ class Equivalence(unittest.TestCase):
     def check_image(self, name):
         if os.environ.get("STRASS_SKIP_EQUIVALENCE") == "1":
             self.skipTest("STRASS_SKIP_EQUIVALENCE=1")
+        if not dlib_faces.available():
+            self.skipTest("dlib or its model is absent (test only: scripts/setup_mac.sh --with-dlib-tests)")
         reference = run_prototype(name)
-        ours = support.frame_result(name)["stones"]
+        ours = support.frame_result(name, dlib=True)["stones"]
         i = first_difference(ours, reference)
         print("EQUIV %s package=%d prototype=%d identical=%s" % (name, len(ours), len(reference), i is None))
         if i is not None:

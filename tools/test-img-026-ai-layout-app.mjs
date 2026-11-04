@@ -5,6 +5,7 @@
 // docs/specifications/IMG-026-StrassLayoutService.md, "App, part 1: data and engine (build C1)".
 
 import assert from 'node:assert/strict';
+import { redrawLookOf, redrawStyleForLook } from '../src/ui/index.js';
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -25,6 +26,8 @@ import { createImageBuffer } from '../src/image/index.js';
 import { validateRhsProject, generateProjectStoneLayout } from './lib/rhsProject.mjs';
 import { buildRegressionCases } from './lib/imageTraceFixtures.mjs';
 import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
+import { callLayoutService, DEFAULT_TIMERS } from '../server/redraw/jobs.mjs';
+import { createServer as createNetServer } from 'node:net';
 
 let failures = 0;
 async function test(name, fn) {
@@ -146,6 +149,48 @@ await test('2. validateProject() rejects each listed bad aiLayout / colorSwaps i
   assert.doesNotThrow(() => validateProject({ ...defaultProject(), layers: [ok] }), 'out-of-box coordinates, SS4 and a D2 colour are allowed');
 });
 
+await test('2b. IMG-026M: a layout with face null (no plausible pupil pair) and the new pupilsAtMm key redraws and validates; a layer saved before IMG-026M, without pupilsAtMm, still loads', () => {
+  const noFace = { ...FAKE_LAYOUT, report: { ...FAKE_LAYOUT.report, face: null, pupilsMm: [], pupilsAtMm: [] } };
+  const l = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: noFace }, { ...OPTS, layout: noFace });
+  assert.equal(l.aiLayout.report.face, null, 'face null is kept, not dropped or turned into a string');
+  assert.ok(!('pupilsAtMm' in l.aiLayout.report), 'the layer keeps only the report keys the app shows');
+  const p = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [l] })));
+  assert.equal(p.layers[0].aiLayout.report.face, null);
+  // A project written by hand (or by a later build) that carries the key loads unchanged.
+  const withKey = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { ...aiLayer().aiLayout.report, pupilsAtMm: FAKE_LAYOUT.report.pupilsAtMm } } };
+  const p2 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [withKey] })));
+  assert.deepEqual(p2.layers[0].aiLayout.report.pupilsAtMm, [[11.6, 12.935], [22.6, 12.935]]);
+  // An old layer: the report as builds C1 to L saved it, face 'human' and no pupilsAtMm.
+  const old = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { minGapMm: 0.2993, violations: 0, coverage: 0.7, face: 'human', ms: 0 } } };
+  const p3 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [old] })));
+  assert.equal(JSON.stringify(p3.layers[0]), JSON.stringify(old));
+});
+
+await test('2c. IMG-026O: a layout whose report carries the clean-up figures (capped, removed, removedShare, filled, cleanupCoverage, stagesMs.cleanup) redraws and validates, keeping only the report keys the app shows; layers saved before IMG-026O, and a project that carries the new keys, still load unchanged', () => {
+  for (const key of ['capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage']) assert.ok(key in FAKE_LAYOUT.report, `fixture has ${key}`);
+  const cleaned = { ...FAKE_LAYOUT, report: { ...FAKE_LAYOUT.report, capped: 2, removed: 3, removedShare: 0.0155, filled: 12, cleanupCoverage: 0.649 } };
+  const l = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: cleaned }, { ...OPTS, layout: cleaned });
+  const kept = ['minGapMm', 'violations', 'coverage', 'face', 'ms', 'offsetMm', 'mmPerPx'];
+  assert.deepEqual(Object.keys(l.aiLayout.report), kept, 'the app shows nothing new yet');
+  assert.equal(l.aiLayout.stones.length, cleaned.stones.length);
+  const p = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [l] })));
+  assert.equal(JSON.stringify(p.layers[0].aiLayout), JSON.stringify(l.aiLayout));
+  // A report without the new keys (every service before build O) redraws the same way.
+  const before = { ...FAKE_LAYOUT, report: Object.fromEntries(Object.entries(FAKE_LAYOUT.report).filter(([k]) => !['capped', 'removed', 'removedShare', 'filled', 'cleanupCoverage'].includes(k))) };
+  const lb = applyRedraw(IMAGE_LAYER, { ...RESULT, layout: before }, { ...OPTS, layout: before });
+  assert.equal(JSON.stringify(lb.aiLayout), JSON.stringify(l.aiLayout));
+  // A project that carries the new keys (written by hand or a later build) loads unchanged.
+  const withKeys = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report: { ...aiLayer().aiLayout.report, removed: 3, filled: 12, cleanupCoverage: 0.649 } } };
+  const p2 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [withKeys] })));
+  assert.equal(JSON.stringify(p2.layers[0]), JSON.stringify(withKeys));
+  // Old layers: builds C1 to L (no pupilsAtMm) and build M/N (face null) load byte for byte.
+  for (const report of [{ minGapMm: 0.2993, violations: 0, coverage: 0.7, face: 'human', ms: 0 }, { minGapMm: 0.11, violations: 0, coverage: 0.66, face: null, ms: 0, offsetMm: [2.9, 3.065], mmPerPx: 0.039062 }]) {
+    const old = { ...aiLayer(), aiLayout: { ...aiLayer().aiLayout, report } };
+    const p3 = validateProject(JSON.parse(JSON.stringify({ ...defaultProject(), layers: [old] })));
+    assert.equal(JSON.stringify(p3.layers[0]), JSON.stringify(old));
+  }
+});
+
 // ---- redraw writes the layout -------------------------------------------------------------------
 
 await test('3. applyRedraw() with a layout: fillMode ai-layout, aiLayout with the kept report keys and editCount 0, colorSwaps {}, previousFillMode, box exactly widthMm x heightMm centred where the layer was', () => {
@@ -236,6 +281,7 @@ function buildStartImageRedraw({ result, template = 'sheet', canvas = { width: 4
       return result;
     },
     REDRAW_STAGE_MESSAGES,
+    redrawLookOf, redrawStyleForLook,
     decodeDataUrlToBuffer: async (dataUrl) => { state.decoded.push(dataUrl); return { widthPx: 1024, heightPx: 1024, data: new Uint8ClampedArray(4) }; },
     project: state.project,
     aiStoneDetectionFor: () => detection,
@@ -286,11 +332,27 @@ await test('6. startImageRedraw() with a layout: stage texts, the Flat Sheet gro
   assert.equal(mug.state.project.layers[0].w, FAKE_LAYOUT.widthMm, 'and the box is not shrunk');
 });
 
-await test('7. startImageRedraw() without a layout: the IMG-023 path runs and the status says why', async () => {
-  const layoutError = { code: 'layout-unavailable', message: 'The layout service is not running.' };
+await test('7. startImageRedraw() without a layout: the IMG-023 path runs and the status says why and names the fix (RS-3043)', async () => {
+  // RS-3043: the real layout-unavailable errors from the Node job, not set and not answering (a
+  // real refused connection on a port nothing listens on), each name the fix.
+  const call = (url) => callLayoutService({ fetch: globalThis.fetch, timers: DEFAULT_TIMERS, url, timeoutMs: 5000, pngBuffer: Buffer.from('x'), colorIds: [], signal: new AbortController().signal });
+  const closedPort = await new Promise((resolve) => { const s = createNetServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); }); });
+  const notSet = (await call('')).error;
+  const notAnswering = (await call(`http://127.0.0.1:${closedPort}`)).error;
+  assert.equal(notSet.code, 'layout-unavailable');
+  assert.equal(notAnswering.code, 'layout-unavailable');
+  const expected = [
+    [notSet, 'Placed with the old method: The layout service is not set up. Start Rhinestone Studio with npm run studio (or set LAYOUT_SERVICE_URL).'],
+    [notAnswering, `Placed with the old method: The layout service at http://127.0.0.1:${closedPort} is not answering. Start the layout service, or start Rhinestone Studio with npm run studio.`]
+  ];
+  for (const [layoutError, status] of expected) {
+    const unset = buildStartImageRedraw({ result: { ...RESULT, layout: null, layoutError } });
+    await unset.run();
+    assert.equal(unset.state.statuses.at(-1), status);
+  }
+  const layoutError = notAnswering;
   const { run, state } = buildStartImageRedraw({ result: { ...RESULT, layout: null, layoutError } });
   await run();
-  assert.equal(state.statuses.at(-1), 'Placed with the old method: The layout service is not running.');
   const next = state.project.layers[0];
   assert.equal(next.fillMode, 'ai-stones');
   assert.ok(!('aiLayout' in next));

@@ -1,0 +1,613 @@
+[
+ {
+  "image": "cat",
+  "stonesBefore": 2150,
+  "stonesAfter": 2162,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 12,
+  "coverageBefore": 0.647,
+  "coverageAfter": 0.649,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1039,
+  "minGapAfter": 0.1003,
+  "sizeBefore": [
+   103.041,
+   130.789
+  ],
+  "sizeAfter": [
+   103.041,
+   130.789
+  ],
+  "face": "animal",
+  "pupilsMm": [
+   5.91,
+   5.91
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 12
+  },
+  "filledColours": {
+   "crystal-clear": 4,
+   "smoked-topaz": 2,
+   "jet": 2,
+   "golden-shadow": 1,
+   "citrus-green": 1,
+   "fern-green": 1,
+   "rose-peach": 1
+  },
+  "cleanupMs": 1738
+ },
+ {
+  "image": "dog",
+  "stonesBefore": 1671,
+  "stonesAfter": 1683,
+  "capped": 2,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 12,
+  "coverageBefore": 0.632,
+  "coverageAfter": 0.631,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1004,
+  "minGapAfter": 0.1004,
+  "sizeBefore": [
+   96.58,
+   160.606
+  ],
+  "sizeAfter": [
+   96.58,
+   160.606
+  ],
+  "face": "animal",
+  "pupilsMm": [
+   6.66,
+   6.66
+  ],
+  "filledBySize": {
+   "ss6": 2,
+   "ss4": 10
+  },
+  "filledColours": {
+   "light-colorado": 3,
+   "smoked-topaz": 5,
+   "copper": 1,
+   "crystal-clear": 2,
+   "colorado-topaz": 1
+  },
+  "cleanupMs": 2383
+ },
+ {
+  "image": "einstein",
+  "stonesBefore": 3591,
+  "stonesAfter": 3594,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 3,
+  "coverageBefore": 0.672,
+  "coverageAfter": 0.672,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1004,
+  "minGapAfter": 0.1004,
+  "sizeBefore": [
+   150.166,
+   143.192
+  ],
+  "sizeAfter": [
+   150.166,
+   143.192
+  ],
+  "face": "human",
+  "pupilsMm": [
+   5.62,
+   5.62
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 3
+  },
+  "filledColours": {
+   "colorado-topaz": 2,
+   "rose-gold": 1
+  },
+  "cleanupMs": 3018
+ },
+ {
+  "image": "jesus",
+  "stonesBefore": 3298,
+  "stonesAfter": 3308,
+  "capped": 1,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 10,
+  "coverageBefore": 0.629,
+  "coverageAfter": 0.63,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1002,
+  "minGapAfter": 0.1002,
+  "sizeBefore": [
+   145.812,
+   163.936
+  ],
+  "sizeAfter": [
+   145.812,
+   163.936
+  ],
+  "face": "animal",
+  "pupilsMm": [
+   4.9
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 10
+  },
+  "filledColours": {
+   "jet": 7,
+   "smoked-topaz": 1,
+   "silk": 2
+  },
+  "cleanupMs": 2991
+ },
+ {
+  "image": "lake",
+  "stonesBefore": 4089,
+  "stonesAfter": 4100,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 11,
+  "coverageBefore": 0.66,
+  "coverageAfter": 0.661,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1002,
+  "minGapAfter": 0.1002,
+  "sizeBefore": [
+   154.737,
+   152.084
+  ],
+  "sizeAfter": [
+   154.737,
+   152.084
+  ],
+  "face": "animal",
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 11
+  },
+  "filledColours": {
+   "copper": 1,
+   "emerald": 2,
+   "light-sapphire": 2,
+   "crystal-clear": 1,
+   "capri-blue": 2,
+   "citrus-green": 1,
+   "hematite": 1,
+   "smoked-topaz": 1
+  },
+  "cleanupMs": 3034
+ },
+ {
+  "image": "leopard",
+  "stonesBefore": 2431,
+  "stonesAfter": 2437,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 6,
+  "coverageBefore": 0.645,
+  "coverageAfter": 0.645,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1019,
+  "minGapAfter": 0.1019,
+  "sizeBefore": [
+   117.239,
+   153.667
+  ],
+  "sizeAfter": [
+   117.239,
+   153.667
+  ],
+  "face": "animal",
+  "pupilsMm": [
+   4.71,
+   4.71
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 6
+  },
+  "filledColours": {
+   "silk": 1,
+   "crystal-clear": 1,
+   "jet": 2,
+   "silver": 1,
+   "gold": 1
+  },
+  "cleanupMs": 2315
+ },
+ {
+  "image": "logo",
+  "stonesBefore": 833,
+  "stonesAfter": 833,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 0,
+  "coverageBefore": 0.796,
+  "coverageAfter": 0.796,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1024,
+  "minGapAfter": 0.1024,
+  "sizeBefore": [
+   144.868,
+   79.139
+  ],
+  "sizeAfter": [
+   144.868,
+   79.139
+  ],
+  "face": "animal",
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 0
+  },
+  "filledColours": {},
+  "cleanupMs": 1475
+ },
+ {
+  "image": "parrot",
+  "stonesBefore": 2542,
+  "stonesAfter": 2552,
+  "capped": 1,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 10,
+  "coverageBefore": 0.644,
+  "coverageAfter": 0.645,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1008,
+  "minGapAfter": 0.1008,
+  "sizeBefore": [
+   168.265,
+   151.595
+  ],
+  "sizeAfter": [
+   168.265,
+   151.595
+  ],
+  "face": "animal",
+  "pupilsMm": [
+   4.51
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 10
+  },
+  "filledColours": {
+   "sapphire": 1,
+   "jet": 1,
+   "citrus-green": 4,
+   "citrine": 2,
+   "light-sapphire": 1,
+   "capri-blue": 1
+  },
+  "cleanupMs": 2701
+ },
+ {
+  "image": "portrait",
+  "stonesBefore": 3991,
+  "stonesAfter": 4051,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 60,
+  "coverageBefore": 0.651,
+  "coverageAfter": 0.658,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1,
+  "minGapAfter": 0.1,
+  "sizeBefore": [
+   149.543,
+   165.999
+  ],
+  "sizeAfter": [
+   149.543,
+   165.999
+  ],
+  "face": "human",
+  "pupilsMm": [
+   3.46,
+   3.46
+  ],
+  "filledBySize": {
+   "ss6": 7,
+   "ss4": 53
+  },
+  "filledColours": {
+   "jet": 45,
+   "graphite": 4,
+   "grey": 3,
+   "silk": 3,
+   "jet-hematite": 3,
+   "golden-shadow": 1,
+   "greige": 1
+  },
+  "cleanupMs": 3235
+ },
+ {
+  "image": "rose",
+  "stonesBefore": 1846,
+  "stonesAfter": 1846,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 0,
+  "coverageBefore": 0.683,
+  "coverageAfter": 0.683,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1012,
+  "minGapAfter": 0.1012,
+  "sizeBefore": [
+   121.027,
+   130.529
+  ],
+  "sizeAfter": [
+   121.027,
+   130.529
+  ],
+  "face": "animal",
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 0
+  },
+  "filledColours": {},
+  "cleanupMs": 1721
+ },
+ {
+  "image": "tulips",
+  "stonesBefore": 2673,
+  "stonesAfter": 2675,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 2,
+  "coverageBefore": 0.665,
+  "coverageAfter": 0.665,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1009,
+  "minGapAfter": 0.1009,
+  "sizeBefore": [
+   140.325,
+   141.745
+  ],
+  "sizeAfter": [
+   140.325,
+   141.745
+  ],
+  "face": "animal",
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 2
+  },
+  "filledColours": {
+   "scarlet": 1,
+   "hyacinth": 1
+  },
+  "cleanupMs": 2596
+ },
+ {
+  "image": "woman",
+  "stonesBefore": 2612,
+  "stonesAfter": 2626,
+  "capped": 2,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 14,
+  "coverageBefore": 0.674,
+  "coverageAfter": 0.674,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1004,
+  "minGapAfter": 0.1,
+  "sizeBefore": [
+   143.896,
+   146.746
+  ],
+  "sizeAfter": [
+   143.896,
+   146.746
+  ],
+  "face": "human",
+  "pupilsMm": [
+   6.32,
+   6.32
+  ],
+  "filledBySize": {
+   "ss6": 3,
+   "ss4": 11
+  },
+  "filledColours": {
+   "silk": 4,
+   "smoked-topaz": 3,
+   "colorado-topaz": 2,
+   "jet": 2,
+   "rose-gold": 1,
+   "crystal-clear": 1,
+   "copper": 1
+  },
+  "cleanupMs": 2386
+ },
+ {
+  "image": "sunburst_flower",
+  "stonesBefore": 1011,
+  "stonesAfter": 1011,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 0,
+  "coverageBefore": 0.69,
+  "coverageAfter": 0.69,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1017,
+  "minGapAfter": 0.1017,
+  "sizeBefore": [
+   92.882,
+   115.259
+  ],
+  "sizeAfter": [
+   92.882,
+   115.259
+  ],
+  "face": "animal",
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 0
+  },
+  "filledColours": {},
+  "cleanupMs": 1115
+ },
+ {
+  "image": "portrait-freckles",
+  "stonesBefore": 3139,
+  "stonesAfter": 3156,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 17,
+  "coverageBefore": 0.631,
+  "coverageAfter": 0.633,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.1007,
+  "minGapAfter": 0.1007,
+  "sizeBefore": [
+   135.031,
+   193.9
+  ],
+  "sizeAfter": [
+   135.031,
+   193.9
+  ],
+  "face": "human",
+  "pupilsMm": [
+   3.73,
+   3.73
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 17
+  },
+  "filledColours": {
+   "light-topaz": 1,
+   "silk": 5,
+   "hyacinth": 2,
+   "rose-gold": 6,
+   "light-peach": 3
+  },
+  "cleanupMs": 2915
+ },
+ {
+  "image": "portrait-flower-crown",
+  "stonesBefore": 3237,
+  "stonesAfter": 3252,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 15,
+  "coverageBefore": 0.644,
+  "coverageAfter": 0.646,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.101,
+  "minGapAfter": 0.101,
+  "sizeBefore": [
+   161.187,
+   165.392
+  ],
+  "sizeAfter": [
+   161.187,
+   165.392
+  ],
+  "face": null,
+  "pupilsMm": [],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 15
+  },
+  "filledColours": {
+   "colorado-topaz": 4,
+   "smoked-topaz": 1,
+   "citrus-green": 1,
+   "rose": 1,
+   "peridot": 1,
+   "rose-gold": 1,
+   "crystal-clear": 1,
+   "scarlet": 1,
+   "copper": 1,
+   "hyacinth": 1,
+   "jet": 1,
+   "emerald": 1
+  },
+  "cleanupMs": 2856
+ },
+ {
+  "image": "portrait-curls",
+  "stonesBefore": 3450,
+  "stonesAfter": 3458,
+  "capped": 0,
+  "removed": 0,
+  "removedShare": 0.0,
+  "filled": 8,
+  "coverageBefore": 0.643,
+  "coverageAfter": 0.644,
+  "violationsBefore": 0,
+  "violationsAfter": 0,
+  "minGapBefore": 0.101,
+  "minGapAfter": 0.1007,
+  "sizeBefore": [
+   145.627,
+   148.849
+  ],
+  "sizeAfter": [
+   145.627,
+   148.849
+  ],
+  "face": "human",
+  "pupilsMm": [
+   3.78,
+   3.78
+  ],
+  "filledBySize": {
+   "ss6": 0,
+   "ss4": 8
+  },
+  "filledColours": {
+   "silk": 2,
+   "rose-peach": 1,
+   "copper": 1,
+   "smoked-topaz": 3,
+   "rose-gold": 1
+  },
+  "cleanupMs": 2655
+ }
+]

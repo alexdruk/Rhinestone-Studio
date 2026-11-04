@@ -106,7 +106,15 @@ function formatMmList(values, units) {
   return values.map((v) => formatLengthDisplay(v, units)).join(', ') + ` ${unitSuffix(units)}`;
 }
 
-// RS-1013: stone sizes get their own formatter (unlike formatMmList(), used unchanged for Gap,
+// RS-3042: the Gap line is always printed in mm, because in inches the usual 0.1 mm gap rounds to
+// "0 in". Inch sheets add the inch value after it, at 3 decimals ("0.1 mm (0.004 in)"); mm sheets
+// print exactly what formatMmList() always printed.
+function formatGapList(values, units) {
+  if (!values.length || units !== 'in') return formatMmList(values, 'mm');
+  return `${formatMmList(values, 'mm')} (${values.map((v) => formatLengthDisplay(v, 'in', 3)).join(', ')} in)`;
+}
+
+// RS-1013: stone sizes get their own formatter (unlike formatMmList(), used by formatGapList() for Gap,
 // which has no commercial name) so a size matching the Stone Library (src/renderer/StoneSizes.js)
 // reads e.g. "SS16 (4.0 mm)" on the printed sheet -- the production floor's usual vocabulary --
 // while a custom, non-catalog size still prints its plain millimeter value.
@@ -361,7 +369,7 @@ function buildHeaderLines(headerTopMm, fields, extraLineTexts = []) {
     { text: `Production size: ${formatLengthDisplay(productionWidthMm, units)} × ${formatLengthDisplay(productionHeightMm, units)} ${unitSuffix(units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone count: ${stoneCount}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone size: ${formatStoneSizeList(distinctSizesMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
-    { text: `Gap: ${formatMmList(distinctGapsMm, units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
+    { text: `Gap: ${formatGapList(distinctGapsMm, units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     // IMG-026F: every colour is listed, over as many lines as it takes (computeColorLineTexts()).
     ...colorLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM })),
     {

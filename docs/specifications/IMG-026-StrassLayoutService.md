@@ -63,7 +63,7 @@ light-colorado, light-peach) exactly, and none of the 17 older entries.
 controls are shown only when such a layer is selected (S16).
 
 **D5. Where the service runs.** For now, natively on Sasha's Mac next to the Node server, bound to
-127.0.0.1:8000. Later, the same package in Docker on a rented server. Only `LAYOUT_SERVICE_URL`
+127.0.0.1:8000 (8001 since RS-3043: 8000 is PatternNifty's strass service on the iMac). Later, the same package in Docker on a rented server. Only `LAYOUT_SERVICE_URL`
 changes.
 
 Added on 6 Oct: "Redraw with AI" runs on every upload and its button is hidden; an Image→Strass
@@ -301,7 +301,7 @@ missing `flowrun` module (lines 79 and 244). `eyes4.build_eye` (the non-copy bra
 names `brew install python@3.12`), creates `services/strass-layout/.venv`, installs
 `requirements.txt`, and downloads and verifies the dlib model (S8). If `dlib-bin` has no wheel for
 the Mac, it says so and installs `cmake` then `dlib` from source. `scripts/start_layout.sh`
-activates the venv and runs `uvicorn app:app --host 127.0.0.1 --port 8000 --workers 1`. Neither
+activates the venv and runs `uvicorn app:app --host 127.0.0.1 --port 8000 --workers 1` (since RS-3043 the port is `LAYOUT_PORT`, default 8001). Neither
 script uses `#` comments. A `caffeinate -i` wrapper is printed as advice by `start_layout.sh`, not
 run by it.
 
@@ -1748,6 +1748,321 @@ instanced draw call; the per-stone CPU loop is unchanged.
 | `STONE_DEPTH_RATIO` | `src/preview3d/Preview3DRenderer.js:93` |
 | `OctahedronGeometry(1, 0)` | `src/preview3d/Preview3DRenderer.js:466` |
 
+## Face landmarks without dlib (build L)
+
+The service found faces with dlib's 68-point model (S6, S8). That model was trained on iBUG 300-W,
+whose licence excludes commercial use. Build L ports PatternNifty's IS-07a (IS commit `e9e7014`)
+and replaces it with MediaPipe Face Landmarker (library and model Apache 2.0). Plan:
+`docs/IS-PORT-PLAN.md` section 3.1. **The dlib model must never be shipped or used in production**
+(`CLAUDE.md`).
+
+- **Models.** `strass_layout/models.py` loads `models/mediapipe/face_landmarker.task` (committed,
+  SHA-256 checked). `landmarks()` (68 points) becomes `eye_contours()`, which returns dlib's points
+  36–41 and 42–47 from the mesh.
+  - The search is kept: three blurs, the largest face, wider than 0.12 of the image.
+  - dlib's 2× upsampling is dropped.
+  - Two rules are added: detection and presence confidence 0.6, and a mesh whose iris centres are
+    closer than 0.25 of its width is not a face.
+  - `post._eye_boxes` reads the contours; nothing after it changes.
+- **Install.** `mediapipe==0.10.15` is in `requirements-nodeps.txt`, installed with `pip --no-deps`.
+  It is the last release whose Intel Mac binaries run on macOS 13; its declared jax needs an
+  ml-dtypes that tensorflow 2.16.2 refuses. `attrs==26.1.0` joins `requirements.txt`, because
+  `import mediapipe` needs it (IS got it through rembg). The Dockerfile copies `models/mediapipe/`
+  and no longer fetches the dlib model.
+- **dlib is test-only.**
+  - `setup_mac.sh --with-dlib-tests` installs `requirements-dlib-tests.txt` and the model.
+  - `tests/dlib_faces.py` gives the old landmarks to `test_equivalence` (the prototype uses dlib)
+    and to `test_build_l`'s `FaceEquivalence`; both skip without it.
+  - `tests/test_build_l.py` fails if any Python file in the repository outside the service's
+    `tests/` and `prototype/` imports dlib, if loading the service imports it, or if the Dockerfile
+    or the setup script without the flag fetches the model.
+- **Licences.** `services/strass-layout/THIRD_PARTY_LICENCES.md`.
+- **Measured** (`docs/results/IMG-026L/`): on the 13 test images, faces and pupils are the same, and
+  pupils are 0.00 mm apart, except:
+  - **lake:** dlib saw a face in the clouds. With `soft_outlines` on, 20 Jet stones had turned
+    Smoked Topaz; they now stay Jet.
+  - **woman:** one SS4 Jet stone by an eye is no longer added.
+
+## Eyes, colour reading and skin rules (build M)
+
+Build M ports PatternNifty's face rules (IS commit `e9e7014`, IS-05b, IS-05c, IS-05d and PN-04h).
+Plan: `docs/IS-PORT-PLAN.md` section 3.2. Each rule is a `Rules` flag, off in `PROTOTYPE` and every
+`BUILD_*`; `BUILD_J` freezes the build J `DEFAULT` (so `test_build_j` compares `BUILD_J` with
+`BUILD_I`).
+
+- **Rules in `DEFAULT`:**
+  - `plausible_eyes` (`post._plausible_pupils`): pupils that are not one plausible pair drop the
+    eye stage and give `report.face: null`.
+  - `sample_delivered` (`ordered.delivered_lab`): colours read at the stone's delivered position,
+    inner 60 % of its radius.
+  - `human_iris` off: no SS4 iris rings round a person's pupils; animals keep them.
+  - `skin_nearest_inner`: `skin_nearest` reads the inner 60 % of the stone.
+  - `warm_shadow`, `warm_shadow_de` 3 (`faces.skin_nearest`): Smoked Topaz → Colorado Topaz on a
+    near tie.
+  - `lone_white_skin` (`faces.lone_white_skin`): a lone white stone in skin takes the skin colour.
+  - `soft_outlines` off.
+- **Fixes:** `colour.stone_colours` gives a stone whose window lies outside the image the nearest
+  pixel's colour (S10); `eyes._find_inscribed`'s window ends at the image edge, which fixes an
+  `IndexError` on a dark disc cut by the border (S11).
+- **Report:** `pupilsAtMm`, the pupil stones' centres in returned coordinates, one per `pupilsMm`
+  entry. `face` may be `null`. The app keeps neither new key in `aiLayout.report`
+  (`AI_LAYOUT_REPORT_KEYS`), and `validateProject()` checks only `offsetMm` and `mmPerPx`, so old
+  and new projects load unchanged.
+- **Not ported:** `mixed_shadow`, `fill_exact`, `fill_cover_mask`, `report.fillAtMm`,
+  `report.discsAtMm` (IS experiments or unused).
+- **Tests:** `tests/test_build_m.py`.
+- **Measured** (`docs/results/IMG-026M/`, 13 test images): 0 violations. Stone positions and sizes
+  are those of `BUILD_J` except within 7.4 mm of people's pupils, where `human_iris` off replaces
+  the ring stones (einstein, portrait, woman). S1 drops no eye stage. Mean cell ΔE2000 against the
+  AI image falls from 9.21 to 9.10 (all pixels) and from 7.70 to 7.45 (stone pixels). It rises on
+  Jesus, the woman (all pixels only), the tulips, the logo (all pixels only), the dog and the cat.
+
+## Prompt v7 and model input (build N)
+
+Build N ports PatternNifty's colour prompt v4 and model input (IS commit `e9e7014`; IS spec 7.1 to
+7.3, IS-03b, PN-09, PN-10). Plan: `docs/IS-PORT-PLAN.md` section 3.3, option B.
+
+- **Prompt v7** (Appendix E), for every product: IS's skin ramp line and skin-tone rule.
+  `PROMPT_VERSION` is 7; `layer.redraw.promptVersion` records it as before. The BACKLOG row that
+  planned version 7 now plans version 8.
+- **Shape.** `startImageRedraw()` reads the product before the provider call: the Flat Sheet sends
+  `shape: 'auto'`, every other product `'square'`. `redrawImage()`, the proxy provider and the
+  `POST /api/redraw` body carry it; a body without `shape` is `'square'`, any other value is a 400.
+  - `'auto'`: `size: 'auto'` (the output keeps the input's shape), the whole-image prompt, and the
+    model input of `src/redraw/ModelInput.js`: with a transparent background (any pixel below
+    alpha 128), the box of the pixels with alpha 128 or more plus 3 % of its longest side on every
+    side, transparent past the image edge; then 1024 px on the longest side, aspect kept, no
+    padding. Without transparency, the whole image, resized the same way.
+  - `'square'`: `size: 1024x1024`, the square prompt with the 60-across sentence, and today's input
+    (the upload fitted inside 1536 px).
+- **Fake mode** (`REDRAW_FAKE=1`) checks the shape too and answers version 7, with no provider call.
+- **Tests:** `tools/test-img-026-prompt-v7.mjs`.
+- **Measured** (`docs/results/IMG-026N/`, 3 provider calls, Flat Sheet): face skin ΔL\* of the AI
+  image against the photo, with IS's skin check: freckles +2.3, flower crown +0.2, curls +12.7
+  (PatternNifty's listing designs: +5.3, −0.2, +23.5). The output follows the photo's shape. On the two
+  darker faces the colour step makes the face stones 2 to 4 L\* lighter than the AI image (Silk on lit
+  cheeks).
+
+## Size cap, overlap cleanup and hole fill (build O)
+
+Build O ports PatternNifty's Node steps after the layout (IS commit `e9e7014`; IS spec 7.4 and 7.5,
+IS `docs/exp-holes.md`; IS `src/pipeline/tiers.js`, `cleanup.js`, `holes.js`) into the service, as
+`strass_layout/cleanup.py`. Plan: `docs/IS-PORT-PLAN.md` sections 3.4 and 3.5. They run in
+`layout_frame()` after the colours, so the service stays the one stone producer; nothing in the Node
+server or the browser adds, moves or resizes a stone. Each step is a `Rules` flag, on in `DEFAULT` and
+off in `PROTOTYPE` and every `BUILD_*`; `BUILD_M` freezes the build M `DEFAULT`.
+
+- **`size_cap`:** every stone above SS16 becomes SS16 at the same centre. When the layout has a face
+  (`human` or `animal`) and exactly two pupils in `pupilsAtMm`, the stones at those two centres
+  (within 0.002 mm) are capped at SS20 instead, so an SS30 pupil becomes SS20.
+- **`overlap_cleanup`,** after the cap: for every pair with a rim gap below 0.1 mm, worst gap first,
+  the smaller stone is removed; on equal size the one with fewer neighbours (rim gap below 0.5 mm,
+  counted once on the capped stones), then the later one. A pair with a stone already removed is
+  skipped.
+- **`hole_fill`,** after the cleanup: the subject is the AI image's alpha ≥ 128, closed with a 1 mm
+  disc, with every enclosed transparent area of at most 2π mm² (6.3 mm²) filled. On a 20 px/mm grid,
+  greedily, the free spot farthest from everything first: SS6 while one fits, then SS4. A filled
+  stone lies wholly inside the subject and is at least 0.1 mm from every stone (exact). It takes its
+  neighbours' colour: the stones within 1 mm of its edge each weigh 1 − gap / 1 mm, the largest total
+  wins, a tie goes to the nearest; filled stones next to filled stones are decided in rounds, and one
+  with no decided stone within 1 mm takes the nearest decided stone's colour. Filled stones come
+  after the others in `stones`. The service's own `fill_exact` and `fill_cover_mask` (IS
+  experiments) are not ported.
+- **Report** (no automatic re-run; the Node fallback to IMG-023 is unchanged): `capped`, `removed`,
+  `removedShare` (removed over the stones before the cleanup), `filled`, and `cleanupCoverage`, IS's
+  coverage after the cleanup: `coverage` of the stones before the steps times the area under the
+  stones after them over the area under the stones before them, both at 10 px/mm. `violations`,
+  `minGapMm`, `coverage` and `largestEmptyCircleMm` are measured on the returned stones, so after
+  every step. With the flags off the new keys are 0 and `cleanupCoverage` equals `coverage`.
+  `stagesMs` gains `cleanup`. The app keeps none of the new keys in `aiLayout.report`
+  (`AI_LAYOUT_REPORT_KEYS`) and shows nothing new; old and new projects load unchanged.
+- **Tests:** `services/strass-layout/tests/test_build_o.py`; `tools/test-img-026-ai-layout-app.mjs`
+  2c; `tools/test-img-026-redraw-jobs.mjs` 14 (the fake layout's report keys).
+- **Measured** (`docs/results/IMG-026O/`, the 13 test images and the 3 IMG-026N layouts): with the
+  three flags off every layout equals `develop`'s `DEFAULT` exactly. With `DEFAULT`: 0 violations,
+  0 stones removed, natural sizes unchanged, 180 stones filled (0 to 60 per image), 6 pupils capped
+  (dog and woman SS30 → SS20, the single pupils of Jesus and the parrot SS20 → SS16). The smaller
+  pupils sit in a freed ring that the fill partly closes with neighbour-coloured stones, and on the
+  portrait the fill closes some of the white gaps between curls.
+  The full service suite (144 tests) passed in 16 528 s (4 h 35 min) on the iMac.
+
+## Black & white (build P)
+
+Build P ports PatternNifty's Black & white (IS commit `e9e7014`; IS spec 6.4, 7.2, 7.6 and 10;
+`docs/exp-holes.md` sections 6 and 10). Plan: `docs/IS-PORT-PLAN.md` section 3.6.
+
+- **The layer's look.** An image layer stores `redrawMode`: `'colour'` (the default) or `'bw'`, and
+  for Black & white `redrawBwStyle`: `'bold'` (the default) or `'shaded'`. A layer without them (every
+  layer made before build P) is Colour; `validateProject()` refuses any other value and adds nothing.
+  `src/ui/ImageStudioState.js` holds the rules: `redrawLookOf()`, `redrawStyleForLook()` (Colour asks
+  for style `'stones'`, Black & white for its style) and `redrawLookFields()`.
+- **Prompts.** `bold` and `shaded` are new redraw styles, each at version 1 (`BOLD_PROMPT_VERSION`,
+  `SHADED_PROMPT_VERSION`); `layer.redraw.style` and `promptVersion` record which. Each is prompt v7 of
+  the layer's shape (Appendix E, so the Flat Sheet size rules of build N apply) with section 4 and the
+  final check replaced: Bold by IS's stencil prompt v5 with its eye rule (Appendix F), Shaded by IS
+  Appendix A (Appendix G). No ramps, no palette line, no skin lines. On the Flat Sheet both equal IS's
+  text word for word.
+- **Request.** The job sends `mode` in the `/layout` options: `'bw'` with `colorIds` Jet and Crystal
+  only for `bold` and `shaded`, `'colour'` with all 47 colours otherwise (`layoutRequestFor()` in
+  `server/redraw/prompt.mjs`).
+- **Mapping, in the service** (`strass_layout/bw.py`). In mode `bw`, after the size cap, the cleanup
+  and the hole fill, every stone is read from the AI image at its delivered position: the mean CIE L\*
+  of the pixels composited on white within the inner 60 % of its radius, at least 2 px. Below
+  `BW_THRESHOLD` (a service setting, default 55) Jet, otherwise Crystal (`crystal-clear`). Filled
+  stones are not read: they take Jet or Crystal by build O's neighbour vote among the read stones.
+  Positions and sizes never change; the report's keys are unchanged and its `colours` lists only the
+  two. Its time counts under `stagesMs.cleanup`. In `bw` mode the S4 check needs only Jet and Crystal
+  in `colorIds`.
+- **Lightbox.** "Look" in the Source group, above the file button (an upload starts the redraw at
+  once): Colour / Black & white, and for Black & white Bold "Solid black and clear areas: strong and
+  graphic." and Shaded "Black and clear stones mixed to show light and shade." Shown whenever a redraw
+  provider is available. It shows the selected image layer's look, or with no image layer selected the
+  remembered one (`localStorage` `rhinestoneStudio.redrawLook`), which a new upload takes. A change is
+  written to the layer in one history step; when the layer's redraw was made in another look, the hint
+  "This layer was made in another look. Redraw with AI to change it." and **Redraw with AI** show
+  (which, like Try again, asks first when the layout has manual edits). Renderers and exporters are
+  unchanged.
+- **Fake mode** answers Bold and Shaded with `server/redraw/fixtures/fake-layout-bw.json`: the fake
+  layout's stones in Jet and Crystal (each colour mapped by its fill's L\*).
+- **Not changed:** when the layout fails, the IMG-023 fallback still places the stones from the AI
+  image with its own palette choice, so a Black & white layer placed that way is not limited to Jet
+  and Crystal.
+- **Tests:** `services/strass-layout/tests/test_build_p.py`; `tools/test-img-026-black-white.mjs`.
+- **Measured** (`docs/results/IMG-026P/`, 4 provider calls, Flat Sheet): portrait-freckles Bold 2998
+  stones (Jet 39 %), Shaded 3791 (37 %); portrait-curls Bold 3036 (75 %), Shaded 4156 (62 %); 0
+  violations. The faces read in all four; Bold is solid areas, Shaded mixes Jet and Crystal, mostly in
+  the hair. The AI images are almost two-tone (at most 0.4 % of the read stones between L\* 45 and
+  65), so the threshold decides little. The service's pupils (SS20, one SS16) are much larger than the
+  AI's, and the thin eyelid and lip lines are mostly lost; Shaded's natural size is 11 to 21 % larger
+  than Bold's (finer AI pitch). The full service suite (162 tests) passed in 17 115 s (4 h 45 min) on the iMac.
+
+## Tinted view (build Q)
+
+Build Q ports PatternNifty's tinted view (IS commit `e9e7014`, `src/render/tinted.js`, IS spec
+section 8). Plan: `docs/IS-PORT-PLAN.md` section 3.7. No service change.
+
+- **Control.** `#canvasBackground` gains a third option, "Background: Tinted". It is a view setting
+  like build I's Product: not saved, not in history. Design (Paper.js) is unchanged. The canvas
+  around the design stays white (`canvasBackgroundColor()` returns `#fbfdff`).
+- **Renderer** (`src/renderer/TintedView.js`). It reads the stones only and follows IS section 8:
+  - gap colour of the nearest stone measured to its edge, up to `FILL_MARGIN_MM` (0.6);
+  - `GAP_RULE`: the fill 4 L\* darker, plus 0.05 L\* per L\* above 80, and at least 8 L\* above
+    L\* 85; hue kept, 8-bit rounding never makes the step smaller;
+  - enclosed specks up to 2π mm² filled;
+  - stones drawn by `drawCrystalStone()` (unchanged), with the SS6 rim for Jet above SS6;
+  - `STONE_LIGHTNESS`: the inner 60 % within 4 L\*, the whole stone within 2.
+
+  `renderProductionLayout()` gains `tinted: { cache, layerIds, crystalGapLayerIds }`. It draws
+  those layers' stones as one bitmap above the grid, and every other stone as before, on top.
+- **App.** `canvasTintedOptions()` tints every image layer. Layers whose `redrawLookOf()` is
+  Black & white use IS's `BW_GAP` "crystal" rule: where the second-nearest stone's edge is within
+  0.6 mm too and its colour differs, the lighter of the two gap colours. The renderer knows only
+  layer ids, not layer types.
+- **Speed.** `TintedViewCache` renders in slices of about 12 ms between frames, showing the stones
+  as on White meanwhile, then redraws (`onReady`). It keeps the bitmap until the tinted stones, the
+  rule or the transform change. `cancel()` on leaving Tinted keeps the finished bitmap.
+- **Exports never show it.** Export PNG and the Combined preview copy the on-screen canvas.
+  `withoutTintedView()` redraws it as on White for the copy, then restores the tinted view from the
+  cache. Exporters do not import `TintedView.js`.
+- **Tests:** `tools/test-img-026-tinted-view.mjs`. `tools/test-img-026-product-background.mjs` test
+  4 lists the third option. The #exportCombined harness in `tools/test-rs-3037-flat-sheet.mjs` passes
+  `withoutTintedView`.
+- **Measured** (`docs/results/IMG-026Q/`; Chrome 156 on the iMac, i5-7600; 4156 stones; DPR 2):
+  - first tinted render 729 ms with a 1500 × 950 window and 1772 ms full-screen at 5K, with no
+    task over 100 ms in 5 of 6 runs;
+  - cached redraw 2–3 ms (White: about 50 ms);
+  - real drawn stones within 2.06 L\* (whole) and 4.26 L\* (inner 60 %) of their fill.
+
+  Most visible defects are the layout's, which the view makes more noticeable: the portrait's white
+  highlight patches and the large SS20 pupils.
+
+## Pale skin (RS-3044)
+
+The AI paints lit skin in one pale cream (about L\* 93–96) that is not in the palette. The snap
+splits it into Silk, Crystal, Metallic Sunshine and Citrine, so lit skin got single white and gold
+stones; `lone_white_skin` left them because each touches a non-skin neighbour, often another stone of
+the same cream (diagnosis in `tools/scratch/white-stones/`, not committed). Spec:
+`docs/specifications/RS-3044-PaleSkin.md`.
+
+RS-3045 (below) replaced the rounds with small groups; the RS-3044 rule as described here is kept
+only for the frozen `BUILD_RS3044`.
+
+- **`pale_skin`** (`faces.pale_skin`), a `Rules` flag on in `DEFAULT`, off in `PROTOTYPE` and every
+  `BUILD_*`; `BUILD_O` freezes the build O `DEFAULT` (builds P and Q changed no rule). It runs in
+  `finish_faces` right after `lone_white_skin`, only when a person's face was found
+  (`face == "human"`).
+  - **Candidate:** an SS4 or SS6 stone outside 1.5 eye-zone radii whose read colour (the inner 60 %
+    of its radius at its delivered position, the reading `skin_nearest` uses) is pale warm cream:
+    L\* above 85, chroma 8 to 40, hue 25 to 100 degrees (`faces.is_pale_cream`). Its colour is any
+    colour outside `distinct.SKIN`.
+  - **Condition:** at least four neighbours, at least half of them in skin colours.
+  - **Result:** the skin colour (`distinct.SKIN`, Topaz excepted, as `skin_nearest`) nearest its read
+    colour in ΔE2000.
+  - **Rounds:** each round reads the colours the round before left, so pairs and triples change
+    from their edge inward; until no stone changes, at most 5 rounds.
+  - Positions and sizes never change. Teeth in the AI's Crystal (chroma 0), eye whites (eye zone)
+    and catch-lights (eye zone, and read dark) stay. Black & white is unchanged (`bw.py` reads its
+    own colours).
+- **Tests:** `services/strass-layout/tests/test_rs_3044_pale_skin.py`; `test_build_o` now compares
+  `BUILD_O` with `BUILD_M`.
+- **Measured** (`docs/results/RS-3044/`): on the diagnosis's AI image, 22 stones become Silk: the 11
+  Crystal stones on skin, 8 Metallic Sunshine and 3 Citrine. The eye white and the catch-light keep
+  Crystal. On the 13 test images, the 3 IMG-026N and the 4 IMG-026P layouts, one stone changes: on
+  the woman's lit lower lip, Crystal → Silk. Everything else is identical.
+- **Full suite:** 180 tests, 5 h 13 min on the iMac.
+
+### Small groups with light skin neighbours (RS-3045)
+
+RS-3044's rule repeats in rounds, stone by stone, so next to a white animal it creeps into the fur;
+PatternNifty measured it on painting-ermine and an archive cat. RS-3045 ports PatternNifty's
+replacement (alexdruk/imagetostrass commit `6e097d5`, PN-11 and its two follow-ups; its
+`docs/pn-11-results.md` and spec 7.4) exactly.
+
+- **`pale_skin`** stays where it was: on in `DEFAULT`, in `finish_faces` right after
+  `lone_white_skin`, only with `face == "human"`.
+  - **Candidates, found once** (`faces.pale_groups`): SS4 or SS6 stones outside 1.5 eye-zone radii,
+    not in a skin colour, whose read colour is pale warm cream (`faces.is_pale_cream`, as RS-3044).
+  - **Groups:** candidates that are neighbours (`faces._neighbours`) form a group.
+  - **Condition:** a group changes only when it has at most `pale_skin_group` stones (a new `Rules`
+    setting, default 4) and at least four outside neighbours (stones touching the group that are not
+    in it, each counted once), at least half of them light skin colours. A light skin colour is a skin
+    colour (`distinct.SKIN`) whose catalogue L\* is at least `pale_skin_min_l` (a new setting, default
+    70: Silk and Light Peach; `faces.light_skin`).
+  - **Result:** every stone of a changed group takes the skin colour (`distinct.SKIN`, Topaz excepted)
+    nearest its own read colour in ΔE2000.
+  - **One pass**, on the colours before the rule. No rounds.
+- **`BUILD_RS3044`** freezes RS-3044's `DEFAULT`. So that it still gives RS-3044's layouts, its
+  `pale_skin_rounds` flag (off everywhere else) runs RS-3044's rule in rounds, kept unchanged as
+  `faces.pale_skin_rounds`.
+- **Tests:** `test_rs_3044_pale_skin.py`, with PatternNifty's new tests (group limit and its setting,
+  fur patch, light skin colours at 60, 70 and 80, exactly half, outside neighbours counted once, teeth
+  at a limit of 10) in place of RS-3044's round tests, which now check `BUILD_RS3044`.
+- **Measured** (`docs/results/RS-3045/`): on the diagnosis's AI image, 22 stones change against no
+  pale skin (Crystal → Silk 10, Metallic Sunshine → Silk 9, Citrine → Silk 3), the same stones as in
+  PatternNifty. Against RS-3044, the forehead Crystal beside the gold head chain now stays and a chest
+  Metallic Sunshine (three neighbours, in a pair with six outside neighbours) now changes; the woman's
+  lower-lip stone stays Crystal. Nothing else changes on the 13 test images, the 3 IMG-026N and the 4
+  IMG-026P (Black & white) layouts. `BUILD_RS3044` gives RS-3044's layouts exactly on all 21.
+
+## Layout service control and the tinted result (RS-3046)
+
+Spec: `docs/specifications/RS-3046-LayoutServiceControl.md`. No service or layout rule change.
+
+- **Dev server.** `GET /api/layout-service/status` (Ready, Busy, Starting, Not running, Wrong service,
+  each with a reason, from `/health`'s `service` and `version`) and `POST /api/layout-service/start`
+  (`tools/layout-control.mjs`), both answered only to this Mac. Start runs `start_layout.sh` under
+  `caffeinate -i` with the URL's port, by `tools/studio.mjs`'s own code, only for a 127.0.0.1 or
+  localhost URL where nothing answers; RS's running service is reused, another service or a remote
+  URL is refused. The dev server stops the service it started when it stops, and never one started
+  elsewhere.
+- **Lightbox.** An indicator above the redraw buttons with Check and, when it is not running,
+  Start layout service. Opening the lightbox starts a service that is Not running and polls every
+  3 s until Ready (180 s limit). While Starting the redraw button waits; while Not running or Wrong
+  service it reads "Redraw with AI (old method)".
+- **Result.** A redraw with a layout ends on the new **Tinted** view (build Q's renderer, unchanged;
+  Black & white with the crystal gap rule), and the lightbox opens an ai-layout layer on it; Template
+  and Source are the switch. View only: nothing saved, no stone changed, exports as on White.
+
 ## Reference figures
 
 Re-derived on 6 Oct 2026 from `prototype/expected/*.json` (the committed reference). Gaps are
@@ -2333,6 +2648,13 @@ and none in `jesus`, so `lake` gets the human eye rule and `jesus` the animal ru
 - Build J changes text this file greps: `services/strass-layout/tests/test_build_i.py` (`BUILD_I`
   instead of `DEFAULT`).
 
+- Build N changes text these files grep (version 6 → 7, Appendix D → E, the `shape` key in the
+  request body):
+  - `tools/test-img-022-redraw-provider.mjs` T1, T5 and the client's POST body;
+  - `tools/test-img-024-flat-artwork-style.mjs` (the version and the POST bodies);
+  - `tools/test-img-026-redraw-jobs.mjs` (the version);
+  - `tools/test-img-026-ai-colours-sheet.mjs` (the version).
+
 ## Anchors (grepped at `7a9e482`)
 
 | Anchor | Location |
@@ -2640,4 +2962,185 @@ Use only the colours below, with exactly these hex values, as flat fills:
 - One scale for the whole image, no perspective.
 
 Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
+## Appendix E — Redraw prompt v7 (`PROMPT_VERSION = 7`)
+
+Prompt v7 is Appendix D with PatternNifty's two skin lines (IS colour prompt v4, PN-10) in section 4:
+the skin ramp says it covers every skin tone, and a rule after the Topaz rule keeps each person's
+skin tone and lightness. It comes in two shapes, picked from the product before the provider call
+(build N). Both are version 7.
+
+- **Square** (`shape: 'square'`; vessels and the plate): Appendix D's section 1 and section 6.
+- **Whole image** (`shape: 'auto'`; the Flat Sheet): rule 1 has no "about 60 stones across"
+  sentence, and section 6's first rule asks for the uploaded image's shape. This text equals IS's
+  colour prompt v4 at IS commit `e9e7014`.
+
+`buildRedrawPrompt(colors, 'stones', shape)` returns the block of its shape with `<palette line>`
+replaced by `buildPaletteLine(colors, true)` (all 47 colours).
+
+Square:
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design. Make the stones large: about 60 stones across the full width of the image.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin (every skin tone, from the lightest to the deepest; deep skin uses the dark end of this ramp): Silk, Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Rose Peach and Vintage Rose for cheeks and Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Silk, Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Greige, Grey, Black Diamond, Graphite, Jet Hematite, Hematite, Jet;
+  greens: Chrysolite, Citrus Green, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire, Capri Blue; reds and pinks: Rose, Rose Peach, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Indian Siam, Fuchsia; yellows and oranges: Citrine, Light Topaz, Metallic Sunshine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Keep each person's skin tone, lightness and undertone as the photo shows them. Never lighten or whiten skin: each face stays as light or as dark as it is in the photo.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Square image at the highest resolution available.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
+Whole image:
+
+```
+Turn the uploaded image into a rhinestone design drawn as a flat technical placement chart. Software will measure every stone in your image (position, size and colour) and rebuild it as a real rhinestone layout, so clean geometry matters more than a realistic look.
+
+1. STONES
+- Every stone is a perfect circle seen straight from above, filled with ONE flat colour.
+- No highlights, facets, sparkle, glints, gradients, rims, shadows, reflections or white dots on the stones.
+- Use one main stone size for the whole design.
+- Only two exceptions:
+  a) a smaller stone, 3/4 of the main diameter, only for very fine details (eyes, eyelids, nostrils, thin lines);
+  b) one large stone, twice the main diameter, for each pupil.
+- No other sizes: no tiny filler dots, no half stones, no ovals.
+
+2. GAPS
+- Every stone is separated from its neighbours by a small, clearly visible gap of about 1/8 of the stone diameter.
+- Stones never touch and never overlap.
+- Keep the gaps even and small. Pack the stones tightly, with neighbouring rows shifted so that stones sit in the notches of the next row. Avoid wide empty spaces inside the subject.
+- The gaps show the background only. Never draw anything in the gaps: no dark shading, no glow, no colour, no dots, no texture.
+
+3. BACKGROUND AND EDGES
+- Background fully transparent. If transparency is not available, use solid pure magenta #FF00FF with no variation, and never use magenta inside the subject.
+- Every stone is fully opaque with a crisp edge. No soft or semi-transparent edges.
+- No frame, border, text, watermark, drop shadow or decoration.
+
+4. COLOURS
+Use only the colours below, with exactly these hex values, as flat fills:
+<palette line>
+- Every stone gets exactly one of these colours. Do not invent, mix, tint or shade colours.
+- Pick the closest of these colours for each area, and keep neighbouring areas clearly distinguishable so the design reads well from a distance.
+- Use these ramps, from light to dark, and stay inside the ramp of each kind of area:
+  skin (every skin tone, from the lightest to the deepest; deep skin uses the dark end of this ramp): Silk, Light Peach, Rose Gold, Light Colorado Topaz, Golden Shadow, Copper, Colorado Topaz, Smoked Topaz, with Rose Peach and Vintage Rose for cheeks and Crystal only for the brightest highlights;
+  tan or brown fur, wood, earth: Silk, Light Peach, Golden Shadow, Light Colorado Topaz, Light Smoked Topaz, Copper, Colorado Topaz, Smoked Topaz;
+  white, grey and black hair, fur, metal, stone: Crystal, Silver, Greige, Grey, Black Diamond, Graphite, Jet Hematite, Hematite, Jet;
+  greens: Chrysolite, Citrus Green, Peridot, Emerald, Fern Green, Erinite, Olivine, Khaki; blues: Light Sapphire, Aquamarine, Sapphire, Capri Blue; reds and pinks: Rose, Rose Peach, Vintage Rose, Padparadscha, Light Siam, Scarlet, Siam, Indian Siam, Fuchsia; yellows and oranges: Citrine, Light Topaz, Metallic Sunshine, Gold, Topaz, Hyacinth.
+- Never use Topaz or Hyacinth on skin.
+- Keep each person's skin tone, lightness and undertone as the photo shows them. Never lighten or whiten skin: each face stays as light or as dark as it is in the photo.
+- Inside one area use at most three neighbouring shades of its ramp, in clear patches; never alternate shades stone by stone.
+- When a colour of the image lies between two listed colours, choose one of them for the whole patch; do not paint an in-between shade.
+
+5. DESIGN
+- Lay the stones in rows that follow the shapes: along feathers, hair strands, fur direction, wrinkles, petals and outlines.
+- Outline important shapes with one row of stones in a darker colour of the same colour family (plain black only where the area itself is black or very dark).
+- Outline stones are ordinary stones: the main size or the 3/4 size, on the same rows as their neighbours, with the same gap. Never squeeze extra stones between rows and never let outline stones touch.
+- Busy textures (rocks, grass, foliage, fur, water) are simplified into patches of one or two shades. Every stone there is still a separate flat circle with a gap; never draw broken, angular or overlapping stones.
+- Eyes: a dark outline ring, the iris in 1 or 2 rings of stones, one large dark pupil stone, and one Crystal #f5f5f5 stone touching the pupil at its upper right as the catch-light.
+- Keep the subject, pose, proportions and recognisable features of the uploaded image. Simplify only where stones cannot show the detail.
+
+6. COMPOSITION
+- Use the whole image at the highest resolution available, in the same shape (width to height) as the uploaded image.
+- The whole subject fits inside the image with a margin of about 3 stones on every side; nothing is cut off at the edges.
+- One scale for the whole image, no perspective.
+
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; only the listed colours are used, skin and fur only from their ramps; the background is transparent or pure magenta.
+```
+
+## Appendix F — Black & white Bold prompt v1 (`BOLD_PROMPT_VERSION = 1`)
+
+Style `bold` (build P) is Appendix E of the layer's shape with section 4 and the final check sentence
+replaced by the two blocks below; everything else, the shape lines included, is Appendix E's. It is
+PatternNifty's stencil prompt version 5, with its eye rule (IS commit `e9e7014`,
+`src/pipeline/prompt.js`); on the Flat Sheet (`shape: 'auto'`) the whole text equals IS's word for
+word. There are no ramps and no skin lines: the only colours are Jet and Crystal, with their
+catalogue preview colours.
+
+Section 4:
+
+```
+4. COLOURS
+Use only these two colours, with exactly these hex values, as flat fills:
+Jet #141414, Crystal #f5f5f5.
+- Every stone is either Jet or Crystal. No greys, no other colours, no tints.
+- Stencil style: every area is solid. Decide for each area whether it is dark or light, and fill all of it with that one colour.
+- Never alternate or mix the two colours to suggest grey: no checkerboards, no dotted, speckled or halftone areas.
+- Faces: light skin in Crystal. The shadows that shape the face (eye sockets, under the nose, under the lower lip, the jaw and neck shadow) and the hair in solid Jet, as clean shapes.
+- Eyes are never part of a dark area. In each eye the white is Crystal, the iris and the pupil are Jet, with one Crystal catch-light stone, and at least one row of Crystal stones separates the eye from any dark shadow or eyebrow around it.
+- Keep the subject clearly readable from a distance: strong Jet outlines around the main shapes.
+```
+
+Final check:
+
+```
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; every stone is Jet or Crystal; no area is mixed or speckled; the background is transparent or pure magenta.
+```
+
+## Appendix G — Black & white Shaded prompt v1 (`SHADED_PROMPT_VERSION = 1`)
+
+Style `shaded` (build P) is Appendix E of the layer's shape with section 4 and the final check
+sentence replaced by the two blocks below. It is PatternNifty's halftone prompt (IS spec
+`docs/IS-001-Spec.md` Appendix A, which shares IS's colour version 4); on the Flat Sheet the whole
+text equals IS's word for word.
+
+Section 4:
+
+```
+4. COLOURS
+Use only these two colours, with exactly these hex values, as flat fills:
+Jet #141414, Crystal #f5f5f5.
+- Every stone is either Jet or Crystal. No greys, no other colours, no tints.
+- Dark areas, outlines, pupils and shadows are Jet; light areas, highlights and the catch-light are Crystal.
+- Show mid-tones only by mixing the two colours in clear patterns (rows or patches), never by inventing a grey.
+- Keep the subject clearly readable from a distance: strong Jet outlines around the main shapes.
+```
+
+Final check:
+
+```
+Before finishing, check that: every stone is a separate flat circle; no two stones touch, outline stones included; nothing is drawn in the gaps; only the three allowed sizes are used; every stone is Jet or Crystal; the background is transparent or pure magenta.
 ```

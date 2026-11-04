@@ -11,7 +11,8 @@
  * 3 s, reports each new stage through onStage, sends DELETE on abort, and counts a failed poll as
  * `network` only after 3 in a row. A layout failure after a good OpenAI image resolves with
  * layout: null and layoutError; the job's error code is thrown only when there is no image. See
- * docs/specifications/IMG-026-StrassLayoutService.md, "Client".
+ * docs/specifications/IMG-026-StrassLayoutService.md, "Client". Build N: the POST body also carries
+ * `shape` ('square' or 'auto'), which picks the server's prompt shape and output size.
  */
 
 export const OPENAI_PROXY_PROVIDER_ID = 'openai-proxy';
@@ -72,13 +73,13 @@ export function createOpenAiProxyProvider({ fetch, costLabel = '', wait = defaul
     consent: { recipientName: 'OpenAI', costLabel, needsAccessCode: true },
     // Resolves { dataUrl, model, promptVersion, layout, layoutError }. onStage(stage) hears each new
     // job stage ('drawing', 'placing', 'done', 'failed').
-    async redraw({ pngDataUrl, accessCode = '', signal, style = 'stones', onStage }) {
+    async redraw({ pngDataUrl, accessCode = '', signal, style = 'stones', shape = 'square', onStage }) {
       let response;
       try {
         response = await fetch(REDRAW_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Redraw-Access-Code': accessCode },
-          body: JSON.stringify({ image: pngDataUrl, style }),
+          body: JSON.stringify({ image: pngDataUrl, style, shape }),
           signal
         });
       } catch (error) {

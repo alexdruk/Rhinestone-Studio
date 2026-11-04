@@ -89,12 +89,15 @@ import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineM
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
+import { TintedViewCache } from './src/renderer/TintedView.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { listStoneSizes, findStoneSizeByDiameterMm, listAllStoneSizes, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable, isValidStoneSizeId } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
+import { stoneLayoutToEps } from './src/export/EpsExporter.js';
+import { stoneLayoutToAi } from './src/export/AiExporter.js';
 import { computeProductionSheetLayout, computeProductionSheetDocument, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
@@ -114,7 +117,7 @@ import { AI_STONE_NUDGE_STEP_MM, AI_STONE_NUDGE_STEP_LARGE_MM } from './src/edit
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
-import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows } from './src/ui/index.js';
+import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply, imageStudioState, aiLayoutColourRows, redrawLookOf, redrawStyleForLook, redrawLookFields, REDRAW_MODES, REDRAW_BW_STYLES } from './src/ui/index.js';
 import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
@@ -139,7 +142,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
 import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
-import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES } from './src/redraw/index.js';
+import { redrawImage, getRedrawAvailability, setRedrawAccessCode, RedrawError, applyRedraw, restoreOriginal, fitAiStoneBox, aiStoneEffectiveShrink, fitAiLayoutCanvas, aiLayoutBoxSize, aiLayoutImageBox, applyAiLayoutEdits, REDRAW_STAGE_MESSAGES, createLayoutServiceMonitor } from './src/redraw/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -1309,6 +1312,9 @@ function validateProject(obj){
     // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
     if(l.type==='image'&&l.redraw!==undefined&&!(l.redraw&&typeof l.redraw==='object'&&!Array.isArray(l.redraw)&&typeof l.redraw.originalImageSrc==='string'&&l.redraw.originalImageSrc.startsWith('data:image/')))throw new Error(`Image layer "${l.id}" has an invalid 'redraw' record: originalImageSrc must be a data:image/ URL.`);
+    // IMG-026 (build P): the redraw look. Both fields are optional; a layer without them is Colour.
+    if(l.type==='image'&&l.redrawMode!==undefined&&!REDRAW_MODES.includes(l.redrawMode))throw new Error(`Image layer "${l.id}" has an invalid 'redrawMode': expected one of ${REDRAW_MODES.join(', ')}.`);
+    if(l.type==='image'&&l.redrawBwStyle!==undefined&&!REDRAW_BW_STYLES.includes(l.redrawBwStyle))throw new Error(`Image layer "${l.id}" has an invalid 'redrawBwStyle': expected one of ${REDRAW_BW_STYLES.join(', ')}.`);
     // IMG-026 (C1): an ai-layout layer's stone list and colour swaps. Size ids cover all six sizes
     // (SS4 included), colour ids all of STONE_COLORS. Coordinates outside the box are allowed.
     if(l.type==='image'&&l.aiLayout!==undefined){
@@ -3203,6 +3209,20 @@ function updateScaleBar(s,dpr){
 // drawLayout() also sets the canvas element's CSS background; White clears it back to the
 // stylesheet's --color-canvas-bg.
 function canvasBackgroundColor(){return el('canvasBackground').value==='product'&&currentObjectTemplate().preview.kind!=='sheet'?project.cupColor:'#fbfdff'}
+// IMG-026Q: the third choice, Tinted, shows image layers as the finished piece (TintedView.js): gaps
+// in a darker shade of their stone, true stone lightness, specks closed, thin pupil rims. White
+// background around them; other layers are drawn as on White. View only like Product: not saved,
+// not in history, never in exports, and Design (Paper.js) is unchanged. Black & white layers use the
+// lighter-gap rule. The cache keeps the last bitmap until those stones or the canvas scale change.
+// It renders in slices between frames (the stones show as on White until it is ready) and redraws
+// when done; window.__tintedView exposes its timing for QA, like window.__layout.
+const tintedViewCache=new TintedViewCache({createCanvas:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c},onReady:()=>drawLayout()});
+Object.defineProperty(window,'__tintedView',{get:()=>tintedViewCache,configurable:true});
+function canvasTintedOptions(){if(el('canvasBackground').value!=='tinted')return null;const images=project.layers.filter(l=>l.type==='image');return{cache:tintedViewCache,layerIds:new Set(images.map(l=>l.id)),crystalGapLayerIds:new Set(images.filter(l=>redrawLookOf(l).mode==='bw').map(l=>l.id))}}
+// Exports never show the tinted view: the two that copy the on-screen canvas (Export PNG and the
+// Combined preview) redraw it as on White for the copy (toBlob()/drawImage() copy it at once), then
+// redraw the tinted view from the cache.
+function withoutTintedView(capture){if(el('canvasBackground').value!=='tinted'||drawingTool.isActive)return capture();el('canvasBackground').value='white';drawLayout();try{return capture()}finally{el('canvasBackground').value='tinted';drawLayout()}}
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
   // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
@@ -3215,7 +3235,7 @@ function drawLayout(){
   // blocked by this guard.
   layoutCanvas.style.background=canvasBackgroundColor()==='#fbfdff'?'':canvasBackgroundColor();
   if(drawingTool.isActive)return;
-  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor()});layoutTransform={s,ox,oy,dpr};
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units,backgroundColor:canvasBackgroundColor(),tinted:canvasTintedOptions()});layoutTransform={s,ox,oy,dpr};
   updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
@@ -5376,7 +5396,7 @@ el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 // S-104: the workspace warning's own "Center Text" button -- same shared function, so it can only
 // ever move x/y (never any other property), exactly like the Text Lightbox's Center on Object.
 el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
-el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();el('status').textContent=el('canvasBackground').value==='product'?'Background: product colour':'Background: white'});
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});el('canvasBackground').addEventListener('change',()=>{drawLayout();if(el('canvasBackground').value!=='tinted')tintedViewCache.cancel();el('status').textContent=({product:'Background: product colour',tinted:'Background: tinted'})[el('canvasBackground').value]||'Background: white'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');
 // S-110: singleOtherSelectedLayer() looks at the selection as it stood *before* the layer about to
@@ -5749,6 +5769,8 @@ el('importImageFile').addEventListener('change',async e=>{
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
     const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:'auto',vividness:1.4,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform',fillGaps:true,cleanup:true};
+    // IMG-026 (build P): the new layer takes the look chosen in the lightbox; its redraw reads it.
+    Object.assign(layer,redrawLookFields(loadRedrawLook()));
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -5773,12 +5795,22 @@ function saveRedrawAccessCode(code){try{if(code)localStorage.setItem(REDRAW_ACCE
 const REDRAW_STYLE_STORAGE_KEY='rhinestoneStudio.redrawStyle';
 function loadRedrawStyle(){try{return localStorage.getItem(REDRAW_STYLE_STORAGE_KEY)==='flat'?'flat':'stones'}catch{return'stones'}}
 function saveRedrawStyle(style){try{localStorage.setItem(REDRAW_STYLE_STORAGE_KEY,style)}catch{}}
+// IMG-026 (build P): the look chosen while no image layer is selected; the next upload takes it.
+const REDRAW_LOOK_STORAGE_KEY='rhinestoneStudio.redrawLook';
+function loadRedrawLook(){try{const v=JSON.parse(localStorage.getItem(REDRAW_LOOK_STORAGE_KEY)||'null');return redrawLookOf(v&&typeof v==='object'?{redrawMode:v.mode,redrawBwStyle:v.bwStyle}:null)}catch{return redrawLookOf(null)}}
+function saveRedrawLook(look){try{localStorage.setItem(REDRAW_LOOK_STORAGE_KEY,JSON.stringify(look))}catch{}}
 let redrawAvailability=null,redrawAvailabilityRequested=false,redrawConsentGiven=false,redrawRun=null,redrawConsentResolve=null;
 // IMG-026 (C2): the layer of the running redraw, and the layers whose last run in this session failed,
 // was declined or cancelled, or fell back to the old method. See imageStudioState().
 let runningLayerId=null;
 const redrawFailedLayerIds=new Set();
-function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id)})}
+// RS-3046: the layout service indicator in the lightbox (src/redraw/LayoutServiceMonitor.js; the dev
+// server's routes are tools/layout-control.mjs). Opening the lightbox reads the state and starts a
+// service that is Not running; Check re-reads it, Start layout service asks again. Its state also
+// decides the redraw button: imageStudioState()'s redrawWaits and oldMethod.
+const layoutServiceMonitor=createLayoutServiceMonitor({onChange:()=>{renderLayoutServiceIndicator();syncImageRedrawControlsForSelection()}});
+function layoutServiceStateForRedraw(){const v=layoutServiceMonitor.view();return v.shown?v.state:null}
+function imageStudioStateFor(l){return imageStudioState(l,{available:Boolean(redrawAvailability&&redrawAvailability.available),runningLayerId,failed:Boolean(l)&&redrawFailedLayerIds.has(l.id),layoutService:layoutServiceStateForRedraw()})}
 function setImageStudioView(value){const input=el('imageStudioView').querySelector(`input[value="${value}"]`);if(input)input.checked=true}
 const REDRAW_ERROR_MESSAGES={
   'not-configured':'AI redraw is not set up on this server.',
@@ -5805,12 +5837,38 @@ function redrawErrorMessage(error){
 function syncImageRedrawControls(l){
   if(!redrawAvailabilityRequested){redrawAvailabilityRequested=true;getRedrawAvailability().then(a=>{redrawAvailability=a;const s=selectedLayer();syncImageRedrawControls(s&&s.type==='image'?s:null)})}
   const busy=redrawRun!==null,state=imageStudioStateFor(l);
-  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawButton;
-  el('imageRedraw').disabled=busy;
+  el('imageRedraw').hidden=!state.redrawButton;if(state.redrawButton)el('imageRedraw').textContent=state.redrawLabel;
+  el('imageRedraw').disabled=busy||state.redrawWaits;
   el('imageRedrawCancel').hidden=!busy;
   el('imageRedrawUseOriginal').hidden=!state.useOriginal;
   el('imageRedrawUseOriginal').disabled=busy;
+  syncImageRedrawLook(l,state,busy);
 }
+// IMG-026 (build P): the Colour / Black & white choice shows the selected image layer's look, or with
+// no image layer selected the remembered one. A change is written to the layer (one history step) and
+// takes effect at the next redraw.
+function syncImageRedrawLook(l,state,busy){
+  const box=el('imageRedrawLook'),look=l?redrawLookOf(l):loadRedrawLook();
+  box.hidden=!state.look;
+  for(const input of box.querySelectorAll('input')){input.checked=input.value===(input.name==='imageRedrawMode'?look.mode:look.bwStyle);input.disabled=busy}
+  el('imageRedrawBwStyles').hidden=look.mode!=='bw';
+  el('imageRedrawLookHint').hidden=!state.lookChanged;
+}
+function onRedrawLookChange(){
+  const box=el('imageRedrawLook'),checked=name=>{const input=box.querySelector(`input[name="${name}"]:checked`);return input?input.value:''};
+  const look=redrawLookOf({redrawMode:checked('imageRedrawMode'),redrawBwStyle:checked('imageRedrawBwStyle')});
+  saveRedrawLook(look);
+  const l=selectedLayer(),fields=redrawLookFields(look);
+  if(l&&l.type==='image'&&!redrawRun&&(l.redrawMode!==fields.redrawMode||l.redrawBwStyle!==fields.redrawBwStyle)){
+    commitHistory();
+    delete l.redrawBwStyle;
+    Object.assign(l,fields);
+    updateHistoryUI();
+    scheduleAutosave();
+  }
+  syncImageRedrawControlsForSelection();
+}
+for(const input of el('imageRedrawLook').querySelectorAll('input'))input.addEventListener('change',onRedrawLookChange);
 const redrawConsentLightbox=new Lightbox('lightboxRedrawConsent',{onClose(){if(redrawConsentResolve){const resolve=redrawConsentResolve;redrawConsentResolve=null;resolve(false)}}});
 function askRedrawConsent(consent){
   el('redrawConsentRecipient').textContent=consent.recipientName||'';
@@ -5842,8 +5900,12 @@ async function startImageRedraw(){
   // The request is bound to this layer and the source it started from (a re-redraw always starts
   // from the original image); a result that no longer matches is dropped, not applied.
   const layerId=layer.id,source=layer.redraw?layer.redraw.originalImageSrc:layer.imageSrc;
-  // IMG-026 (C2, D3): always the stone picture; the flat style stays dormant.
-  const style='stones';
+  // IMG-026 (C2, D3): always a stone picture; the flat style stays dormant. Build P: the layer's look
+  // picks the colour picture ('stones') or a Black & white style ('bold', 'shaded').
+  const style=redrawStyleForLook(redrawLookOf(layer));
+  // IMG-026 (build N): read before the provider call. The Flat Sheet asks for the photo's own shape
+  // (cropped model input, size auto); vessels and the plate keep the square output.
+  const shape=currentObjectTemplate().id==='sheet'?'auto':'square';
   redrawRun=new AbortController();
   runningLayerId=layerId;
   setImageRedrawStatus('Redrawing… this can take up to five minutes.');
@@ -5851,16 +5913,16 @@ async function startImageRedraw(){
   syncImageRedrawControls(layer);
   renderImageStudio();
   try{
-    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])}});
+    const result=await redrawImage({dataUrl:source,signal:redrawRun.signal,style,onStage:stage=>{if(REDRAW_STAGE_MESSAGES[stage])setImageRedrawStatus(REDRAW_STAGE_MESSAGES[stage])},shape});
     const buffer=await decodeDataUrlToBuffer(result.dataUrl);
     const current=project.layers.find(x=>x.id===layerId);
     if(!current||(current.redraw?current.redraw.originalImageSrc:current.imageSrc)!==source){setImageRedrawStatus('The image changed while redrawing, so the result was not applied.');return}
     // IMG-026 (C1): a stones redraw that came back with a layout becomes an ai-layout layer, its box
     // exactly the layout's size; on a Flat Sheet the sheet grows first to the box plus 20 mm.
-    const layout=style==='stones'&&result.layout?result.layout:null;
+    const layout=style!=='flat'&&result.layout?result.layout:null;
     // IMG-023 (D2(a)): otherwise the redrawn image becomes an AI stones layer sized from its own stone
     // pitch; on a Flat Sheet the sheet grows first (the size then fits without shrinking).
-    const detection=layout?null:style==='stones'?aiStoneDetectionFor(result.dataUrl,buffer):null;
+    const detection=layout?null:style!=='flat'?aiStoneDetectionFor(result.dataUrl,buffer):null;
     const aiPitchPx=detection&&detection.ok?detection.pitchPx:null,shrink=resolveAiStoneShrink(current.aiStoneShrink);
     const grownCanvas=layout?(currentObjectTemplate().id==='sheet'?fitAiLayoutCanvas({canvas:project.canvas,widthMm:layout.widthMm,heightMm:layout.heightMm,sheetMaxMm:SHEET_MAX_MM}):null):aiPitchPx&&currentObjectTemplate().id==='sheet'?fitAiStoneBox({centerXMm:current.x+current.w/2,centerYMm:current.y+current.h/2,widthPx:buffer.widthPx,heightPx:buffer.heightPx,aiPitchPx,stoneSizeMm:current.stoneSize,gapMm:current.gap,shrink,canvas:project.canvas,sheetMaxMm:SHEET_MAX_MM}).canvas:null;
     commitHistory();
@@ -5868,10 +5930,10 @@ async function startImageRedraw(){
     const next=applyRedraw(current,result,{canvas:project.canvas,layout,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,now:Date.now,aiPitchPx,shrink,style});
     imageBufferCache.set(next.imageSrc,buffer);
     project.layers[project.layers.indexOf(current)]=next;
-    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('template')}else redrawFailedLayerIds.add(layerId);
+    if(layout){redrawFailedLayerIds.delete(layerId);setImageStudioView('tinted')}else redrawFailedLayerIds.add(layerId);
     syncSelectedControlsFromLayer();
     await updateAll(true);
-    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style==='stones'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
+    setImageRedrawStatus(layout?`Placed ${next.aiLayout.stones.length} stones. Gap check: ${next.aiLayout.report.violations} violations.`:style!=='flat'&&result.layoutError?`Placed with the old method: ${result.layoutError.message}`:'Redrawn with AI. Use original to undo this.');
   }catch(error){
     if(!(error&&error.name==='AbortError')&&!(error instanceof RedrawError))console.error('Redraw failed',error);
     if(error instanceof RedrawError&&error.code==='unauthorized'){saveRedrawAccessCode('');setRedrawAccessCode('');redrawConsentGiven=false}
@@ -5886,7 +5948,8 @@ async function startImageRedraw(){
 }
 // IMG-026 (C2): "Try again" first asks before it discards manual edits to the layout. The app has no
 // confirm dialog of its own, so this is window.confirm.
-el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0;if(imageStudioStateFor(l&&l.type==='image'?l:null).redrawButton==='Try again'&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
+// IMG-026 (build P): a redraw for a changed look discards them too.
+el('imageRedraw').onclick=()=>{const l=selectedLayer(),edits=l&&l.type==='image'&&l.aiLayout?l.aiLayout.editCount:0,state=imageStudioStateFor(l&&l.type==='image'?l:null);if((state.redrawButton==='Try again'||state.lookChanged)&&edits>0&&!window.confirm(`This discards ${edits} manual edits.`))return;startImageRedraw()};
 el('imageRedrawStyle').value=loadRedrawStyle();el('imageRedrawStyle').onchange=()=>saveRedrawStyle(el('imageRedrawStyle').value==='flat'?'flat':'stones');
 el('imageRedrawCancel').onclick=()=>{if(redrawRun)redrawRun.abort()};
 el('imageRedrawUseOriginal').onclick=async()=>{
@@ -5904,6 +5967,26 @@ el('imageRedrawUseOriginal').onclick=async()=>{
 // event) rather than duplicating it -- matches this codebase's stated preference for reuse over
 // duplication.
 el('imageStudioSwitchToSheet').onclick=()=>{el('objectType').value='sheet';el('objectType').dispatchEvent(new Event('change'))};
+// RS-3046: what a redraw does in each layout service state, said under the reason.
+const LAYOUT_SERVICE_REDRAW_HINTS={starting:'The redraw button waits until it is ready.','not-running':'Until it is ready, a redraw places its stones with the old method.','wrong-service':'Until it is ready, a redraw places its stones with the old method.'};
+function renderLayoutServiceIndicator(){
+  const v=layoutServiceMonitor.view(),box=el('layoutServiceIndicator');
+  box.hidden=!v.shown;
+  if(!v.shown)return;
+  box.dataset.state=v.state;
+  const reason=[v.reason,LAYOUT_SERVICE_REDRAW_HINTS[v.state]||''].filter(Boolean).join(' ');
+  el('layoutServiceState').textContent=v.text;el('layoutServiceState').title=reason;
+  el('layoutServiceReason').textContent=reason;
+  el('layoutServiceStart').hidden=!v.showStart;
+  el('layoutServiceCheck').disabled=v.checking;
+}
+// Only where a redraw provider is set up: without one there is no redraw to place.
+async function openLayoutServiceIndicator(){
+  const availability=await getRedrawAvailability();
+  if(availability&&availability.available&&lightboxes.imagetrace.isOpen)layoutServiceMonitor.open();
+}
+el('layoutServiceCheck').onclick=()=>layoutServiceMonitor.check();
+el('layoutServiceStart').onclick=()=>layoutServiceMonitor.start();
 // IMG-002: clears every row's colorMap override back to each cluster's own auto-detected nearestId.
 // Not part of the generic HISTORY_TRACKED_CONTROL_IDS 'input'/'change' wiring below (a button click
 // fires neither), so it commits its own history step and regenerates directly, the same pattern
@@ -5930,10 +6013,13 @@ el('exportProject').onclick=()=>{try{download('rhinestone-project.json','applica
   }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// RS-3042: EPS and AI (a one-page true-size PDF saved as .ai), straight from the merged StoneLayout.
+el('exportEPS').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-design.eps','application/postscript',stoneLayoutToEps(layout,{title:project.name}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportAI').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-design.ai','application/pdf',stoneLayoutToAi(layout))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{withoutTintedView(()=>exportCanvas('rhinestone-layout.png',layoutCanvas))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{withoutTintedView(()=>exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
 // only options (like rotation/zoom) -- read live from their controls at click time, not part of
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one
@@ -6078,7 +6164,7 @@ const lightboxes={
   text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();renderImageStudio()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();showTintedForAiLayout();renderImageStudio();openLayoutServiceIndicator()},onClose(){activeFieldLightbox=null;layoutServiceMonitor.close();studioTintedCache.cancel();relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
   // can never go stale from an edit made while it was closed (matching shipping/settings' own
@@ -6873,9 +6959,9 @@ function applyImageStudioState(state){
   el('legacyImageControls').hidden=!state.legacy;
   el('imageStudioGroupAiColours').hidden=!state.aiColours;
   for(const id of AI_LAYOUT_STAT_IDS){el(id).hidden=!state.aiStats;el(`${id}Label`).hidden=!state.aiStats}
-  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;
+  el('imageStudioViewMask').hidden=!state.views.mask;el('imageStudioViewColors').hidden=!state.views.colours;el('imageStudioViewTinted').hidden=!state.views.tinted;
   const view=el('imageStudioView').querySelector('input:checked')?.value;
-  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours))setImageStudioView('template');
+  if((view==='mask'&&!state.views.mask)||(view==='colors'&&!state.views.colours)||(view==='tinted'&&!state.views.tinted))setImageStudioView('template');
 }
 // IMG-026 (C2, S17): the "Colours used" rows of an ai-layout layer, rebuilt on every render. A change
 // writes layer.colorSwaps as its own history step; neither control is in HISTORY_TRACKED_CONTROL_IDS.
@@ -6902,6 +6988,23 @@ function drawGapViolationRings(ctx,stones,t,lineWidthPx){
   for(const s of flagged){ctx.beginPath();ctx.arc(t.ox+s.xMm*t.s,t.oy+s.yMm*t.s,Math.max(2,s.sizeMm*t.s/2),0,Math.PI*2);ctx.stroke()}
   ctx.restore();
 }
+// RS-3046: the Tinted view of an ai-layout layer's result: IMG-026Q's renderer (TintedView.js,
+// unchanged) through a cache of its own, so the 2D canvas's tinted bitmap is not thrown away. A
+// Black & white layer uses the crystal gap rule, as the 2D canvas does (canvasTintedOptions). It reads the stones
+// only; until the bitmap is ready (it renders in slices) the plain stones show, then the studio
+// redraws. Outside renderImageStudio() so that function keeps its two drawImage() calls.
+const studioTintedCache=new TintedViewCache({createCanvas:(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c},onReady:()=>renderImageStudio()});
+function drawStudioTinted(ctx,l,stones,t){
+  const bw=redrawLookOf(l).mode==='bw';
+  const bitmap=studioTintedCache.get(stones,{s:t.s,ox:t.ox,oy:t.oy,canvasWidthPx:ctx.canvas.width,canvasHeightPx:ctx.canvas.height,crystalGap:Uint8Array.from(stones,()=>bw?1:0)});
+  if(!bitmap)return false;
+  // The open gaps show the white the 2D canvas's Tinted view has (canvasBackgroundColor()), not the studio's grey.
+  ctx.fillStyle='#fbfdff';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  ctx.drawImage(bitmap.canvas,bitmap.xPx,bitmap.yPx);
+  return true;
+}
+// RS-3046: an ai-layout layer opens on its Tinted view.
+function showTintedForAiLayout(){const l=selectedLayer();if(l&&l.type==='image'&&imageStudioStateFor(l).views.tinted)setImageStudioView('tinted')}
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -7040,6 +7143,7 @@ async function renderImageStudio(){
     drawInBox(scratch);
   };
   const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
+  if(view!=='tinted')studioTintedCache.cancel();
   // IMG-023 (D8): for a redrawn layer Source shows the original (aspect kept inside the box) and AI
   // image shows the redraw; without a redraw both show the layer's own image.
   if(view==='source'||(view==='ai'&&!l.redraw)){
@@ -7057,6 +7161,8 @@ async function renderImageStudio(){
     drawColors();
   }else if(view==='template'){
     drawTemplate();
+  }else if(view==='tinted'){
+    if(drawStudioTinted(ctx,l,stones,t))drawGapViolationRings(ctx,stones,t,1.5*dpr);else drawTemplate();
   }else{
     const img=await drawSource();
     if(token!==imageStudioRenderToken)return;
