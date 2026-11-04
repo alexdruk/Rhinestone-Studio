@@ -13,7 +13,9 @@ stone in skin, which reads as a hole, its skin neighbours' colour.
 
 RS-3044: Rules.pale_skin (pale_skin, after lone_white_skin, on a person's face) gives a stone the AI
 painted in its pale cream lit-skin colour, which the snap split into whites and golds, the skin colour
-nearest its read colour when at least half its neighbours are skin.
+nearest its read colour. RS-3045 (from IS PN-11, commit 6e097d5): only in small groups (at most
+Rules.pale_skin_group stones) whose outside neighbours are at least half light skin colours
+(catalogue L* at least Rules.pale_skin_min_l), in one pass, so it no longer creeps into white fur.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -138,7 +140,13 @@ def lone_white_skin(P, D, C, pal, eyes, nb=None):
 PALE_L = 85.0
 PALE_CHROMA = (8.0, 40.0)
 PALE_HUE = (25.0, 100.0)
-PALE_ROUNDS = 5
+# RS-3045 (IS PN-11 follow-up): the largest group pale_skin changes (Rules.pale_skin_group) and the
+# fewest outside neighbours a group needs.
+PALE_GROUP = 4
+PALE_MIN_OUTSIDE = 4
+# RS-3045 (IS PN-11 second follow-up): an outside neighbour counts as skin only in a skin colour whose
+# catalogue L* is at least this (Rules.pale_skin_min_l; at 70 Silk and Light Peach).
+PALE_MIN_L = 70.0
 
 
 def is_pale_cream(lab):
@@ -150,13 +158,75 @@ def is_pale_cream(lab):
             & (hue >= PALE_HUE[0]) & (hue <= PALE_HUE[1]))
 
 
-def pale_skin(P, D, C, lab, pal, eyes, nb=None, rounds=PALE_ROUNDS):
-    """RS-3044: an SS4 or SS6 stone outside 1.5 eye-zone radii whose read colour (lab, inner 60 %)
-    is pale warm cream (is_pale_cream) and whose colour is not a skin colour, with at least four
-    neighbours of which at least half are in skin colours, takes the skin colour (distinct.SKIN, Topaz
-    excepted, as skin_nearest) nearest its read colour in ΔE2000. Each round reads the colours the
-    round before left, so pairs and triples of such stones change from their edge inward; it repeats
-    until no stone changes, at most `rounds` rounds. Returns (colours, count)."""
+def pale_groups(P, D, C, lab, eyes, nb=None):
+    """RS-3045 (IS PN-11 follow-up): the candidates of pale_skin, found once: SS4 or SS6 stones outside
+    1.5 eye-zone radii whose colour is not a skin colour and whose read colour (lab, inner 60 %) is pale
+    warm cream (is_pale_cream), grouped so that neighbouring candidates (_neighbours) share a group.
+    Returns a list of groups, each a sorted list of stone indices."""
+    nb = nb if nb is not None else _neighbours(P, D)
+    pale = is_pale_cream(lab)
+    cand = {i for i in range(len(C)) if pale[i] and D[i] in (1.5, 2.0) and C[i] not in SKIN and not _near_eye(P[i], eyes, 1.5)}
+    groups, seen = [], set()
+    for i in sorted(cand):
+        if i in seen:
+            continue
+        group, todo = [], [i]
+        seen.add(i)
+        while todo:
+            k = todo.pop()
+            group.append(k)
+            for j in nb[k]:
+                if j in cand and j not in seen:
+                    seen.add(j)
+                    todo.append(j)
+        groups.append(sorted(group))
+    return groups
+
+
+def light_skin(pal, min_l=PALE_MIN_L):
+    """RS-3045 (IS PN-11 second follow-up): the skin colours (distinct.SKIN) whose catalogue L* is at
+    least min_l."""
+    return {k for k in pal.ids if k in SKIN and pal.lab[pal.ids.index(k)][0] >= min_l}
+
+
+def pale_skin(P, D, C, lab, pal, eyes, nb=None, group=PALE_GROUP, min_l=PALE_MIN_L):
+    """RS-3044, by small groups since RS-3045 (IS PN-11 follow-ups): the stones the AI painted in its
+    pale cream lit skin. A group of pale_groups changes when it has at most `group` stones and at least
+    PALE_MIN_OUTSIDE outside neighbours (stones touching the group that are not in it, each counted
+    once), of which at least half are light skin colours (light_skin, catalogue L* at least min_l, so
+    tan fur and copper hair do not count): then each of its stones takes the skin colour (distinct.SKIN,
+    Topaz excepted, as skin_nearest) nearest its own read colour in ΔE2000. One pass, on the colours
+    before the rule; a larger group (fur, a white animal) stays. Returns (colours, count)."""
+    nb = nb if nb is not None else _neighbours(P, D)
+    ids = [k for k in pal.ids if k in SKIN and k != "topaz"]
+    cat = pal.lab[[pal.ids.index(k) for k in ids]]
+    light = light_skin(pal, min_l)
+    out = list(C)
+    n = 0
+    for g in pale_groups(P, D, C, lab, eyes, nb):
+        if len(g) > group:
+            continue
+        inside = set(g)
+        outside = {j for k in g for j in nb[k]} - inside
+        if len(outside) < PALE_MIN_OUTSIDE or sum(C[j] in light for j in outside) < 0.5 * len(outside):
+            continue
+        for i in g:
+            out[i] = ids[int(np.argmin(deltaE_ciede2000(np.repeat(lab[i][None], len(ids), 0), cat)))]
+            n += 1
+    return out, n
+
+
+# RS-3044's rule in rounds, kept for BUILD_RS3044 only (Rules.pale_skin_rounds; RS-3045 replaced it).
+PALE_ROUNDS = 5
+
+
+def pale_skin_rounds(P, D, C, lab, pal, eyes, nb=None, rounds=PALE_ROUNDS):
+    """RS-3044 (BUILD_RS3044 only since RS-3045): an SS4 or SS6 stone outside 1.5 eye-zone radii whose
+    read colour (lab, inner 60 %) is pale warm cream (is_pale_cream) and whose colour is not a skin
+    colour, with at least four neighbours of which at least half are in skin colours, takes the skin
+    colour (distinct.SKIN, Topaz excepted, as skin_nearest) nearest its read colour in ΔE2000. Each
+    round reads the colours the round before left, so pairs and triples of such stones change from
+    their edge inward; it repeats until no stone changes, at most `rounds` rounds. Returns (colours, count)."""
     nb = nb if nb is not None else _neighbours(P, D)
     ids = [k for k in pal.ids if k in SKIN and k != "topaz"]
     cat = pal.lab[[pal.ids.index(k) for k in ids]]
@@ -194,5 +264,8 @@ def finish_faces(P, D, C, pal, face, eyes, rules, lab=None):
         C, _ = lone_white_skin(P, D, C, pal, eyes, nb)
     if rules.pale_skin and face == "human":  # RS-3044
         nb = nb if nb is not None else _neighbours(P, D)
-        C, _ = pale_skin(P, D, C, lab, pal, eyes, nb)
+        if rules.pale_skin_rounds:  # BUILD_RS3044
+            C, _ = pale_skin_rounds(P, D, C, lab, pal, eyes, nb)
+        else:  # RS-3045
+            C, _ = pale_skin(P, D, C, lab, pal, eyes, nb, rules.pale_skin_group, rules.pale_skin_min_l)
     return C

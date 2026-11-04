@@ -1984,6 +1984,9 @@ stones; `lone_white_skin` left them because each touches a non-skin neighbour, o
 the same cream (diagnosis in `tools/scratch/white-stones/`, not committed). Spec:
 `docs/specifications/RS-3044-PaleSkin.md`.
 
+RS-3045 (below) replaced the rounds with small groups; the RS-3044 rule as described here is kept
+only for the frozen `BUILD_RS3044`.
+
 - **`pale_skin`** (`faces.pale_skin`), a `Rules` flag on in `DEFAULT`, off in `PROTOTYPE` and every
   `BUILD_*`; `BUILD_O` freezes the build O `DEFAULT` (builds P and Q changed no rule). It runs in
   `finish_faces` right after `lone_white_skin`, only when a person's face was found
@@ -2007,6 +2010,39 @@ the same cream (diagnosis in `tools/scratch/white-stones/`, not committed). Spec
   Crystal. On the 13 test images, the 3 IMG-026N and the 4 IMG-026P layouts, one stone changes: on
   the woman's lit lower lip, Crystal → Silk. Everything else is identical.
 - **Full suite:** 180 tests, 5 h 13 min on the iMac.
+
+### Small groups with light skin neighbours (RS-3045)
+
+RS-3044's rule repeats in rounds, stone by stone, so next to a white animal it creeps into the fur;
+PatternNifty measured it on painting-ermine and an archive cat. RS-3045 ports PatternNifty's
+replacement (alexdruk/imagetostrass commit `6e097d5`, PN-11 and its two follow-ups; its
+`docs/pn-11-results.md` and spec 7.4) exactly.
+
+- **`pale_skin`** stays where it was: on in `DEFAULT`, in `finish_faces` right after
+  `lone_white_skin`, only with `face == "human"`.
+  - **Candidates, found once** (`faces.pale_groups`): SS4 or SS6 stones outside 1.5 eye-zone radii,
+    not in a skin colour, whose read colour is pale warm cream (`faces.is_pale_cream`, as RS-3044).
+  - **Groups:** candidates that are neighbours (`faces._neighbours`) form a group.
+  - **Condition:** a group changes only when it has at most `pale_skin_group` stones (a new `Rules`
+    setting, default 4) and at least four outside neighbours (stones touching the group that are not
+    in it, each counted once), at least half of them light skin colours. A light skin colour is a skin
+    colour (`distinct.SKIN`) whose catalogue L\* is at least `pale_skin_min_l` (a new setting, default
+    70: Silk and Light Peach; `faces.light_skin`).
+  - **Result:** every stone of a changed group takes the skin colour (`distinct.SKIN`, Topaz excepted)
+    nearest its own read colour in ΔE2000.
+  - **One pass**, on the colours before the rule. No rounds.
+- **`BUILD_RS3044`** freezes RS-3044's `DEFAULT`. So that it still gives RS-3044's layouts, its
+  `pale_skin_rounds` flag (off everywhere else) runs RS-3044's rule in rounds, kept unchanged as
+  `faces.pale_skin_rounds`.
+- **Tests:** `test_rs_3044_pale_skin.py`, with PatternNifty's new tests (group limit and its setting,
+  fur patch, light skin colours at 60, 70 and 80, exactly half, outside neighbours counted once, teeth
+  at a limit of 10) in place of RS-3044's round tests, which now check `BUILD_RS3044`.
+- **Measured** (`docs/results/RS-3045/`): on the diagnosis's AI image, 22 stones change against no
+  pale skin (Crystal → Silk 10, Metallic Sunshine → Silk 9, Citrine → Silk 3), the same stones as in
+  PatternNifty. Against RS-3044, the forehead Crystal beside the gold head chain now stays and a chest
+  Metallic Sunshine (three neighbours, in a pair with six outside neighbours) now changes; the woman's
+  lower-lip stone stays Crystal. Nothing else changes on the 13 test images, the 3 IMG-026N and the 4
+  IMG-026P (Black & white) layouts. `BUILD_RS3044` gives RS-3044's layouts exactly on all 21.
 
 ## Reference figures
 
