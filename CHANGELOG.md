@@ -56,6 +56,7 @@ view, and the layout service is easier to start. Two new export formats: EPS and
 
 - **No design fits the mug.** AI designs start at about 130 mm and the mug's body is 95 mm. The
   bottle takes only the smaller designs.
+- **Remove the sample text before a redraw.** On a new project, stones of the design that overlap the sample text are removed. The design can also be larger than the 150 × 150 mm sheet; the canvas grows to fit it.
 - **No warm reddish mid-brown stone.** The lit areas of deep skin go to Light Peach and look too
   light.
 - **Thin eye and lip lines are lost.** The eyes become single dots. It shows most in Black & white
