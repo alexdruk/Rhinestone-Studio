@@ -618,9 +618,9 @@ Sizes are rough: S is a day or less, M a few days, L a milestone of a week or mo
    1.8 s first render for 4156 stones); the milestone's done criterion asked for Chrome 103, which
    was not available. Needs one measurement on a Chrome 103 machine. RS. Size S.
 9. **Bold and Shaded give different sizes.** For the same photo, Shaded comes out 11 to 21 %
-   larger than Bold (IMG-026P); the cause is not known. It shows as a different natural size
-   when the user switches the look. Both apps. Size M (first find out whether the prompt or the
-   layout should even it out).
+   larger than Bold (IMG-026P), because the AI draws more stones across in Shaded. It shows as a
+   different natural size when the user switches the look. Both apps. Size M (first find out
+   whether the prompt or the layout should even it out).
 10. **The full service suite takes about 4.5 hours** on the iMac. It slows every service
     milestone. It needs a fast tier, for example the golden images on a smaller set, with the full
     run kept for releases. RS. Size M.

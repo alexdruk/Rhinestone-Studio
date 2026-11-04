@@ -475,3 +475,77 @@ changed no Python. The 2.0.0 gate requires `node tools/run-tests.mjs --all` and
 `develop`→`main` merge. This milestone changes no code: it touches `package.json`,
 `package-lock.json`, this file, the status docs (`docs/ARCHITECTURE.md`, `docs/PRODUCT_ROADMAP.md`,
 `docs/BACKLOG.md`) and the `main` branch.
+
+### Version 2.1.0 — prepared 2026-11-04 (to be tagged `v2.1.0`)
+
+Version 2.1.0 is cut from `develop` at `0fbb67a` plus this release milestone (`ac41726` and the
+commit that adds this record), on the branch release/2.1.0. It is not yet merged or tagged.
+`package.json` and `package-lock.json` read `2.0.0`; both now read `2.1.0`. The Help dialog's
+About text, which still said 0.1.0, now says 2.1.0. The layout service keeps its own version
+(1.2.0). The notes are in `CHANGELOG.md` and `docs/releases/2.1.0.md`.
+
+The bump is semver-minor: every change adds to or improves Image → Strass, and project JSON stays
+backward compatible. A layer saved before 2.1.0 has no `redrawMode` and is read as Colour.
+
+**The PatternNifty port (`IMG-026L`–`IMG-026Q`, `RS-3042`).** The plan and its open items are in
+`docs/IS-PORT-PLAN.md`. In order:
+
+- L, faces found with MediaPipe Face Landmarker (Apache 2.0) instead of dlib, whose model may not
+  be used commercially; dlib is test-only;
+- M, PatternNifty's face rules (no iris ring for people, warm shadows, single white stones on skin
+  take a skin colour) and the fix for the crash when a dark round area touches the image edge;
+- N, prompt v7 (each person keeps their skin tone), and on the Flat Sheet an AI image in the
+  photo's shape, drawn from the cut-out only;
+- O, the SS16 size cap (a pupil pair SS20), the overlap cleanup and the hole fill in the service;
+- P, Black & white in two styles, Bold and Shaded, Jet and Crystal only;
+- Q, "Background: Tinted" on the 2D canvas, a view only;
+- `RS-3042`, EPS and AI exports for every product, and inch production sheets that print the gap
+  in mm ("Gap: 0.1 mm (0.004 in)") instead of "Gap: 0 in".
+
+**Layout service (`RS-3043`, `RS-3045`, `RS-3046`).** `npm run studio` starts the layout service
+on port 8001 and the app together. The pale skin rule turns small groups of white or gold stones
+on lit skin into the nearest skin colour (`RS-3045`, which replaced `RS-3044`'s rule). The
+Image → Strass lightbox shows the service's state, starts it from `npm run dev` when it is not
+running, and opens a redraw's result on the Tinted view.
+
+**Licence check.** `services/strass-layout/THIRD_PARTY_LICENCES.md` lists everything 2.1.0 ships,
+including mediapipe 0.10.15 and the committed `face_landmarker.task`, whose SHA-256 matches the
+file. No pin or model has changed since `IMG-026L`. Every package in the service's environment is
+listed except dlib-bin, the test-only install the file covers under "Never shipped". No dlib model
+is tracked in git, and the Dockerfile neither fetches nor copies one. The only Python file outside
+the service's tests that imports dlib is the research prototype, which only the equivalence test
+runs and which the Docker image excludes.
+
+**Browser check (4 Nov 2026).** `npm run studio` on ports 5173 and 8001; the service's health
+check answered `rhinestone-studio-layout`, version 1.2.0, models loaded. In Chrome (headless, its
+own profile) on the Flat Sheet, the lightbox showed "Layout service: Ready". The OpenAI call was stubbed with a
+fixed test image (a dummy key, no provider call); the layout service was the real one.
+
+- Colour: 833 stones (Jet, Gold, Light Topaz), 0 gap violations, minimum gap 0.102 mm.
+- Black & white Bold: 833 stones (Jet and Crystal only), 0 gap violations, minimum gap 0.102 mm.
+- Both results opened on Tinted; Template, Source and Tinted again left the stones unchanged.
+  Help showed "Version 2.1.0". The only console error was the favicon 404 that predates 2.1.0.
+
+**Known issues (non-blocking).** From `CHANGELOG.md`:
+
+- No design fits the mug: AI designs start at about 130 mm and the mug's body is 95 mm. The
+  bottle takes only the smaller designs.
+- No warm reddish mid-brown stone, so the lit areas of deep skin go to Light Peach.
+- Thin eye and lip lines are lost; the eyes become single dots, most in Black & white Bold.
+- Groups of Crystal and Silver stones on light skin read as white patches, most in the Tinted view.
+- Large Jet areas show grey rings in the Tinted view.
+- A single pupil is at most SS16, a pair SS20.
+- The hole fill closes some gaps between curls that the AI image shows white.
+- The Tinted view was not timed on Chrome 103.
+- For the same photo, Shaded comes out 11 to 21 % larger than Bold, because the AI draws more
+  stones across in Shaded.
+- The face finder can take an animal for a person; the face rules then act on its fur.
+- The full layout service suite takes about 4.5 hours.
+
+**Testing gate.** The `tools/test-*.mjs` suite stands at 198 files, up from 191 at `v2.0.0`.
+`npm test` (the fast group) passed 25/25 on `ac41726`. The layout service's Python suite, run with
+`STRASS_SKIP_EQUIVALENCE=1`, passed: 189 tests in 4 h 47 min, 0 failures, 0 errors, 12 skipped
+(the equivalence tests). `node tools/run-tests.mjs --all` was not run for this record. This
+milestone changes no code: it touches `package.json`, `package-lock.json`, `index.html` (the About
+text), `CHANGELOG.md`, `docs/releases/2.1.0.md`, `docs/IS-PORT-PLAN.md`, `docs/BACKLOG.md` and
+this file.
