@@ -69,6 +69,15 @@ whatever `.env` says. If this service is already running on the port, it is reus
 running when the studio stops; if another service answers there, the studio stops and names the
 port. Ctrl+C stops both; if either stops on its own, the studio stops the other and says why.
 
+With `npm run dev` alone (RS-3046), the Image → Strass lightbox starts the service when it opens
+and nothing answers at `LAYOUT_SERVICE_URL`, provided that URL is 127.0.0.1 or localhost with a
+port: the dev server (`tools/layout-control.mjs`, routes `GET /api/layout-service/status` and
+`POST /api/layout-service/start`, answered only to requests from this Mac) runs the same
+`caffeinate -i scripts/start_layout.sh` with `LAYOUT_PORT` set to the URL's port, and stops it when
+the dev server stops. It never starts a second copy next to this service, never starts over another
+service on the port, and never starts anything for a URL on another machine; a service started by
+hand or by `npm run studio` is never stopped by it.
+
 The manual way:
 
 ```

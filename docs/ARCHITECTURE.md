@@ -1637,7 +1637,9 @@ separate layout service:
   (`scripts/start_layout.sh`, port `LAYOUT_PORT`; 8000 is PatternNifty's strass service) until a
   server is rented. `npm run studio` (`tools/studio.mjs`, RS-3043) starts it with the dev server
   and sets `LAYOUT_SERVICE_URL`; `GET /health` names the service so the studio never takes another
-  one on that port for it. When a server is rented, the same package runs in Docker and
+  one on that port for it. Since RS-3046 the dev server's `/api/layout-service/status` and
+  `/start` (`tools/layout-control.mjs`, this Mac only) let the Image → Strass lightbox show the
+  service's state and start it with `npm run dev` alone, by the studio's own code. When a server is rented, the same package runs in Docker and
   only `LAYOUT_SERVICE_URL` changes. Its tests read the research prototype kept in `prototype/`
   for the equivalence check.
 - **Layer data.** An ai-layout image layer stores `aiLayout` (`version`, `widthMm`, `heightMm`,
@@ -1660,6 +1662,9 @@ separate layout service:
   octahedron (8). It is still one instanced draw call.
 - **View setting.** "Background: White / Product" on the 2D canvas shows the gaps on the product
   colour. It is not saved and never changes the StoneLayout; Flat Sheet always uses white.
+  "Background: Tinted" (IMG-026Q, `src/renderer/TintedView.js`) shows image layers as the finished
+  piece; since RS-3046 the lightbox opens an ai-layout layer's result on the same Tinted view, with
+  Template and Source as the switch. Neither is saved or exported.
 
 The full specification, with measured figures, is
 `docs/specifications/IMG-026-StrassLayoutService.md`.

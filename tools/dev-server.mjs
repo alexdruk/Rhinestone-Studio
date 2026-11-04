@@ -7,6 +7,10 @@
 // routes are 404 and the app works without them: its Redraw button stays hidden. This is a local
 // server, not a production host. IMG-026: POST /api/redraw starts a job; GET and DELETE
 // /api/redraw/:jobId poll and cancel it. LAYOUT_SERVICE_URL points the jobs at the layout service.
+// RS-3046: GET /api/layout-service/status and POST /api/layout-service/start (tools/layout-control.mjs)
+// let the Image → Strass lightbox show the layout service's state and start it when it is not
+// running; both answer only to this Mac. A service started that way is stopped when this server
+// stops (Ctrl+C, SIGTERM or SIGHUP); one started elsewhere is left running.
 //
 // Usage: node tools/dev-server.mjs [port]   (default 5173; 0 picks a free port)
 import { createServer } from 'node:http';
@@ -16,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRedrawHandler } from '../server/redraw/handler.mjs';
 import { loadRedrawEnv, redrawConfigStatus } from '../server/redraw/env.mjs';
+import { createLayoutServiceControl } from './layout-control.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CACHE_CONTROL = 'no-cache, no-store';
@@ -72,9 +77,11 @@ try { envFileText = readFileSync(path.join(ROOT, '.env'), 'utf8'); } catch { env
 const redrawSettings = loadRedrawEnv({ envFileText });
 const redraw = createRedrawHandler({ settings: redrawSettings });
 const redrawStatus = redrawConfigStatus(redrawSettings);
+const layoutControl = createLayoutServiceControl({ url: redrawSettings.layoutServiceUrl, fake: redrawSettings.fake });
 
 const server = createServer(async (req, res) => {
   const routePath = (req.url || '/').split('?')[0];
+  if (layoutControl.handle(req, res, routePath)) return;
   if (routePath === '/api/redraw/config' && req.method === 'GET') return redraw.handleConfig(req, res);
   if (routePath === '/api/redraw' && req.method === 'POST') return redraw.handleRedraw(req, res);
   const jobMatch = /^\/api\/redraw\/([^/]+)$/.exec(routePath);
@@ -103,6 +110,16 @@ server.listen(requestedPort, () => {
     ? `Redraw with AI is on${redrawSettings.fake ? ' (fake mode, no OpenAI calls)' : ''}.`
     : `Redraw with AI is off: ${redrawStatus.missing.join(' and ')} not set.`);
   if (redrawStatus.configured && !redrawSettings.fake) {
-    console.log(redrawSettings.layoutServiceUrl ? `Layout service: ${redrawSettings.layoutServiceUrl}` : 'Layout service: not set, so redraws are placed with the old method. Start with npm run studio, or set LAYOUT_SERVICE_URL.');
+    console.log(redrawSettings.layoutServiceUrl ? `Layout service: ${redrawSettings.layoutServiceUrl} (the Image → Strass lightbox shows its state and starts it when it runs on this Mac)` : 'Layout service: not set, so redraws are placed with the old method. Start with npm run studio, or set LAYOUT_SERVICE_URL.');
   }
 });
+
+// RS-3046: stop the layout service this server started (only that one), then end as the signal
+// would have ended it. 'exit' covers any other way out, without waiting.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, async () => {
+    await layoutControl.stop();
+    process.kill(process.pid, signal);
+  });
+}
+process.once('exit', () => layoutControl.stopNow());

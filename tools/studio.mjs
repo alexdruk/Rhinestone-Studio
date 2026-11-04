@@ -25,7 +25,7 @@ export const DEFAULT_DEV_PORT = 5173;
 export const LAYOUT_SERVICE_NAME = 'rhinestone-studio-layout';
 export const START_TIMEOUT_MS = 180000;
 const PROBE_TIMEOUT_MS = 3000;
-const POLL_MS = 1000;
+export const POLL_MS = 1000;
 const STOP_GRACE_MS = 10000;
 
 // The port from LAYOUT_PORT (environment only, like start_layout.sh), default 8001.
@@ -48,6 +48,9 @@ export function repoLayoutVersion(root = ROOT) {
 // What answers GET /health on the port: { state: 'free' } (nothing listens), 'ready' (RS's service,
 // this version, models loaded), 'loading' (RS's service, models not loaded yet), 'stale' (RS's
 // service, another version) or 'other' (anything else, including no answer within 3 s).
+// RS-3046: 'ready' and 'loading' also carry `busy` (a layout is running); 'other' carries
+// `unreachable` (the error code) when the connection itself failed for another reason than a
+// refusal or the time limit, such as an unknown host.
 export async function probeLayoutService({ fetch = globalThis.fetch, url, expectedVersion, timeoutMs = PROBE_TIMEOUT_MS }) {
   let response;
   try {
@@ -55,12 +58,13 @@ export async function probeLayoutService({ fetch = globalThis.fetch, url, expect
   } catch (error) {
     const cause = error && error.cause ? error.cause : error;
     if (cause && cause.code === 'ECONNREFUSED') return { state: 'free' };
+    if (cause && typeof cause.code === 'string' && cause.name !== 'TimeoutError' && cause.name !== 'AbortError') return { state: 'other', unreachable: cause.code };
     return { state: 'other' };
   }
   const body = await response.json().catch(() => null);
   if (response.status !== 200 || !body || body.service !== LAYOUT_SERVICE_NAME) return { state: 'other' };
   if (body.version !== expectedVersion) return { state: 'stale', version: String(body.version) };
-  return { state: body.ok === true && body.modelsLoaded === true ? 'ready' : 'loading', version: body.version };
+  return { state: body.ok === true && body.modelsLoaded === true ? 'ready' : 'loading', version: body.version, busy: body.busy === true };
 }
 
 // Resolves true when a server could listen on the port (as tools/dev-server.mjs does), false when it
@@ -73,7 +77,8 @@ export function portIsFree(port) {
   });
 }
 
-function defaultLayoutCommand(root, platform) {
+// RS-3046: also the dev server's (tools/layout-control.mjs), which starts the service the same way.
+export function defaultLayoutCommand(root, platform) {
   const script = path.join(root, 'services/strass-layout/scripts/start_layout.sh');
   return platform === 'darwin' ? ['caffeinate', '-i', script] : [script];
 }
@@ -86,7 +91,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Each child runs in its own process group (detached), so Ctrl+C reaches only the studio, which
 // then stops each group: caffeinate, start_layout.sh's uvicorn and the dev server together.
-function startChild(name, command, { cwd, env }) {
+export function startChild(name, command, { cwd, env }) {
   const child = spawn(command[0], command.slice(1), { cwd, env, stdio: 'inherit', detached: true });
   const exited = new Promise((resolve) => {
     child.once('exit', (code, signal) => resolve({ code, signal }));
@@ -95,11 +100,11 @@ function startChild(name, command, { cwd, env }) {
   return { name, child, exited, running: true };
 }
 
-function signalGroup(entry, signal) {
+export function signalGroup(entry, signal) {
   try { process.kill(-entry.child.pid, signal); } catch { /* already gone */ }
 }
 
-async function stopChild(entry) {
+export async function stopChild(entry) {
   if (!entry || !entry.running) return;
   signalGroup(entry, 'SIGTERM');
   const timer = setTimeout(() => signalGroup(entry, 'SIGKILL'), STOP_GRACE_MS);
@@ -109,7 +114,7 @@ async function stopChild(entry) {
   signalGroup(entry, 'SIGKILL');
 }
 
-function exitText(result) {
+export function exitText(result) {
   if (result.error) return `could not start (${result.error.message})`;
   if (result.signal) return `stopped (${result.signal})`;
   return `stopped (exit code ${result.code})`;
