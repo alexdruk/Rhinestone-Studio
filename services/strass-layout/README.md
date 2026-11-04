@@ -119,13 +119,20 @@ layout automatically.
 
 Since RS-3044, on a person's face (`face` is `"human"`), a stone the AI painted in its pale cream
 lit-skin colour becomes skin. The AI paints lit skin in one cream (about L\* 93–96) that is not in
-the palette, and the colour step split it into Silk, Crystal, Metallic Sunshine and Citrine. An SS4
-or SS6 stone outside 1.5 eye-zone radii is changed when two things hold. Its colour, read from the
-inner 60 % of its radius, is pale warm cream: L\* above 85, chroma 8 to 40, hue 25 to 100 degrees.
-And it has at least four neighbours, at least half of them in skin colours. It then takes the skin
-colour nearest its read colour (ΔE2000). This repeats until nothing changes, at most 5 rounds, so
-pairs and triples change too. Positions and sizes never change. Teeth the AI paints in its Crystal,
-eye whites and catch-lights stay. The rule is `Rules.pale_skin` (`faces.pale_skin`).
+the palette, and the colour step split it into Silk, Crystal, Metallic Sunshine and Citrine. Since
+RS-3045 (ported from PatternNifty, PN-11) the rule works on small groups, in one pass. The candidates
+are SS4 and SS6 stones outside 1.5 eye-zone radii, not in a skin colour, whose colour, read from the
+inner 60 % of their radius, is pale warm cream: L\* above 85, chroma 8 to 40, hue 25 to 100 degrees.
+Candidates that touch form a group. A group changes only when it has at most `pale_skin_group`
+stones (default 4) and at least four outside neighbours (stones touching the group, each counted
+once), at least half of them light skin colours: skin colours whose catalogue L\* is at least
+`pale_skin_min_l` (default 70, which means Silk and Light Peach). Every stone of a changed group then
+takes the skin colour nearest its own read colour (ΔE2000). So single, paired and tripled white or
+gold stones on lit skin change, while white fur next to a person, cream in tan fur or copper hair, and
+larger highlights stay. Positions and sizes never change. Teeth the AI paints in its Crystal, eye
+whites and catch-lights stay. The rule is `Rules.pale_skin` (`faces.pale_skin`); RS-3044's version,
+which repeated stone by stone in rounds and crept into white fur, is kept only for the frozen
+`BUILD_RS3044` (`faces.pale_skin_rounds`).
 
 With `"mode": "bw"` (IMG-026P, PatternNifty's Black & white) every stone is then Jet or Crystal
 (`jet`, `crystal-clear`), read from the AI image itself: the mean CIE L\* of its pixels composited on
@@ -228,11 +235,13 @@ python -m unittest -v
   13 test images; `test_build_p` (IMG-026P) checks the Black & white reading (threshold, inner 60 %,
   composited on white, 2 px minimum, filled stones by vote) on small fixtures, `mode` and
   `BW_THRESHOLD` through the HTTP app, and the woman in `bw` against `colour`.
-- `test_rs_3044_pale_skin` (RS-3044) checks the pale skin rule on small fixtures (a pair, a triple,
-  a cluster over rounds, the 5-round limit, the stones it must leave, teeth), on
-  `fixtures/pale_skin_portrait.png` (the AI image of the white-stones diagnosis) and `DEFAULT`
-  against `BUILD_O` on the 13 test images. `test_build_o` compares `BUILD_O`, build O's frozen
-  `DEFAULT`, with `BUILD_M`.
+- `test_rs_3044_pale_skin` (RS-3044, RS-3045) checks the pale skin rule on small fixtures (a pair,
+  a triple, groups of 4 and 5, the group limit setting, a fur patch, light skin colours at L\* 60, 70
+  and 80, exactly half light skin, outside neighbours counted once, the stones it must leave, teeth,
+  and `BUILD_RS3044`'s rounds), on `fixtures/pale_skin_portrait.png` (the AI image of the white-stones
+  diagnosis) against `BUILD_O` and `BUILD_RS3044`, and `DEFAULT` against `BUILD_O` on the 13 test
+  images. `test_build_o` compares `BUILD_O`, build O's frozen `DEFAULT`, with `BUILD_M`;
+  `BUILD_RS3044` freezes RS-3044's `DEFAULT`.
 
 The full run lays out each of the 12 images once for the package and once for the prototype, about
 one to two minutes each. Run long jobs under `caffeinate -i`.

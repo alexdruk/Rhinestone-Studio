@@ -1,7 +1,7 @@
-"""Which IMG-026E to O and RS-3044 rules the pipeline applies on top of the prototype.
+"""Which IMG-026E to O, RS-3044 and RS-3045 rules the pipeline applies on top of the prototype.
 
 PROTOTYPE reproduces the prototype exactly (the equivalence and golden tests run with it);
-BUILD_E to BUILD_O are what builds E to O shipped; DEFAULT is what the service ships.
+BUILD_E to BUILD_O are what builds E to O shipped, BUILD_RS3044 what RS-3044 shipped; DEFAULT is what the service ships.
 See docs/specifications/IMG-026-StrassLayoutService.md, "Layout quality (build E)",
 "Colour and eyes (build F)", "Pupils and stone colours (build G)",
 "More catalogue colours (build H)", "Faces and eyes (build I)", "Skin and fur tones (build J)" and
@@ -42,7 +42,7 @@ after its own layout (cleanup.clean_up); each is a flag, off in PROTOTYPE and ev
   colour by IS's weighted vote.
 BUILD_M freezes the build M DEFAULT.
 
-RS-3044 (pale skin) adds one flag, off in PROTOTYPE and every BUILD_* set:
+RS-3044 (pale skin) adds one flag, off in PROTOTYPE and every BUILD_* set before BUILD_RS3044:
 - pale_skin: the AI paints lit skin in one pale cream (about L* 93-96) that is not in the palette,
   and the snap splits it into Silk, Crystal, Metallic Sunshine and Citrine; lone_white_skin leaves
   such a stone when any neighbour is not skin (often another stone of the same cream). With a
@@ -50,8 +50,17 @@ RS-3044 (pale skin) adds one flag, off in PROTOTYPE and every BUILD_* set:
   read (inner 60 %, the skin_nearest reading) as pale warm cream (L* above 85, chroma 8 to 40, hue
   25 to 100 degrees) and not in a skin colour, with at least four neighbours of which at least half
   are skin colours, takes the skin colour nearest its read colour; repeated until nothing changes,
-  at most 5 rounds (faces.pale_skin). No stone moves or changes size.
+  at most 5 rounds (faces.pale_skin_rounds since RS-3045). No stone moves or changes size.
 BUILD_O freezes the build O DEFAULT (builds P and Q changed no rule).
+
+RS-3045 (from IS PN-11, commit 6e097d5) replaces RS-3044's rounds, which crept into white fur next to
+a person: the candidates (same colour, size and eye-zone tests, not in a skin colour) are found once
+and grouped by neighbours (faces.pale_groups); a group changes only when it has at most
+pale_skin_group stones (default 4) and at least four outside neighbours (stones touching it, each
+counted once), at least half of them light skin colours: skin colours whose catalogue L* is at least
+pale_skin_min_l (default 70: Silk and Light Peach). Each stone of a changed group takes the skin
+colour nearest its own read colour. One pass, no rounds. BUILD_RS3044 freezes the RS-3044 DEFAULT;
+its pale_skin_rounds (off everywhere else) keeps RS-3044's rule in rounds (faces.pale_skin_rounds).
 """
 from dataclasses import dataclass
 
@@ -85,6 +94,9 @@ class Rules:
     overlap_cleanup: bool = False
     hole_fill: bool = False
     pale_skin: bool = False
+    pale_skin_group: int = 4  # RS-3045
+    pale_skin_min_l: float = 70.0  # RS-3045
+    pale_skin_rounds: bool = False  # RS-3045: RS-3044's rounds, BUILD_RS3044 only
 
 
 PROTOTYPE = Rules(pupil_core_only=False, keep_chains=False)
@@ -109,6 +121,11 @@ BUILD_O = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean
                 soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,
                 skin_nearest_inner=True, warm_shadow=True, warm_shadow_de=3.0, lone_white_skin=True,
                 size_cap=True, overlap_cleanup=True, hole_fill=True)
+BUILD_RS3044 = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=False, eye_keep=True,
+                     pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
+                     soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,
+                     skin_nearest_inner=True, warm_shadow=True, warm_shadow_de=3.0, lone_white_skin=True,
+                     size_cap=True, overlap_cleanup=True, hole_fill=True, pale_skin=True, pale_skin_rounds=True)
 DEFAULT = Rules(pupil_core_only=True, keep_chains=True, extra_colours=True, mean_colour=True, human_iris=False, eye_keep=True,
                 pupil_inscribed=True, real_colours=True, more_colours=True, lively_eyes=True, skin_no_wine=True,
                 soft_outlines=False, calm_skin=True, skin_nearest=True, plausible_eyes=True, sample_delivered=True,

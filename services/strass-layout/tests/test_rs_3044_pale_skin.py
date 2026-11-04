@@ -1,12 +1,18 @@
-"""RS-3044: pale skin (Rules.pale_skin, faces.pale_skin).
+"""RS-3044 and RS-3045: pale skin (Rules.pale_skin, faces.pale_skin).
 
 The AI paints lit skin in one pale cream (about L* 93-96) that is not in the palette; the snap splits
 it into Silk, Crystal, Metallic Sunshine and Citrine, and lone_white_skin leaves such a stone when any
 neighbour is not skin. See docs/specifications/IMG-026-StrassLayoutService.md, "Pale skin (RS-3044)".
 
+RS-3045 ports PatternNifty's version (IS PN-11, commit 6e097d5, tests/test_pn11.py): the rule acts on
+groups of at most Rules.pale_skin_group candidates (4) in one pass instead of RS-3044's rounds, and only
+light skin colours (catalogue L* at least Rules.pale_skin_min_l, 70) count among a group's outside
+neighbours. So the round tests became group tests (they stay for BUILD_RS3044, which keeps the rounds
+in faces.pale_skin_rounds), and a fur patch stays.
+
 The fixtures are SS6 stones on a hexagonal grid (pitch 2.2 mm, so six neighbours each). The image test
 lays out tests/fixtures/pale_skin_portrait.png (the AI image of the white-stones diagnosis) with BUILD_O
-and DEFAULT; the 13 RS test images are compared with BUILD_O the same way.
+(no pale skin), BUILD_RS3044 and DEFAULT; the 13 RS test images are compared with BUILD_O the same way.
 """
 import dataclasses
 import unittest
@@ -14,10 +20,11 @@ import unittest
 import numpy as np
 from skimage.color import deltaE_ciede2000
 
-from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, BUILD_O, DEFAULT, PROTOTYPE
+from strass_layout import BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, BUILD_O, BUILD_RS3044, DEFAULT, PROTOTYPE
 from strass_layout.colour import palette
 from strass_layout.distinct import SKIN
-from strass_layout.faces import finish_faces, is_pale_cream, lone_white_skin, pale_skin
+from strass_layout.faces import (_neighbours, finish_faces, is_pale_cream, light_skin, lone_white_skin, pale_groups, pale_skin,
+                                 pale_skin_rounds)
 from tests import support
 
 BUILDS = (PROTOTYPE, BUILD_E, BUILD_F, BUILD_G, BUILD_H, BUILD_I, BUILD_J, BUILD_M, BUILD_O)
@@ -65,13 +72,29 @@ def nearest_skin(lab):
 
 
 class Defaults(unittest.TestCase):
-    def test_only_default_has_pale_skin(self):
+    def test_only_default_and_build_rs3044_have_pale_skin(self):
         for rules in BUILDS:
             self.assertFalse(rules.pale_skin)
+            self.assertFalse(rules.pale_skin_rounds)
         self.assertTrue(DEFAULT.pale_skin)
+        self.assertFalse(DEFAULT.pale_skin_rounds)
+        self.assertTrue(BUILD_RS3044.pale_skin and BUILD_RS3044.pale_skin_rounds)
 
     def test_build_o_is_default_without_it(self):
         self.assertEqual(dataclasses.replace(DEFAULT, pale_skin=False), BUILD_O)
+
+    def test_build_rs3044_is_default_with_rounds(self):
+        self.assertEqual(dataclasses.replace(DEFAULT, pale_skin_rounds=True), BUILD_RS3044)
+
+    def test_group_limit_is_four(self):
+        self.assertEqual(DEFAULT.pale_skin_group, 4)
+
+    def test_light_skin_is_silk_and_light_peach(self):
+        self.assertEqual(DEFAULT.pale_skin_min_l, 70.0)
+        self.assertEqual(light_skin(PAL, DEFAULT.pale_skin_min_l), {"silk", "light-peach"})
+        self.assertEqual(light_skin(PAL, 60), {"silk", "light-peach", "rose-peach", "vintage-rose", "golden-shadow",
+                                               "rose-gold", "light-colorado"})
+        self.assertEqual(light_skin(PAL, 80), set())
 
 
 class Colour(unittest.TestCase):
@@ -108,26 +131,80 @@ class Rule(unittest.TestCase):
         out = f.run()
         self.assertEqual([out[k] for k in ks], ["silk"] * 4)
 
-    def test_a_cluster_changes_from_its_edge_inward(self):
+    def test_a_group_of_four_changes_and_of_five_stays(self):
         f = Field()
-        # A centre with its six neighbours: the ring has half skin neighbours, the centre none at first.
-        centre = f.at(4, 4)
-        ring = f.set([(4, 3), (4, 5), (3, 3), (3, 4), (5, 3), (5, 4)], "crystal-clear")
-        f.set([(4, 4)], "crystal-clear")
-        once = pale_skin(f.P, f.D, f.C, f.lab, PAL, [], rounds=1)[0]
-        self.assertEqual([once[k] for k in ring], ["silk"] * 6)
-        self.assertEqual(once[centre], "crystal-clear")
-        out, n = pale_skin(f.P, f.D, f.C, f.lab, PAL, [])
-        self.assertEqual((out[centre], n), ("silk", 7))
+        four = f.set([(2, 2), (2, 3), (2, 4), (2, 5)], "crystal-clear")
+        five = f.set([(6, 2), (6, 3), (6, 4), (6, 5), (6, 6)], "crystal-clear")
+        self.assertEqual(sorted(map(len, pale_groups(f.P, f.D, f.C, f.lab, []))), [4, 5])
+        out = f.run()
+        self.assertEqual([out[k] for k in four], ["silk"] * 4)
+        self.assertEqual([out[k] for k in five], ["crystal-clear"] * 5)
 
-    def test_at_most_five_rounds(self):
-        # A wide white patch is taken from its corners inward over many rounds; the rule stops after 5.
+    def test_group_limit_setting(self):
+        # A centre with its six neighbours: one group of seven, which stays at the default limit and
+        # changes whole, in one pass, at a limit of 7.
+        f = Field()
+        ks = f.set([(4, 4), (4, 3), (4, 5), (3, 3), (3, 4), (5, 3), (5, 4)], "crystal-clear")
+        self.assertEqual([len(g) for g in pale_groups(f.P, f.D, f.C, f.lab, [])], [7])
+        self.assertEqual([f.run()[k] for k in ks], ["crystal-clear"] * 7)
+        out = f.run(rules=dataclasses.replace(DEFAULT, pale_skin_group=7))
+        self.assertEqual([out[k] for k in ks], ["silk"] * 7)
+        self.assertEqual(pale_skin(f.P, f.D, f.C, f.lab, PAL, [], group=7)[1], 7)
+
+    def test_a_fur_patch_touching_skin_stays(self):
+        """A white animal next to a person: a patch of 12 cream stones (3 x 4) in skin, and a wide
+        13 x 13 patch, stay whole."""
         f = Field(15, 15)
-        f.set([(r, c) for r in range(1, 14) for c in range(1, 14)], "crystal-clear")
-        counts = [pale_skin(f.P, f.D, f.C, f.lab, PAL, [], rounds=k)[1] for k in (5, 6)]
-        self.assertEqual(pale_skin(f.P, f.D, f.C, f.lab, PAL, [])[1], counts[0])
-        self.assertLess(counts[0], counts[1])
-        self.assertEqual(pale_skin(f.P, f.D, f.C, f.lab, PAL, [])[0][f.at(7, 7)], "crystal-clear")
+        fur = f.set([(r, c) for r in range(2, 5) for c in range(2, 6)], "crystal-clear")
+        wide = f.set([(r, c) for r in range(1, 14) for c in range(7, 14)], "metallic-sunshine")
+        out = f.run()
+        self.assertEqual([out[k] for k in fur], ["crystal-clear"] * 12)
+        self.assertEqual([out[k] for k in wide], ["metallic-sunshine"] * len(wide))
+
+    def test_only_light_skin_neighbours_count(self):
+        """Cream among tan fur or copper hair (skin-ramp colours under L* 70) stays; among Light Peach it
+        changes; the setting moves the line."""
+        for colour, changes in (("copper", False), ("light-colorado", False), ("golden-shadow", False), ("light-peach", True)):
+            with self.subTest(colour=colour):
+                f = Field()
+                f.C = [colour] * len(f.C)
+                pair = f.set([(4, 4), (4, 5)], "crystal-clear")
+                out = f.run()
+                self.assertEqual([out[k] != "crystal-clear" for k in pair], [changes] * 2)
+        f = Field()
+        f.C = ["light-colorado"] * len(f.C)
+        pair = f.set([(4, 4), (4, 5)], "crystal-clear")
+        out = f.run(rules=dataclasses.replace(DEFAULT, pale_skin_min_l=60))
+        self.assertEqual([out[k] for k in pair], ["silk"] * 2)
+
+    def test_half_light_skin(self):
+        """A single stone with six neighbours: three Silk and three Copper is half light skin (changes);
+        two Silk and four Copper is not."""
+        for silk, changes in ((3, True), (2, False)):
+            f = Field()
+            k = f.set([(4, 4)], "crystal-clear")[0]
+            nb = _neighbours(f.P, f.D)[k]
+            for j in nb[silk:]:
+                f.C[j] = "copper"
+            # pale_skin alone: calm_skin in finish_faces would give lone Copper stones their neighbours' Silk.
+            self.assertEqual(pale_skin(f.P, f.D, f.C, f.lab, PAL, [])[0][k] != "crystal-clear", changes, silk)
+
+    def test_outside_neighbours_counted_once(self):
+        """A pair has 8 outside neighbours; the two it shares are skin, five of the other six Jet. Once
+        each, 3 of 8 are skin (under half), so the pair stays; counted per stone it would be 5 of 10."""
+        f = Field()
+        pair = f.set([(2, 2), (2, 3)], "crystal-clear")
+        nb = _neighbours(f.P, f.D)
+        outside = sorted(set(nb[pair[0]] + nb[pair[1]]) - set(pair))
+        shared = sorted(set(nb[pair[0]]) & set(nb[pair[1]]))
+        self.assertEqual((len(outside), len(shared)), (8, 2))
+        others = [j for j in outside if j not in shared]
+        for j in others[:5]:
+            f.C[j] = "jet"
+            f.lab[j] = (10.0, 0.0, 0.0)
+        self.assertEqual([f.run()[k] for k in pair], ["crystal-clear"] * 2)
+        f.C[others[4]], f.lab[others[4]] = "silk", SKIN_LAB  # 4 of 8: half, so it changes
+        self.assertEqual([f.run()[k] for k in pair], ["silk"] * 2)
 
     def test_what_stays(self):
         cases = {
@@ -136,7 +213,7 @@ class Rule(unittest.TestCase):
             "ss10": dict(d=2.8),
             "near an eye": dict(eye=True),
             "under half skin": dict(others=[(4, 3), (4, 5), (3, 4), (5, 4)]),
-            "only three neighbours": dict(alone=True),
+            "only three outside neighbours": dict(alone=True),
         }
         for name, case in cases.items():
             with self.subTest(case=name):
@@ -174,6 +251,19 @@ class Rule(unittest.TestCase):
         k = f.set([(4, 4), (4, 5)], "crystal-clear")
         self.assertEqual([f.run(rules=BUILD_O)[j] for j in k], ["crystal-clear"] * 2)
 
+    def test_build_rs3044_keeps_the_rounds(self):
+        """BUILD_RS3044 runs RS-3044's rule (faces.pale_skin_rounds): a group of seven changes from its
+        edge inward, which DEFAULT's group rule leaves."""
+        f = Field()
+        centre = f.at(4, 4)
+        ring = f.set([(4, 3), (4, 5), (3, 3), (3, 4), (5, 3), (5, 4)], "crystal-clear")
+        f.set([(4, 4)], "crystal-clear")
+        once = pale_skin_rounds(f.P, f.D, f.C, f.lab, PAL, [], rounds=1)[0]
+        self.assertEqual([once[k] for k in ring], ["silk"] * 6)
+        self.assertEqual(once[centre], "crystal-clear")
+        self.assertEqual(f.run(rules=BUILD_RS3044)[centre], "silk")
+        self.assertEqual(f.run()[centre], "crystal-clear")
+
     def mouth(self, teeth_lab, upper_lip):
         """Two rows of five teeth (Crystal) in a ring of lips: the upper lip (row 3 and the corners of
         row 4) in upper_lip, the lower lip (row 6 and the corners of row 5) in Light Siam, all in skin.
@@ -186,29 +276,47 @@ class Rule(unittest.TestCase):
 
     def test_teeth_in_crystal_stay(self):
         """Teeth the AI paints in its Crystal (#f5f5f5, chroma 0) are no pale cream, even between lips
-        in a skin colour (Vintage Rose)."""
+        in a skin colour (Vintage Rose). RS-3045: the ten teeth are one group, over the limit; with the
+        limit at 10 they stay too, for their colour."""
         f, teeth, lips = self.mouth(CRYSTAL_READ, "vintage-rose")
-        out = f.run()
-        self.assertEqual([out[k] for k in teeth], ["crystal-clear"] * 10)
+        for rules in (DEFAULT, dataclasses.replace(DEFAULT, pale_skin_group=10)):
+            out = f.run(rules=rules)
+            self.assertEqual([out[k] for k in teeth], ["crystal-clear"] * 10)
 
     def test_cream_teeth_between_red_lips_stay(self):
         """Teeth read as pale cream stay when the lips are not skin colours: no tooth has half its
-        neighbours in skin."""
+        neighbours in skin. RS-3045: with the limit at 10 too (their outside neighbours are the lips,
+        under half of them skin)."""
         f, teeth, lips = self.mouth(TOOTH, "light-siam")
-        out = f.run()
-        self.assertEqual([out[k] for k in teeth], ["crystal-clear"] * 10)
-        self.assertEqual([out[k] for k in lips], ["light-siam"] * 18)
+        for rules in (DEFAULT, dataclasses.replace(DEFAULT, pale_skin_group=10)):
+            out = f.run(rules=rules)
+            self.assertEqual([out[k] for k in teeth], ["crystal-clear"] * 10)
+            self.assertEqual([out[k] for k in lips], ["light-siam"] * 18)
 
 def pale_portrait():
     return support.layout_result("pale_skin_portrait", BUILD_O), support.layout_result("pale_skin_portrait", DEFAULT)
 
 
 # The diagnosis' white stones (tools/scratch/white-stones, whites.json) in the portrait's stone mm:
-# the 11 Crystal stones on skin, the eye white (#5) and the catch-light (#14).
-SKIN_CRYSTAL = [(31.67, 118.7), (28.43, 31.98), (47.81, 106.26), (50.24, 124.22), (74.52, 100.76), (28.79, 54.74),
+# 10 of the 11 Crystal stones on skin (the 11th is DARK_EDGE), the eye white (#5) and the catch-light (#14).
+SKIN_CRYSTAL = [(31.67, 118.7), (47.81, 106.26), (50.24, 124.22), (74.52, 100.76), (28.79, 54.74),
                 (45.88, 123.89), (28.34, 56.85), (47.05, 122.02), (45.99, 54.88), (30.54, 55.51)]
 EYE_WHITE = (24.12, 47.47)
 CATCH_LIGHT = (49.32, 42.24)
+# RS-3045: a Metallic Sunshine on the chest with three neighbours, which RS-3044 skipped; its pair has
+# six outside neighbours, all skin, so it changes now.
+EXTRA = (49.146, 126.438)
+# RS-3045: the one of RS-3044's 22 that stays, on the forehead beside the gold head chain; its outside
+# neighbours are Silk 2, Light Topaz 2 and Light Colorado 1 (2 of 5 light skin).
+DARK_EDGE = (28.43, 31.98)
+
+
+def changes(before, after):
+    out = {}
+    for a, b in zip(before["stones"], after["stones"]):
+        if a[3] != b[3]:
+            out[(a[3], b[3])] = out.get((a[3], b[3]), 0) + 1
+    return out
 
 
 def colour_at(layout, xy):
@@ -225,12 +333,20 @@ class Portrait(unittest.TestCase):
         for xy in SKIN_CRYSTAL:
             self.assertEqual(colour_at(before, xy), "crystal-clear", xy)
             self.assertIn(colour_at(after, xy), SKIN, xy)
-        changes = {}
-        for a, b in zip(before["stones"], after["stones"]):
-            if a[3] != b[3]:
-                changes[(a[3], b[3])] = changes.get((a[3], b[3]), 0) + 1
-        self.assertEqual(changes, {("crystal-clear", "silk"): 11, ("metallic-sunshine", "silk"): 8, ("citrine", "silk"): 3})
-        print("ROW pale_skin_portrait %s" % changes)
+        # RS-3045, as PatternNifty's 6e097d5: of RS-3044's 22 (Crystal 11, Metallic Sunshine 8, Citrine 3)
+        # the Crystal at DARK_EDGE stays, and the Metallic Sunshine at EXTRA changes: 22.
+        self.assertEqual(changes(before, after), {("crystal-clear", "silk"): 10, ("metallic-sunshine", "silk"): 9, ("citrine", "silk"): 3})
+        self.assertEqual((colour_at(before, DARK_EDGE), colour_at(after, DARK_EDGE)), ("crystal-clear", "crystal-clear"))
+        self.assertEqual((colour_at(before, EXTRA), colour_at(after, EXTRA)), ("metallic-sunshine", "silk"))
+        print("ROW pale_skin_portrait %s" % changes(before, after))
+
+    def test_build_rs3044_gives_the_rs_3044_changes(self):
+        """BUILD_RS3044 (frozen, rounds) changes RS-3044's 22 stones, DARK_EDGE among them and not EXTRA."""
+        before, _ = pale_portrait()
+        rounds = support.layout_result("pale_skin_portrait", BUILD_RS3044)
+        self.assertEqual(changes(before, rounds), {("crystal-clear", "silk"): 11, ("metallic-sunshine", "silk"): 8, ("citrine", "silk"): 3})
+        self.assertEqual(colour_at(rounds, DARK_EDGE), "silk")
+        self.assertEqual(colour_at(rounds, EXTRA), "metallic-sunshine")
 
     def test_eye_white_and_catch_light_stay(self):
         before, after = pale_portrait()
